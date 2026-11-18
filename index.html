@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -231,40 +230,64 @@
   </div>
 
   <script type="module">
-    import { initAuthObserver, loginWithGoogle, sendMagicLink, logoutUser } from "./js/auth.js";
-    import { initMasterApp } from "./js/ui-master.js";
-
     const loadingScreen = document.getElementById("screen-loading");
     const loginScreen = document.getElementById("screen-login");
     const appScreen = document.getElementById("screen-app");
 
-    document.getElementById("btn-google-login").addEventListener("click", loginWithGoogle);
-    document.getElementById("btn-logout").addEventListener("click", logoutUser);
+    function showErrorOnLoading(msg) {
+      loadingScreen.innerHTML = `
+        <div class="max-w-sm p-5 bg-slate-800 border border-red-500/40 rounded-xl text-center space-y-3 mx-4">
+          <p class="text-red-400 font-bold text-sm">Startup Error</p>
+          <p class="text-xs text-slate-300 break-words">${msg}</p>
+          <button onclick="location.reload()" class="px-4 py-2 bg-amber-500 text-slate-950 text-xs font-bold rounded-lg">Reload Page</button>
+        </div>
+      `;
+    }
 
-    document.getElementById("form-magic-link").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const email = document.getElementById("magic-email").value.trim();
-      const statusEl = document.getElementById("magic-status");
-      const res = await sendMagicLink(email);
-      statusEl.classList.remove("hidden");
-      statusEl.textContent = res.success
-        ? "Sign-in link sent! Check your email inbox."
-        : "Error: " + res.message;
-    });
-
-    initAuthObserver(
-      async (profile) => {
-        loadingScreen.classList.add("hidden");
-        loginScreen.classList.add("hidden");
-        appScreen.classList.remove("hidden");
-        await initMasterApp(profile);
-      },
-      () => {
-        loadingScreen.classList.add("hidden");
-        appScreen.classList.add("hidden");
-        loginScreen.classList.remove("hidden");
+    // Pengaman jika loading lebih dari 6 detik
+    const bootTimer = setTimeout(() => {
+      if (!loadingScreen.classList.contains("hidden")) {
+        showErrorOnLoading("Connection or script timeout. Please check that all 4 files inside /js/ are saved properly.");
       }
-    );
+    }, 6000);
+
+    try {
+      const { initAuthObserver, loginWithGoogle, sendMagicLink, logoutUser } = await import("./js/auth.js");
+      const { initMasterApp } = await import("./js/ui-master.js");
+
+      document.getElementById("btn-google-login").addEventListener("click", loginWithGoogle);
+      document.getElementById("btn-logout").addEventListener("click", logoutUser);
+
+      document.getElementById("form-magic-link").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("magic-email").value.trim();
+        const statusEl = document.getElementById("magic-status");
+        const res = await sendMagicLink(email);
+        statusEl.classList.remove("hidden");
+        statusEl.textContent = res.success
+          ? "Sign-in link sent! Check your email inbox."
+          : "Error: " + res.message;
+      });
+
+      initAuthObserver(
+        async (profile) => {
+          clearTimeout(bootTimer);
+          loadingScreen.classList.add("hidden");
+          loginScreen.classList.add("hidden");
+          appScreen.classList.remove("hidden");
+          await initMasterApp(profile);
+        },
+        () => {
+          clearTimeout(bootTimer);
+          loadingScreen.classList.add("hidden");
+          appScreen.classList.add("hidden");
+          loginScreen.classList.remove("hidden");
+        }
+      );
+    } catch (err) {
+      clearTimeout(bootTimer);
+      showErrorOnLoading(err.message || "Failed to load JS modules.");
+    }
   </script>
 </body>
 </html>
