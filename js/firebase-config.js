@@ -1,13 +1,10 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+// js/firebase-config.js
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyDw5SzfnC2aE7e3cvFjbPT4OtxE_-Pw_Fs",
+  apiKey: "AIzaSyDw5SzfWCzaE7e3cvFjbPT4OtxE_-Pw_Fs",
   authDomain: "myifgfpalmy.firebaseapp.com",
   projectId: "myifgfpalmy",
   storageBucket: "myifgfpalmy.firebasestorage.app",
@@ -16,6 +13,9 @@ const firebaseConfig = {
   measurementId: "G-JK9DNP3KXD"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+
+// Timezone lock wajib (Pacific/Auckland)
+export const CHURCH_TIMEZONE = "Pacific/Auckland";
