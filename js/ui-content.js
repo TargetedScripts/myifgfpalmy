@@ -1,6 +1,7 @@
 // js/ui-content.js
 import { seed2027Curriculum } from "./seed-2027.js";
 import { seedNovDec2026Compass } from "./seed-2026-compass.js";
+import { seedNov20toDec31Devotions } from "./seed-devotions-nov2026.js";
 import {
   getMonthlyThemes,
   getWeeklyInsights,
@@ -193,6 +194,23 @@ function bindContentEvents() {
     } finally {
       btn.disabled = false;
       btn.textContent = "✨ Seed Nov–Dec 2026";
+    }
+  });
+
+  document.getElementById("btn-seed-devotions-nov26")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Seeding 42 Devotions...";
+    try {
+      const count = await seedNov20toDec31Devotions();
+      alert(`Success! Seeded ${count} Daily Devotions (20 Nov – 31 Dec 2026).`);
+      await refreshContentData();
+      await initPublicPortal();
+    } catch (err) {
+      alert("Error seeding devotions: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "🙏 Seed Devotions (Nov–Dec)";
     }
   });
 
