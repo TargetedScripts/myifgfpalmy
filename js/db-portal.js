@@ -65,8 +65,13 @@ export async function getMyUnavailability(discipleId) {
   );
   const snap = await getDocs(q);
   return snap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => (a.unavailable_date || "").localeCompare(b.unavailable_date || ""));
+    .map(d => {
+      const data = d.data();
+      const start = data.start_date || data.unavailable_date || "";
+      const end = data.end_date || data.unavailable_date || start;
+      return { id: d.id, ...data, start_date: start, end_date: end };
+    })
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
 }
 
 export async function updateMyContactProfile(discipleId, updates) {
