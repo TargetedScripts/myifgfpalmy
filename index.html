@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MyIFGFPalmy — Church Portal & Ministry Hub</title>
+  <title>MyIFGFPalmy — IFGF Palmerston North Portal</title>
   <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#0f172a" />
   <script src="https://cdn.tailwindcss.com"></script>
@@ -17,13 +17,14 @@
     <p class="text-sm font-medium tracking-wide text-slate-300">Loading MyIFGFPalmy...</p>
   </div>
 
-  <!-- LOGIN SCREEN -->
-  <div id="screen-login" class="hidden min-h-screen flex items-center justify-center p-4 bg-slate-900">
-    <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+  <!-- LOGIN MODAL (OPENS WHEN USER CLICKS SIGN IN) -->
+  <div id="modal-login" class="hidden fixed inset-0 bg-slate-900/75 flex items-center justify-center p-4 z-50">
+    <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8 relative">
+      <button onclick="document.getElementById('modal-login').classList.add('hidden')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 text-sm font-bold">✕</button>
       <div class="text-center mb-6">
         <span class="inline-block px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full mb-2">IFGF PALMERSTON NORTH</span>
-        <h1 class="text-2xl font-bold text-slate-900">MyIFGFPalmy</h1>
-        <p class="text-sm text-slate-500 mt-1">Sign in to access rosters, discipleship & ministry tools</p>
+        <h2 class="text-2xl font-bold text-slate-900">Member Sign In</h2>
+        <p class="text-sm text-slate-500 mt-1">Access your personal ministry roster, availability & profile</p>
       </div>
 
       <button id="btn-google-login" class="w-full flex items-center justify-center gap-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 px-4 rounded-xl transition">
@@ -45,23 +46,30 @@
     </div>
   </div>
 
-  <!-- MAIN APP SHELL -->
+  <!-- MAIN APP SHELL (PUBLIC + MEMBER + ADMIN) -->
   <div id="screen-app" class="hidden flex-1 flex flex-col">
     <!-- Top Header -->
     <header class="bg-slate-900 text-white px-4 py-3 shadow-md sticky top-0 z-30">
       <div class="max-w-6xl mx-auto flex items-center justify-between">
         <div>
           <h1 class="font-bold text-lg tracking-tight">MyIFGFPalmy</h1>
-          <p class="text-[11px] text-slate-400">Stage 2 • Master Data, Content & Sunday Roster</p>
+          <p class="text-[11px] text-slate-400">IFGF Palmerston North • Church Portal & Ministry Hub</p>
         </div>
         <div class="flex items-center gap-3">
-          <div class="text-right hidden sm:block">
-            <p id="user-name-badge" class="text-xs font-semibold text-white"></p>
-            <span id="user-role-badge" class="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded font-bold"></span>
-          </div>
-          <button id="btn-logout" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700">
-            Sign Out
+          <!-- Guest State -->
+          <button id="btn-open-login" onclick="document.getElementById('modal-login').classList.remove('hidden')" class="text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-2 rounded-xl transition">
+            Sign In / My Portal
           </button>
+          <!-- Authenticated State -->
+          <div id="header-user-info" class="hidden flex items-center gap-3">
+            <div class="text-right hidden sm:block">
+              <p id="user-name-badge" class="text-xs font-semibold text-white"></p>
+              <span id="user-role-badge" class="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded font-bold"></span>
+            </div>
+            <button id="btn-logout" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700">
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
     </header>
@@ -71,20 +79,111 @@
       <!-- Navigation Bar -->
       <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
         <div class="flex flex-wrap gap-1.5">
-          <button class="tab-btn active px-3.5 py-2 rounded-lg text-xs font-semibold transition" data-tab="roster">📅 Sunday Roster</button>
-          <button class="tab-btn px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="disciples">Disciples (360°)</button>
-          <button class="tab-btn px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="content">📖 Content Studio</button>
-          <button class="tab-btn px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roles">Roles Reference</button>
-          <button class="tab-btn px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="departments">Departments</button>
+          <button class="tab-btn active px-3.5 py-2 rounded-lg text-xs font-semibold transition" data-tab="public">🏛️ Church Portal</button>
+          <button id="nav-my-portal" class="tab-btn hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="myportal">🙋 My Portal</button>
+          <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roster">📅 Sunday Roster</button>
+          <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="disciples">Disciples (360°)</button>
+          <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="content">📖 Content Studio</button>
+          <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roles">Roles</button>
+          <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="departments">Departments</button>
         </div>
-        <button id="btn-seed-master" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold px-3 py-2 rounded-lg transition">
+        <button id="btn-seed-master" class="admin-only-tab hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold px-3 py-2 rounded-lg transition">
           ⚡ Seed Depts & Roles
         </button>
       </div>
 
-      <!-- TAB 0: SUNDAY ROSTER (STAGE 2) -->
-      <section id="panel-roster" class="tab-panel space-y-4">
-        <!-- Service Selector & Actions -->
+      <!-- TAB PUBLIC: CHURCH PORTAL (ACCESSIBLE TO ALL) -->
+      <section id="panel-public" class="tab-panel space-y-5">
+        <!-- Yearly & Monthly Hero Banner -->
+        <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6 rounded-2xl shadow-md grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+          <div class="space-y-2">
+            <span class="inline-block text-[10px] uppercase tracking-widest px-2.5 py-1 bg-amber-500 text-slate-950 font-extrabold rounded-full">
+              2027 CHURCH THEME
+            </span>
+            <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight">ALIGN IN PURPOSE</h2>
+            <p class="text-xs sm:text-sm text-slate-300">Kitab Keluaran • Sunday Celebration 10:30 AM • Palmerston North, NZ</p>
+          </div>
+          <div id="public-monthly-banner" class="bg-white/10 backdrop-blur p-4 rounded-xl border border-white/10">
+            <p class="text-xs text-slate-300">Loading monthly theme...</p>
+          </div>
+        </div>
+
+        <!-- Upcoming Services & Devotions -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div class="lg:col-span-2 space-y-3">
+            <h3 class="font-bold text-sm uppercase tracking-wider text-slate-700">📅 Upcoming Sunday Services</h3>
+            <div id="public-upcoming-services" class="space-y-3"></div>
+          </div>
+          <div class="space-y-5">
+            <div class="space-y-3">
+              <h3 class="font-bold text-sm uppercase tracking-wider text-slate-700">✨ Daily Devotions</h3>
+              <div id="public-devotions-list" class="space-y-3"></div>
+            </div>
+            <div class="space-y-3">
+              <h3 class="font-bold text-sm uppercase tracking-wider text-slate-700">📸 Media & Sermons</h3>
+              <div id="public-media-list" class="space-y-2.5"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB MY PORTAL: MEMBER SELF-SERVICE -->
+      <section id="panel-myportal" class="tab-panel hidden space-y-4">
+        <div id="member-unregistered-notice" class="hidden bg-amber-50 border border-amber-200 p-4 rounded-xl text-xs text-amber-900">
+          Your Google/Email account is signed in, but not yet linked to a disciple profile in our directory. Please contact an IFGF Palmy coordinator to link your email address.
+        </div>
+
+        <div id="member-selfservice-body" class="space-y-4">
+          <!-- Profile Header Card -->
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <h2 id="my-profile-name" class="font-bold text-lg text-slate-900"></h2>
+            <p id="my-profile-meta" class="text-xs text-slate-500 mt-0.5"></p>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- Left 2 Cols: My Upcoming Ministry Duties -->
+            <div class="lg:col-span-2 space-y-3">
+              <h3 class="font-bold text-sm text-slate-900">🙌 My Upcoming Ministry Duties</h3>
+              <div id="my-duties-list" class="space-y-2.5"></div>
+            </div>
+
+            <!-- Right Col: Availability & Contact Info -->
+            <div class="space-y-4">
+              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                <h3 class="font-bold text-sm text-slate-900">🚫 My Unavailable Dates</h3>
+                <form id="form-my-blockout" class="space-y-2 text-xs">
+                  <input type="date" id="my-blockout-date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                  <input type="text" id="my-blockout-reason" placeholder="Reason (e.g., Shift work / Away)" class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                  <button type="submit" class="w-full bg-slate-900 text-white font-semibold py-2 rounded-lg">Mark Unavailable</button>
+                </form>
+                <div id="my-blockouts-list" class="space-y-1.5 pt-1"></div>
+              </div>
+
+              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                <h3 class="font-bold text-sm text-slate-900">✏️ Update My Contact & Interests</h3>
+                <form id="form-my-profile" class="space-y-2 text-xs">
+                  <div>
+                    <label class="font-semibold text-slate-600">WhatsApp / Phone</label>
+                    <input type="text" id="my-phone-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
+                  </div>
+                  <div>
+                    <label class="font-semibold text-slate-600">Palmerston North Address</label>
+                    <input type="text" id="my-address-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
+                  </div>
+                  <div>
+                    <label class="font-semibold text-slate-600">Ministry Interests (comma separated)</label>
+                    <input type="text" id="my-interests-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
+                  </div>
+                  <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded-lg">Save Changes</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 0: SUNDAY ROSTER (STAGE 2 - ADMIN/COORDINATOR) -->
+      <section id="panel-roster" class="tab-panel hidden space-y-4">
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div class="flex-1">
@@ -101,20 +200,16 @@
             </div>
           </div>
 
-          <!-- Active Service Theme Banner -->
           <div class="bg-slate-900 text-white p-3.5 rounded-xl">
             <h2 id="roster-theme-title" class="font-bold text-base text-amber-400">Loading service...</h2>
             <p id="roster-theme-meta" class="text-xs text-slate-300 mt-0.5"></p>
           </div>
 
-          <!-- Conflict / Unavailability Warnings -->
           <div id="roster-conflict-banner" class="hidden bg-red-50 border border-red-200 text-red-800 p-3 rounded-xl text-xs space-y-1"></div>
         </div>
 
-        <!-- Department Assignment Matrix -->
         <div id="roster-board" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
 
-        <!-- Block-out / Unavailability Manager -->
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
           <h3 class="font-bold text-sm text-slate-900">🚫 Volunteer Unavailability (Block-out Dates)</h3>
           <form id="form-unavailability" class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
@@ -420,7 +515,6 @@
 
   <script type="module">
     const loadingScreen = document.getElementById("screen-loading");
-    const loginScreen = document.getElementById("screen-login");
     const appScreen = document.getElementById("screen-app");
 
     function showErrorOnLoading(msg) {
@@ -444,6 +538,17 @@
       const { initMasterApp } = await import("./js/ui-master.js");
       const { initContentStudio } = await import("./js/ui-content.js");
       const { initRosterEngine } = await import("./js/ui-roster.js");
+      const { initPublicPortal, initMemberSelfService } = await import("./js/ui-portal.js");
+
+      // Bind basic tab switching immediately so Public Portal works even before login
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          document.querySelectorAll(".tab-panel").forEach(p => p.classList.add("hidden"));
+          document.getElementById(`panel-${btn.dataset.tab}`)?.classList.remove("hidden");
+        });
+      });
 
       document.getElementById("btn-google-login").addEventListener("click", loginWithGoogle);
       document.getElementById("btn-logout").addEventListener("click", logoutUser);
@@ -459,21 +564,45 @@
           : "Error: " + res.message;
       });
 
+      // Load Public Feed first
+      await initPublicPortal();
+
       initAuthObserver(
         async (profile) => {
           clearTimeout(bootTimer);
           loadingScreen.classList.add("hidden");
-          loginScreen.classList.add("hidden");
+          document.getElementById("modal-login").classList.add("hidden");
           appScreen.classList.remove("hidden");
-          await initMasterApp(profile);
-          await initContentStudio();
-          await initRosterEngine();
+
+          // Toggle Header UI
+          document.getElementById("btn-open-login").classList.add("hidden");
+          document.getElementById("header-user-info").classList.remove("hidden");
+          document.getElementById("nav-my-portal").classList.remove("hidden");
+          document.getElementById("user-name-badge").textContent = profile.displayName;
+          document.getElementById("user-role-badge").textContent = profile.accessLevel.toUpperCase();
+
+          await initMemberSelfService(profile);
+
+          const isAdminOrCoord = profile.accessLevel === "super_admin" || profile.accessLevel === "coordinator";
+          if (isAdminOrCoord) {
+            document.querySelectorAll(".admin-only-tab").forEach(el => el.classList.remove("hidden"));
+            await initMasterApp(profile);
+            await initContentStudio();
+            await initRosterEngine();
+          } else {
+            document.querySelectorAll(".admin-only-tab").forEach(el => el.classList.add("hidden"));
+          }
         },
         () => {
           clearTimeout(bootTimer);
           loadingScreen.classList.add("hidden");
-          appScreen.classList.add("hidden");
-          loginScreen.classList.remove("hidden");
+          appScreen.classList.remove("hidden");
+
+          // Guest View
+          document.getElementById("btn-open-login").classList.remove("hidden");
+          document.getElementById("header-user-info").classList.add("hidden");
+          document.getElementById("nav-my-portal").classList.add("hidden");
+          document.querySelectorAll(".admin-only-tab").forEach(el => el.classList.add("hidden"));
         }
       );
     } catch (err) {
