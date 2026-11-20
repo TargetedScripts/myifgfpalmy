@@ -54,7 +54,6 @@ function renderPublicFeed() {
   const todayISO = getAucklandTodayISO();
   const currentMonthKey = todayISO.slice(0, 7);
 
-  // Cari bulan aktif (atau bulan pertama 2027 jika masih tahun 2026)
   const activeMonth =
     portalState.months.find(m => m.month_key === currentMonthKey) ||
     portalState.months[0];
@@ -71,7 +70,6 @@ function renderPublicFeed() {
     `;
   }
 
-  // Upcoming Services (4 jadwal terdekat dari todayISO)
   const upcomingWeeks = portalState.weeks
     .filter(w => w.service_date >= todayISO)
     .slice(0, 4);
@@ -96,7 +94,6 @@ function renderPublicFeed() {
     }
   }
 
-  // Latest Daily Devotions
   const devContainer = document.getElementById("public-devotions-list");
   if (devContainer) {
     if (portalState.devotions.length === 0) {
@@ -113,7 +110,6 @@ function renderPublicFeed() {
     }
   }
 
-  // Media Gallery
   const mediaContainer = document.getElementById("public-media-list");
   if (mediaContainer) {
     if (portalState.media.length === 0) {
@@ -151,7 +147,6 @@ async function refreshMemberSelfService() {
   unregBanner?.classList.add("hidden");
   selfServiceBody?.classList.remove("hidden");
 
-  // Populate My Profile summary
   document.getElementById("my-profile-name").textContent = discipleDoc.full_name || "";
   document.getElementById("my-profile-meta").textContent =
     `${discipleDoc.member_id || "Member"} • ${discipleDoc.email} • DJ Status: ${(discipleDoc.dj_traffic_light || "red").toUpperCase()}`;
@@ -211,6 +206,10 @@ function renderMyDuties() {
   }).join("");
 }
 
+function formatDateRangeLabel(start, end) {
+  return !end || start === end ? start : `${start} → ${end}`;
+}
+
 function renderMyBlockouts() {
   const container = document.getElementById("my-blockouts-list");
   if (!container) return;
@@ -221,12 +220,12 @@ function renderMyBlockouts() {
   }
 
   container.innerHTML = portalState.myBlockouts.map(b => `
-    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between text-xs">
+    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between gap-2 text-xs">
       <div>
-        <span class="font-mono font-bold text-red-700">${b.unavailable_date}</span>
+        <span class="font-mono font-bold text-red-700">${formatDateRangeLabel(b.start_date, b.end_date)}</span>
         ${b.reason ? `<span class="text-slate-600 ml-1.5">— ${b.reason}</span>` : ""}
       </div>
-      <button onclick="window.deleteMyBlockout('${b.id}')" class="text-red-600 hover:underline font-medium">Remove</button>
+      <button onclick="window.deleteMyBlockout('${b.id}')" class="text-red-600 hover:underline font-medium shrink-0">Remove</button>
     </div>
   `).join("");
 }
@@ -237,14 +236,21 @@ function bindMemberPortalEvents() {
     const discipleDoc = portalState.profile?.discipleDoc;
     if (!discipleDoc) return;
 
-    const dateVal = document.getElementById("my-blockout-date").value;
+    const fromDate = document.getElementById("my-blockout-from").value;
+    const toDate = document.getElementById("my-blockout-to").value || fromDate;
     const reason = document.getElementById("my-blockout-reason").value.trim();
-    if (!dateVal) return;
+    if (!fromDate) return;
+
+    if (toDate < fromDate) {
+      alert("'To Date' cannot be earlier than 'From Date'.");
+      return;
+    }
 
     await addUnavailability({
       disciple_id: discipleDoc.id,
       disciple_name: discipleDoc.full_name,
-      unavailable_date: dateVal,
+      start_date: fromDate,
+      end_date: toDate,
       reason
     });
     e.target.reset();
