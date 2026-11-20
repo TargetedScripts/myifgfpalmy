@@ -187,37 +187,34 @@ function renderPublicFeed() {
     }
   }
 
-  // Daily Reflections: Prioritize Today (NZ) + Next 2 Days
+  // Daily Reflection: Display ONLY TODAY (NZ)
   const refContainer = document.getElementById("public-devotions-list");
   if (refContainer) {
     if (portalState.reflections.length === 0) {
-      refContainer.innerHTML = `<div class="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-500">Daily reflections will be published soon. Check back shortly!</div>`;
+      refContainer.innerHTML = `<div class="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-500">Daily reflection will be published soon. Check back shortly!</div>`;
     } else {
       const normalized = portalState.reflections.map(d => ({
         ...d,
         _date: d.reflection_date || d.devotion_date || d.id || ""
       }));
       const sortedAsc = [...normalized].sort((a, b) => a._date.localeCompare(b._date));
-      const fromToday = sortedAsc.filter(d => d._date >= todayISO);
-      const displayRefs = fromToday.length > 0
-        ? fromToday.slice(0, 3)
-        : normalized.slice(0, 3);
+      const todayRef =
+        sortedAsc.find(d => d._date === todayISO) ||
+        sortedAsc.find(d => d._date >= todayISO) ||
+        sortedAsc[sortedAsc.length - 1];
 
-      refContainer.innerHTML = displayRefs.map((d, idx) => {
-        const isToday = d._date === todayISO || (idx === 0 && fromToday.length > 0);
-        return `
-          <div class="bg-white p-4 rounded-xl border ${isToday ? "border-amber-400 ring-1 ring-amber-200" : "border-slate-200"} shadow-sm space-y-2">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-[11px] font-mono font-semibold text-slate-600">${d._date}</span>
-              ${d._date === todayISO ? `<span class="text-[10px] font-extrabold px-2 py-0.5 bg-amber-400 text-slate-950 rounded-full">TODAY</span>` : ""}
-            </div>
-            <p class="text-[11px] font-bold text-amber-800">${d.scripture}</p>
-            <h4 class="font-bold text-sm text-slate-900">${d.title}</h4>
-            <p class="text-xs text-slate-700 whitespace-pre-line leading-relaxed">${d.reflection}</p>
-            ${d.prayer ? `<p class="text-xs italic text-slate-600 pt-1.5 border-t border-slate-100">🙏 ${d.prayer}</p>` : ""}
+      refContainer.innerHTML = `
+        <div class="bg-white p-4 rounded-xl border border-amber-400 ring-1 ring-amber-200 shadow-sm space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[11px] font-mono font-semibold text-slate-600">${todayRef._date}</span>
+            <span class="text-[10px] font-extrabold px-2 py-0.5 bg-amber-400 text-slate-950 rounded-full">TODAY</span>
           </div>
-        `;
-      }).join("");
+          <p class="text-[11px] font-bold text-amber-800">${todayRef.scripture}</p>
+          <h4 class="font-bold text-sm text-slate-900">${todayRef.title}</h4>
+          <p class="text-xs text-slate-700 whitespace-pre-line leading-relaxed">${todayRef.reflection}</p>
+          ${todayRef.prayer ? `<p class="text-xs italic text-slate-600 pt-1.5 border-t border-slate-100">🙏 ${todayRef.prayer}</p>` : ""}
+        </div>
+      `;
     }
   }
 
