@@ -1,155 +1,307 @@
 // js/ui-roster.js
-import { getDepartments, getRolesReference, getDisciples } from "./db-master.js";
-import { getWeeklyInsights } from "./db-content.js";
 import {
-  getSundayServices,
-  ensureServiceRecord,
+  getDepartments,
+  getRoles,
+  getDisciples
+} from "./db-master.js";
+import {
+  getWeeklyInsights
+} from "./db-content.js";
+import {
   getAssignmentsByDate,
-  saveAssignment,
-  updateAssignmentStatus,
-  removeAssignment,
-  getUnavailabilityList,
+  upsertAssignment,
+  deleteAssignment,
+  getUnavailability,
   addUnavailability,
   deleteUnavailability
 } from "./db-roster.js";
+
+const ROLE_PRIORITY_ORDER = [
+  "Service MC / Host",
+  "Worship Leader",
+  "Singer 1",
+  "Singer 2",
+  "Singer 3",
+  "Acoustic / Electric Guitar",
+  "Bass Guitar",
+  "Drums / Cajon",
+  "Keyboard / Piano",
+  "Sound Engineer",
+  "Lighting",
+  "Multi Media",
+  "Camera",
+  "Barista / Coffee Station",
+  "Fellowship Refreshments",
+  "Greeter / Usher"
+];
 
 let rosterState = {
   departments: [],
   roles: [],
   disciples: [],
-  insights: [],
   services: [],
+  unavailability: [],
   selectedDate: "",
-  assignments: [],
-  unavailability: []
-};
-
-const DEPT_INTEREST_KEYWORDS = {
-  pulpit_editorial: ["preach", "mc", "editorial", "pulpit"],
-  praise_worship: ["worship", "wl", "singer", "musician"],
-  creative_production: ["multimedia", "sound", "creative", "media", "photo", "design"],
-  kitchen_catering: ["coffee", "catering", "kitchen", "hospitality"],
-  usher_facility: ["usher", "hospitality", "welcome", "facility"],
-  dj_class: ["dj", "discipleship", "kids", "sunday school"],
-  icare: ["icare", "connect"],
-  icorner_missions: ["icorner", "mission", "outreach"]
+  assignments: []
 };
 
 export async function initRosterEngine() {
   bindRosterEvents();
-  await loadRosterBaseData();
+  await refreshRosterContext();
 }
 
-async function loadRosterBaseData() {
-  const [depts, roles, disciples, insights, services, unavail] = await Promise.all([
+async function refreshRosterContext() {
+  const [depts, roles, disciples, weeks, unavail] = await Promise.all([
     getDepartments(),
-    getRolesReference(),
+    getRoles(),
     getDisciples(),
     getWeeklyInsights(),
-    getSundayServices(),
-    getUnavailabilityList()
+    getUnavailability()
   ]);
 
-  rosterState.departments = depts.filter(d => d.is_active);
-  rosterState.roles = roles.filter(r => r.is_active);
-  rosterState.disciples = disciples.filter(d => d.status === "Active");
-  rosterState.insights = insights;
-  rosterState.services = services;
+  rosterState.departments = depts.filter(d => d.active !== false);
+  rosterState.roles = sortRolesCustom(roles.filter(r => r.active !== false));
+  rosterState.disciples = disciples.filter(d => (d.status || "Active") === "Active");
   rosterState.unavailability = unavail;
 
-  populateServiceDateSelector();
-  populateUnavailSelectors();
-  renderUnavailabilityList();
-
-  if (rosterState.selectedDate) {
-    await loadAssignmentsForSelectedDate();
-  }
-}
-
-function populateServiceDateSelector() {
-  const sel = document.getElementById("roster-service-select");
-  if (!sel) return;
-
-  const dateMap = new Map();
-  rosterState.insights.forEach(w => {
-    dateMap.set(w.service_date, {
-      date: w.service_date,
-      title: w.title,
-      key_verse: w.key_verse,
-      label: `${w.service_date} — ${w.title} (${w.week_label || "Sunday"})`
-    });
-  });
-  rosterState.services.forEach(s => {
-    if (!dateMap.has(s.service_date)) {
-      dateMap.set(s.service_date, {
-        date: s.service_date,
-        title: s.title,
-        key_verse: s.key_verse || "",
-        label: `${s.service_date} — ${s.title}`
+  const serviceMap = new Map();
+  weeks.forEach(w => {
+    if (w.service_date) {
+      serviceMap.set(w.service_date, {
+        service_date: w.service_date,
+        title: w.title || "Sunday Celebration",
+        week_label: w.week_label || "",
+        key_verse: w.key_verse || ""
       });
     }
   });
 
-  const sorted = Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  if (sorted.length === 0) {
-    sel.innerHTML = `<option value="">No service dates yet — add custom date or seed 2027 curriculum</option>`;
-    return;
+  if (rosterState.selectedDate && !serviceMap.has(rosterState.selectedDate)) {
+    serviceMap.set(rosterState.selectedDate, {
+      service_date: rosterState.selectedDate,
+      title: "Custom / Special Service",
+      week_label: "Special",
+      key_verse: ""
+    });
   }
 
-  sel.innerHTML = sorted.map(item => `<option value="${item.date}">${item.label}</option>`).join("");
-  if (!rosterState.selectedDate || !dateMap.has(rosterState.selectedDate)) {
-    rosterState.selectedDate = sorted[0].date;
+  rosterState.services = Array.from(serviceMap.values()).sort((a, b) =>
+    a.service_date.localeCompare(b.service_date)
+  );
+
+  if (!rosterState.selectedDate && rosterState.services.length > 0) {
+    const todayISO = getAucklandTodayISO();
+    const upcoming = rosterState.services.find(s => s.service_date >= todayISO);
+    rosterState.selectedDate = (upcoming || rosterState.services[0]).service_date;
   }
-  sel.value = rosterState.selectedDate;
+
+  populateServiceSelect();
+  populateUnavailDiscipleSelect();
+  renderUnavailabilityList();
+
+  if (rosterState.selectedDate) {
+    await loadServiceRoster(rosterState.selectedDate);
+  }
 }
 
-async function loadAssignmentsForSelectedDate() {
-  const date = rosterState.selectedDate;
-  if (!date) return;
+function sortRolesCustom(roles) {
+  return [...roles].sort((a, b) => {
+    const idxA = ROLE_PRIORITY_ORDER.indexOf(a.name);
+    const idxB = ROLE_PRIORITY_ORDER.indexOf(b.name);
+    const rankA = idxA === -1 ? 999 : idxA;
+    const rankB = idxB === -1 ? 999 : idxB;
+    if (rankA !== rankB) return rankA - rankB;
+    return (a.sort_order ?? 99) - (b.sort_order ?? 99);
+  });
+}
 
-  const insight = rosterState.insights.find(w => w.service_date === date);
-  const customSvc = rosterState.services.find(s => s.service_date === date);
-  const title = insight?.title || customSvc?.title || "Sunday Celebration Service";
-  const verse = insight?.key_verse || customSvc?.key_verse || "";
+function getAucklandTodayISO() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Pacific/Auckland",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
 
-  document.getElementById("roster-theme-title").textContent = title;
-  document.getElementById("roster-theme-meta").textContent =
-    `${date} • 10:30 AM (Pacific/Auckland)` + (verse ? ` • 🔑 ${verse}` : "");
+function populateServiceSelect() {
+  const select = document.getElementById("roster-service-select");
+  if (!select) return;
 
-  rosterState.assignments = await getAssignmentsByDate(date);
-  renderConflictBanner();
+  select.innerHTML = rosterState.services
+    .map(s => `<option value="${s.service_date}">${s.service_date} — ${s.title}${s.week_label ? ` (${s.week_label})` : ""}</option>`)
+    .join("");
+
+  if (rosterState.selectedDate) {
+    select.value = rosterState.selectedDate;
+  }
+}
+
+function populateUnavailDiscipleSelect() {
+  const select = document.getElementById("unavail-disciple");
+  if (!select) return;
+
+  select.innerHTML = rosterState.disciples
+    .map(d => `<option value="${d.id}">${d.full_name}</option>`)
+    .join("");
+}
+
+async function loadServiceRoster(serviceDate) {
+  rosterState.selectedDate = serviceDate;
+  const svc = rosterState.services.find(s => s.service_date === serviceDate);
+
+  const titleEl = document.getElementById("roster-theme-title");
+  const metaEl = document.getElementById("roster-theme-meta");
+  if (titleEl) {
+    titleEl.textContent = svc ? `${svc.service_date} • ${svc.title}` : serviceDate;
+  }
+  if (metaEl) {
+    metaEl.textContent = svc
+      ? [svc.week_label, svc.key_verse].filter(Boolean).join(" • ") || "Sunday Celebration 10:30 AM"
+      : "";
+  }
+
+  rosterState.assignments = await getAssignmentsByDate(serviceDate);
   renderRosterBoard();
+  renderConflicts();
 }
 
-function isDateWithinBlockout(u, targetDate) {
-  const start = u.start_date || u.unavailable_date || "";
-  const end = u.end_date || u.unavailable_date || start;
-  return start <= targetDate && targetDate <= end;
+function isDiscipleUnavailable(discipleId, serviceDate) {
+  return rosterState.unavailability.find(u => {
+    if (u.disciple_id !== discipleId) return false;
+    const start = u.start_date || "";
+    const end = u.end_date || start;
+    return serviceDate >= start && serviceDate <= end;
+  });
 }
 
-function renderConflictBanner() {
+function getDjRank(level) {
+  const map = { come: 1, grow: 2, serve: 3, lead: 4 };
+  return map[(level || "come").toLowerCase()] || 1;
+}
+
+function meetsMinDj(disciple, minDjLevel) {
+  const reqRank = getDjRank(minDjLevel);
+  if (reqRank <= 1) return true;
+  const light = (disciple.dj_traffic_light || "red").toLowerCase();
+  const stage = (disciple.dj_stage || "").toLowerCase();
+  if (light === "green") return true;
+  if (light === "amber") return reqRank <= 2;
+  if (stage.includes("grow") || stage.includes("serve") || stage.includes("lead")) return reqRank <= 2;
+  return false;
+}
+
+function renderRosterBoard() {
+  const board = document.getElementById("roster-board");
+  if (!board) return;
+
+  const assignedCountByDisciple = {};
+  rosterState.assignments.forEach(a => {
+    if (a.disciple_id) {
+      assignedCountByDisciple[a.disciple_id] = (assignedCountByDisciple[a.disciple_id] || 0) + 1;
+    }
+  });
+
+  const deptCards = rosterState.departments.map(dept => {
+    const deptRoles = rosterState.roles.filter(r => r.dept_id === dept.id || r.dept_name === dept.name);
+    if (deptRoles.length === 0) return "";
+
+    const filledCount = deptRoles.filter(r =>
+      rosterState.assignments.some(a => (a.role_id === r.id || a.role_name === r.name) && a.disciple_id)
+    ).length;
+
+    const rowsHtml = deptRoles.map(role => {
+      const current = rosterState.assignments.find(a => a.role_id === role.id || a.role_name === role.name);
+      const selectedId = current?.disciple_id || "";
+      const isVocalTeam = ["Worship Leader", "Singer 1", "Singer 2", "Singer 3"].includes(role.name);
+
+      const optionsHtml = rosterState.disciples.map(d => {
+        const unavail = isDiscipleUnavailable(d.id, rosterState.selectedDate);
+        const djOk = meetsMinDj(d, role.min_dj_level);
+        const count = assignedCountByDisciple[d.id] || 0;
+        const flags = [
+          unavail ? "🚫 Unavailable" : "",
+          !djOk ? `⚠️ Min DJ: ${role.min_dj_level}` : "",
+          count > 1 ? `(${count} roles)` : ""
+        ].filter(Boolean).join(" ");
+
+        return `<option value="${d.id}" ${d.id === selectedId ? "selected" : ""}>${d.full_name}${flags ? ` ${flags}` : ""}</option>`;
+      }).join("");
+
+      const statusBadge = selectedId
+        ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${
+            current?.status === "Confirmed"
+              ? "badge-green"
+              : current?.status === "Declined"
+              ? "badge-red"
+              : "badge-amber"
+          }">${current?.status || "Assigned"}</span>`
+        : `<span class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Optional / Open</span>`;
+
+      return `
+        <div class="py-2.5 border-b border-slate-100 last:border-b-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+          isVocalTeam ? "bg-amber-50/35 -mx-2 px-2 rounded-lg" : ""
+        }">
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-slate-900">${role.name}</p>
+            <p class="text-[11px] text-slate-500">Min DJ: ${role.min_dj_level || "Come"}${role.can_reimburse ? " • Reimbursable" : ""}</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <select
+              onchange="window.assignRosterSlot('${role.id}', this.value)"
+              class="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium bg-white max-w-[210px]"
+            >
+              <option value="">— Unassigned —</option>
+              ${optionsHtml}
+            </select>
+            ${statusBadge}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
+        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+          <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800">${dept.name}</h3>
+          <span class="text-xs font-bold text-slate-600">${filledCount}/${deptRoles.length} filled</span>
+        </div>
+        <div>${rowsHtml}</div>
+      </div>
+    `;
+  }).filter(Boolean).join("");
+
+  board.innerHTML = deptCards || `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500 col-span-full">Click "⚡ Seed Depts & Roles" first to initialize departments and roles.</div>`;
+}
+
+function renderConflicts() {
   const banner = document.getElementById("roster-conflict-banner");
   if (!banner) return;
 
   const warnings = [];
-  const counts = {};
+  const byDisciple = {};
 
   rosterState.assignments.forEach(a => {
-    counts[a.disciple_id] = counts[a.disciple_id] || [];
-    counts[a.disciple_id].push(a.role_name);
+    if (!a.disciple_id) return;
+    byDisciple[a.disciple_id] = byDisciple[a.disciple_id] || [];
+    byDisciple[a.disciple_id].push(a.role_name);
 
-    const isBlocked = rosterState.unavailability.some(
-      u => u.disciple_id === a.disciple_id && isDateWithinBlockout(u, rosterState.selectedDate)
-    );
-    if (isBlocked) {
-      warnings.push(`⚠️ <strong>${a.disciple_name}</strong> (${a.role_name}) marked UNAVAILABLE on ${rosterState.selectedDate}.`);
+    const unavail = isDiscipleUnavailable(a.disciple_id, rosterState.selectedDate);
+    if (unavail) {
+      warnings.push(`🚫 <strong>${a.disciple_name}</strong> is marked unavailable for <strong>${roleNameOr(a.role_name)}</strong>${unavail.reason ? ` (${unavail.reason})` : ""}.`);
+    }
+
+    const role = rosterState.roles.find(r => r.id === a.role_id || r.name === a.role_name);
+    const disciple = rosterState.disciples.find(d => d.id === a.disciple_id);
+    if (role && disciple && !meetsMinDj(disciple, role.min_dj_level)) {
+      warnings.push(`⚠️ <strong>${a.disciple_name}</strong> is assigned to <strong>${role.name}</strong> (Min DJ: ${role.min_dj_level}).`);
     }
   });
 
-  Object.entries(counts).forEach(([discipleId, roleList]) => {
-    if (roleList.length > 1) {
-      const person = rosterState.assignments.find(x => x.disciple_id === discipleId)?.disciple_name;
-      warnings.push(`🔁 Double-booked: <strong>${person}</strong> assigned to ${roleList.join(" + ")}.`);
+  Object.entries(byDisciple).forEach(([discId, roleNames]) => {
+    if (roleNames.length > 1) {
+      const personName = rosterState.assignments.find(x => x.disciple_id === discId)?.disciple_name || "Volunteer";
+      warnings.push(`🔁 <strong>${personName}</strong> has multiple roles on ${rosterState.selectedDate}: <strong>${roleNames.join(", ")}</strong>.`);
     }
   });
 
@@ -162,178 +314,97 @@ function renderConflictBanner() {
   }
 }
 
-function isDiscipleInterestedInDept(disciple, deptId) {
-  const keywords = DEPT_INTEREST_KEYWORDS[deptId] || [];
-  const interests = (disciple.ministry_interests || []).join(" ").toLowerCase();
-  return keywords.some(kw => interests.includes(kw));
-}
-
-function renderRosterBoard() {
-  const board = document.getElementById("roster-board");
-  if (!board) return;
-
-  if (rosterState.departments.length === 0 || rosterState.roles.length === 0) {
-    board.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500">Please click "⚡ Seed Depts & Roles" first to load ministry roles.</div>`;
-    return;
-  }
-
-  const assignByRole = Object.fromEntries(rosterState.assignments.map(a => [a.role_id, a]));
-  const blockedIds = new Set(
-    rosterState.unavailability
-      .filter(u => isDateWithinBlockout(u, rosterState.selectedDate))
-      .map(u => u.disciple_id)
-  );
-
-  board.innerHTML = rosterState.departments.map(dept => {
-    const deptRoles = rosterState.roles.filter(r => r.department_id === dept.id);
-    if (deptRoles.length === 0) return "";
-
-    const rowsHtml = deptRoles.map(role => {
-      const assigned = assignByRole[role.id];
-      const recommended = rosterState.disciples.filter(d => isDiscipleInterestedInDept(d, dept.id));
-      const others = rosterState.disciples.filter(d => !isDiscipleInterestedInDept(d, dept.id));
-
-      const buildOption = (d, isRec) => {
-        const blockedTag = blockedIds.has(d.id) ? " [UNAVAILABLE]" : "";
-        const djTag = d.dj_traffic_light === "green" ? "🟢" : d.dj_traffic_light === "amber" ? "🟠" : "🔴";
-        const starTag = isRec ? "⭐ " : "";
-        return `<option value="${d.id}" ${assigned?.disciple_id === d.id ? "selected" : ""}>${starTag}${djTag} ${d.full_name}${blockedTag}</option>`;
-      };
-
-      const optionsHtml = `
-        <option value="">— Unassigned —</option>
-        ${recommended.length > 0 ? `<optgroup label="⭐ Matching Ministry Interest">${recommended.map(d => buildOption(d, true)).join("")}</optgroup>` : ""}
-        <optgroup label="All Active Disciples">${others.map(d => buildOption(d, false)).join("")}</optgroup>
-      `;
-
-      const statusBadge = assigned
-        ? `<select onchange="window.changeRosterStatus('${assigned.id}', this.value)" class="text-[11px] font-semibold px-2 py-1 rounded border ${
-            assigned.status === "Confirmed"
-              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-              : assigned.status === "Declined"
-              ? "bg-red-50 text-red-700 border-red-200"
-              : "bg-amber-50 text-amber-800 border-amber-200"
-          }">
-            <option value="Assigned" ${assigned.status === "Assigned" ? "selected" : ""}>Assigned</option>
-            <option value="Confirmed" ${assigned.status === "Confirmed" ? "selected" : ""}>Confirmed</option>
-            <option value="Declined" ${assigned.status === "Declined" ? "selected" : ""}>Declined</option>
-          </select>`
-        : `<span class="text-[11px] text-slate-400">Open slot</span>`;
-
-      return `
-        <div class="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 last:border-b-0">
-          <div class="min-w-[190px]">
-            <p class="text-xs font-bold text-slate-900">${role.role_name}</p>
-            <span class="text-[10px] text-slate-500">Min DJ: ${role.min_dj_level || "Come"}</span>
-          </div>
-          <div class="flex items-center gap-2 flex-1 sm:justify-end">
-            <select onchange="window.assignVolunteer('${role.id}', this.value)" class="w-full sm:w-64 px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg">
-              ${optionsHtml}
-            </select>
-            ${statusBadge}
-          </div>
-        </div>
-      `;
-    }).join("");
-
-    return `
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
-          <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800">${dept.name}</h3>
-          <span class="text-[11px] text-slate-500">${deptRoles.filter(r => assignByRole[r.id]).length}/${deptRoles.length} filled</span>
-        </div>
-        <div>${rowsHtml}</div>
-      </div>
-    `;
-  }).join("");
-}
-
-function populateUnavailSelectors() {
-  const sel = document.getElementById("unavail-disciple");
-  if (!sel) return;
-  sel.innerHTML = rosterState.disciples
-    .map(d => `<option value="${d.id}">${d.full_name}</option>`)
-    .join("");
+function roleNameOr(val) {
+  return val || "role";
 }
 
 function renderUnavailabilityList() {
-  const container = document.getElementById("list-unavailability");
-  if (!container) return;
+  const list = document.getElementById("list-unavailability");
+  if (!list) return;
+
   if (rosterState.unavailability.length === 0) {
-    container.innerHTML = `<p class="text-xs text-slate-500">No volunteer block-out dates recorded.</p>`;
+    list.innerHTML = `<p class="text-xs text-slate-500">No unavailability records logged.</p>`;
     return;
   }
-  container.innerHTML = rosterState.unavailability.map(u => {
-    const rangeLabel = !u.end_date || u.start_date === u.end_date
+
+  list.innerHTML = rosterState.unavailability.map(u => {
+    const label = !u.end_date || u.start_date === u.end_date
       ? u.start_date
       : `${u.start_date} → ${u.end_date}`;
     return `
-      <div class="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+      <div class="p-2 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between gap-2 text-xs">
         <div>
-          <span class="font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded">${rangeLabel}</span>
-          <strong class="text-slate-900 ml-1.5">${u.disciple_name}</strong>
-          ${u.reason ? `<span class="text-slate-500"> — ${u.reason}</span>` : ""}
+          <strong>${u.disciple_name}</strong>
+          <span class="font-mono text-red-700 ml-1.5">${label}</span>
+          ${u.reason ? `<span class="text-slate-600 ml-1">— ${u.reason}</span>` : ""}
         </div>
-        <button onclick="window.removeUnavail('${u.id}')" class="text-red-600 hover:underline font-medium">Remove</button>
+        <button onclick="window.removeUnavailability('${u.id}')" class="text-red-600 hover:underline font-medium shrink-0">Remove</button>
       </div>
     `;
   }).join("");
 }
 
-function generateWhatsAppText() {
-  const date = rosterState.selectedDate;
-  const title = document.getElementById("roster-theme-title")?.textContent || "Sunday Service";
-  const meta = document.getElementById("roster-theme-meta")?.textContent || date;
-
-  let lines = [
+function buildWhatsAppRosterText() {
+  const svc = rosterState.services.find(s => s.service_date === rosterState.selectedDate);
+  const lines = [
     `*IFGF PALMERSTON NORTH — SUNDAY ROSTER*`,
-    `📅 *${meta}*`,
-    `📖 *Tema:* ${title}`,
-    `────────────────────`
-  ];
+    `📅 *Date:* ${rosterState.selectedDate}`,
+    svc ? `📖 *Theme:* ${svc.title}` : "",
+    `⏰ *Time:* Sunday 10:30 AM`,
+    ``
+  ].filter(Boolean);
 
   rosterState.departments.forEach(dept => {
-    const deptAssigns = rosterState.assignments.filter(a => a.department_id === dept.id && a.status !== "Declined");
-    if (deptAssigns.length > 0) {
-      lines.push(`\n*${dept.name.toUpperCase()}*`);
-      deptAssigns.forEach(a => {
-        const tick = a.status === "Confirmed" ? " ✅" : "";
-        lines.push(`• ${a.role_name}: *${a.disciple_name}*${tick}`);
-      });
-    }
+    const deptRoles = rosterState.roles.filter(r => r.dept_id === dept.id || r.dept_name === dept.name);
+    if (deptRoles.length === 0) return;
+
+    lines.push(`*${dept.name}*`);
+    deptRoles.forEach(role => {
+      const assigned = rosterState.assignments.find(a => a.role_id === role.id || a.role_name === role.name);
+      const person = assigned?.disciple_name || "_Unassigned_";
+      lines.push(`• ${role.name}: ${person}`);
+    });
+    lines.push(``);
   });
 
-  if (rosterState.assignments.length === 0) {
-    lines.push(`\n_(Belum ada petugas yang dijadwalkan untuk tanggal ini)_`);
-  }
-
-  lines.push(`\n────────────────────`);
-  lines.push(`_Mohon konfirmasi kesiapan pelayanan. Tuhan Yesus memberkati!_ 🙏`);
-  return lines.join("\n");
+  return lines.join("\n").trim();
 }
 
 function bindRosterEvents() {
   document.getElementById("roster-service-select")?.addEventListener("change", async (e) => {
-    rosterState.selectedDate = e.target.value;
-    await loadAssignmentsForSelectedDate();
+    await loadServiceRoster(e.target.value);
   });
 
   document.getElementById("btn-add-custom-service")?.addEventListener("click", async () => {
-    const dateInput = prompt("Enter Service Date (YYYY-MM-DD), e.g. 2026-11-22:");
-    if (!dateInput || !/^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) return;
-    const titleInput = prompt("Service Theme / Title:", "Sunday Celebration Service") || "Sunday Celebration Service";
-    await ensureServiceRecord(dateInput.trim(), { title: titleInput.trim() });
-    rosterState.selectedDate = dateInput.trim();
-    await loadRosterBaseData();
+    const dateVal = prompt("Enter Service Date (YYYY-MM-DD, e.g. 2026-12-25):");
+    if (!dateVal || !/^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim())) {
+      if (dateVal !== null) alert("Please enter a valid date in YYYY-MM-DD format.");
+      return;
+    }
+    const cleanDate = dateVal.trim();
+    const titleVal = prompt("Enter Service / Event Title:", "Special Service") || "Special Service";
+
+    if (!rosterState.services.some(s => s.service_date === cleanDate)) {
+      rosterState.services.push({
+        service_date: cleanDate,
+        title: titleVal.trim(),
+        week_label: "Special",
+        key_verse: ""
+      });
+      rosterState.services.sort((a, b) => a.service_date.localeCompare(b.service_date));
+    }
+    rosterState.selectedDate = cleanDate;
+    populateServiceSelect();
+    await loadServiceRoster(cleanDate);
   });
 
   document.getElementById("btn-copy-wa-roster")?.addEventListener("click", async () => {
-    const text = generateWhatsAppText();
+    const text = buildWhatsAppRosterText();
     try {
       await navigator.clipboard.writeText(text);
-      alert("WhatsApp Roster copied to clipboard! Ready to paste into IFGF Palmy WhatsApp group.");
+      alert("WhatsApp roster copied to clipboard!");
     } catch {
-      prompt("Copy WhatsApp Roster below:", text);
+      prompt("Copy WhatsApp Roster text:", text);
     }
   });
 
@@ -341,12 +412,12 @@ function bindRosterEvents() {
     e.preventDefault();
     const discipleId = document.getElementById("unavail-disciple").value;
     const disciple = rosterState.disciples.find(d => d.id === discipleId);
-    const fromDate = document.getElementById("unavail-from").value;
-    const toDate = document.getElementById("unavail-to").value || fromDate;
+    const startDate = document.getElementById("unavail-from").value;
+    const endDate = document.getElementById("unavail-to").value || startDate;
     const reason = document.getElementById("unavail-reason").value.trim();
-    if (!disciple || !fromDate) return;
 
-    if (toDate < fromDate) {
+    if (!disciple || !startDate) return;
+    if (endDate < startDate) {
       alert("'To Date' cannot be earlier than 'From Date'.");
       return;
     }
@@ -354,41 +425,52 @@ function bindRosterEvents() {
     await addUnavailability({
       disciple_id: disciple.id,
       disciple_name: disciple.full_name,
-      start_date: fromDate,
-      end_date: toDate,
+      start_date: startDate,
+      end_date: endDate,
       reason
     });
     e.target.reset();
-    await loadRosterBaseData();
+    rosterState.unavailability = await getUnavailability();
+    renderUnavailabilityList();
+    renderRosterBoard();
+    renderConflicts();
   });
 }
 
-window.assignVolunteer = async (roleId, discipleId) => {
-  const date = rosterState.selectedDate;
-  if (!date) return;
+window.assignRosterSlot = async (roleId, discipleId) => {
+  const role = rosterState.roles.find(r => r.id === roleId);
+  if (!role || !rosterState.selectedDate) return;
+
+  const existing = rosterState.assignments.find(a => a.role_id === role.id || a.role_name === role.name);
 
   if (!discipleId) {
-    await removeAssignment(`${date}__${roleId}`);
-    await loadAssignmentsForSelectedDate();
-    return;
+    if (existing?.id) {
+      await deleteAssignment(existing.id);
+    }
+  } else {
+    const disciple = rosterState.disciples.find(d => d.id === discipleId);
+    if (!disciple) return;
+    await upsertAssignment(existing?.id || null, {
+      service_date: rosterState.selectedDate,
+      dept_id: role.dept_id || "",
+      dept_name: role.dept_name || "",
+      role_id: role.id,
+      role_name: role.name,
+      disciple_id: disciple.id,
+      disciple_name: disciple.full_name,
+      status: "Assigned"
+    });
   }
 
-  const roleObj = rosterState.roles.find(r => r.id === roleId);
-  const discipleObj = rosterState.disciples.find(d => d.id === discipleId);
-  if (!roleObj || !discipleObj) return;
-
-  const title = document.getElementById("roster-theme-title")?.textContent || "Sunday Service";
-  await ensureServiceRecord(date, { title });
-  await saveAssignment(date, roleObj, discipleObj, "Assigned");
-  await loadAssignmentsForSelectedDate();
+  rosterState.assignments = await getAssignmentsByDate(rosterState.selectedDate);
+  renderRosterBoard();
+  renderConflicts();
 };
 
-window.changeRosterStatus = async (assignmentId, newStatus) => {
-  await updateAssignmentStatus(assignmentId, newStatus);
-  await loadAssignmentsForSelectedDate();
-};
-
-window.removeUnavail = async (id) => {
+window.removeUnavailability = async (id) => {
   await deleteUnavailability(id);
-  await loadRosterBaseData();
+  rosterState.unavailability = await getUnavailability();
+  renderUnavailabilityList();
+  renderRosterBoard();
+  renderConflicts();
 };
