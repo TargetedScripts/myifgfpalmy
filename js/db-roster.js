@@ -69,16 +69,29 @@ export async function removeAssignment(assignmentId) {
   await deleteDoc(doc(db, "assignments", assignmentId));
 }
 
-// --- 3. VOLUNTEER UNAVAILABILITY (BLOCK-OUT DATES) ---
+// --- 3. VOLUNTEER UNAVAILABILITY (FROM / TO DATE RANGE) ---
 export async function getUnavailabilityList() {
-  const q = query(collection(db, "volunteer_unavailability"), orderBy("unavailable_date", "asc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const snap = await getDocs(collection(db, "volunteer_unavailability"));
+  return snap.docs
+    .map(d => {
+      const data = d.data();
+      const start = data.start_date || data.unavailable_date || "";
+      const end = data.end_date || data.unavailable_date || start;
+      return { id: d.id, ...data, start_date: start, end_date: end };
+    })
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
 }
 
 export async function addUnavailability(data) {
+  const start = data.start_date || data.unavailable_date;
+  const end = data.end_date && data.end_date >= start ? data.end_date : start;
   await addDoc(collection(db, "volunteer_unavailability"), {
-    ...data,
+    disciple_id: data.disciple_id,
+    disciple_name: data.disciple_name,
+    start_date: start,
+    end_date: end,
+    unavailable_date: start, // backward compatibility
+    reason: data.reason || "",
     created_at: serverTimestamp()
   });
 }
