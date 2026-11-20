@@ -1,13 +1,13 @@
 // js/ui-content.js
 import { seed2027Curriculum } from "./seed-2027.js";
 import { seedNovDec2026Compass } from "./seed-2026-compass.js";
-import { seedNov20toDec31Devotions } from "./seed-devotions-nov2026.js";
 import {
   getMonthlyThemes,
   getWeeklyInsights,
   saveWeeklyInsight,
-  getDailyDevotions,
-  saveDailyDevotion,
+  getDailyReflections,
+  saveDailyReflection,
+  seedNov20toDec31Reflections,
   getMediaGalleries,
   saveMediaGallery,
   deleteContentItem
@@ -17,7 +17,7 @@ import { initPublicPortal } from "./ui-portal.js";
 let contentState = {
   months: [],
   weeks: [],
-  devotions: [],
+  reflections: [],
   media: []
 };
 
@@ -27,22 +27,31 @@ export async function initContentStudio() {
 }
 
 async function refreshContentData() {
-  const [months, weeks, devotions, media] = await Promise.all([
+  let [months, weeks, reflections, media] = await Promise.all([
     getMonthlyThemes(),
     getWeeklyInsights(),
-    getDailyDevotions(),
+    getDailyReflections(),
     getMediaGalleries()
   ]);
 
+  if (reflections.length === 0) {
+    try {
+      await seedNov20toDec31Reflections();
+      reflections = await getDailyReflections();
+    } catch (err) {
+      console.warn("Auto-seed Daily Reflections skipped:", err);
+    }
+  }
+
   contentState.months = months;
   contentState.weeks = weeks;
-  contentState.devotions = devotions;
+  contentState.reflections = reflections;
   contentState.media = media;
 
   populateMonthFilter();
   renderMonthlyThemes();
   renderWeeklyInsights();
-  renderDevotions();
+  renderReflections();
   renderMedia();
 }
 
@@ -116,28 +125,31 @@ function renderWeeklyInsights() {
   `).join("");
 }
 
-function renderDevotions() {
+function renderReflections() {
   const container = document.getElementById("list-devotions");
   if (!container) return;
 
-  if (contentState.devotions.length === 0) {
-    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500">No daily devotions published yet.</div>`;
+  if (contentState.reflections.length === 0) {
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500">No daily reflections published yet.</div>`;
     return;
   }
 
-  container.innerHTML = contentState.devotions.map(d => `
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-1.5">
-      <div class="flex justify-between items-start">
-        <div>
-          <span class="text-xs font-mono text-slate-500">${d.devotion_date} • ${d.scripture}</span>
-          <h4 class="font-bold text-slate-900">${d.title}</h4>
+  container.innerHTML = contentState.reflections.map(d => {
+    const dateLabel = d.reflection_date || d.devotion_date || d.id;
+    return `
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-1.5">
+        <div class="flex justify-between items-start">
+          <div>
+            <span class="text-xs font-mono text-slate-500">${dateLabel} • ${d.scripture}</span>
+            <h4 class="font-bold text-slate-900">${d.title}</h4>
+          </div>
+          <button onclick="window.removeReflection('${d.id}')" class="text-xs text-red-600 hover:underline">Delete</button>
         </div>
-        <button onclick="window.removeDevotion('${d.id}')" class="text-xs text-red-600 hover:underline">Delete</button>
+        <p class="text-xs text-slate-700 whitespace-pre-line">${d.reflection}</p>
+        ${d.prayer ? `<p class="text-xs italic text-slate-600 pt-1 border-t border-slate-100">🙏 ${d.prayer}</p>` : ""}
       </div>
-      <p class="text-xs text-slate-700 whitespace-pre-line">${d.reflection}</p>
-      ${d.prayer ? `<p class="text-xs italic text-slate-600 pt-1 border-t border-slate-100">🙏 ${d.prayer}</p>` : ""}
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
 function renderMedia() {
@@ -196,22 +208,26 @@ function bindContentEvents() {
     }
   });
 
-  document.getElementById("btn-seed-devotions-nov26")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    btn.textContent = "Seeding 42 Devotions...";
-    try {
-      const count = await seedNov20toDec31Devotions();
-      alert(`Success! Seeded ${count} Daily Devotions (20 Nov – 31 Dec 2026).`);
-      await refreshContentData();
-      await initPublicPortal();
-    } catch (err) {
-      alert("Error seeding devotions: " + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "🙏 Seed Devotions (Nov–Dec)";
-    }
-  });
+  const seedReflectionsBtn = document.getElementById("btn-seed-devotions-nov26");
+  if (seedReflectionsBtn) {
+    seedReflectionsBtn.textContent = "🙏 Seed Daily Reflections (Nov–Dec)";
+    seedReflectionsBtn.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = "Seeding 42 Daily Reflections...";
+      try {
+        const count = await seedNov20toDec31Reflections();
+        alert(`Success! Seeded ${count} Daily Reflections (20 Nov – 31 Dec 2026).`);
+        await refreshContentData();
+        await initPublicPortal();
+      } catch (err) {
+        alert("Error seeding daily reflections: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "🙏 Seed Daily Reflections (Nov–Dec)";
+      }
+    });
+  }
 
   document.getElementById("btn-seed-2027")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
@@ -253,9 +269,9 @@ function bindContentEvents() {
 
   document.getElementById("form-devotion")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const devDate = document.getElementById("dev-date").value;
-    await saveDailyDevotion(devDate || null, {
-      devotion_date: devDate,
+    const refDate = document.getElementById("dev-date").value;
+    await saveDailyReflection(refDate || null, {
+      reflection_date: refDate,
       title: document.getElementById("dev-title").value.trim(),
       scripture: document.getElementById("dev-verse").value.trim(),
       reflection: document.getElementById("dev-body").value.trim(),
@@ -299,11 +315,14 @@ window.openWeeklyModal = (serviceDate) => {
   document.getElementById("modal-weekly").classList.remove("hidden");
 };
 
-window.removeDevotion = async (id) => {
-  if (!confirm("Delete this devotion?")) return;
-  await deleteContentItem("daily_devotions", id);
+window.removeReflection = async (id) => {
+  if (!confirm("Delete this daily reflection?")) return;
+  await deleteContentItem("daily_reflections", id).catch(() => {});
+  await deleteContentItem("daily_devotions", id).catch(() => {});
   await refreshContentData();
 };
+
+window.removeDevotion = window.removeReflection;
 
 window.removeMedia = async (id) => {
   if (!confirm("Delete this media entry?")) return;
