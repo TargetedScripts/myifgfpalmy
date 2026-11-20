@@ -5,13 +5,15 @@ import {
   doc,
   getDocs,
   addDoc,
-  updateDoc,
   setDoc,
   deleteDoc,
   query,
   orderBy,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { seedNov20toDec31Devotions } from "./seed-devotions-nov2026.js";
+
+export { seedNov20toDec31Devotions };
 
 // --- 1. MONTHLY THEMES ---
 export async function getMonthlyThemes() {
@@ -47,21 +49,89 @@ export async function saveWeeklyInsight(id, data) {
   }
 }
 
-// --- 3. DAILY DEVOTIONS ---
-export async function getDailyDevotions() {
-  const q = query(collection(db, "daily_devotions"), orderBy("devotion_date", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+// --- 3. DAILY REFLECTIONS (with daily_devotions fallback) ---
+export async function getDailyReflections() {
+  const [refSnap, devSnap] = await Promise.all([
+    getDocs(query(collection(db, "daily_reflections"), orderBy("reflection_date", "desc"))).catch(() => null),
+    getDocs(query(collection(db, "daily_devotions"), orderBy("devotion_date", "desc"))).catch(() => null)
+  ]);
+
+  const byDate = new Map();
+
+  if (devSnap) {
+    devSnap.docs.forEach(d => {
+      const data = d.data();
+      const dateKey = data.reflection_date || data.devotion_date || d.id;
+      byDate.set(dateKey, {
+        id: d.id,
+        ...data,
+        reflection_date: dateKey
+      });
+    });
+  }
+
+  if (refSnap) {
+    refSnap.docs.forEach(d => {
+      const data = d.data();
+      const dateKey = data.reflection_date || data.devotion_date || d.id;
+      byDate.set(dateKey, {
+        id: d.id,
+        ...data,
+        reflection_date: dateKey
+      });
+    });
+  }
+
+  return Array.from(byDate.values()).sort((a, b) =>
+    (b.reflection_date || "").localeCompare(a.reflection_date || "")
+  );
 }
 
-export async function saveDailyDevotion(id, data) {
-  const payload = { ...data, updated_at: serverTimestamp() };
-  if (id) {
-    await setDoc(doc(db, "daily_devotions", id), payload, { merge: true });
+export async function saveDailyReflection(id, data) {
+  const dateKey = data.reflection_date || data.devotion_date || id;
+  const docId = id || dateKey || undefined;
+  const payload = {
+    ...data,
+    reflection_date: dateKey || "",
+    devotion_date: dateKey || "",
+    status: data.status || "Published",
+    updated_at: serverTimestamp()
+  };
+
+  if (docId) {
+    await setDoc(doc(db, "daily_reflections", docId), payload, { merge: true });
+    await setDoc(doc(db, "daily_devotions", docId), payload, { merge: true });
   } else {
     payload.created_at = serverTimestamp();
-    await addDoc(collection(db, "daily_devotions"), payload);
+    await addDoc(collection(db, "daily_reflections"), payload);
   }
+}
+
+// Backward-compatible aliases
+export const getDailyDevotions = getDailyReflections;
+export const saveDailyDevotion = saveDailyReflection;
+
+export async function seedNov20toDec31Reflections() {
+  const count = await seedNov20toDec31Devotions();
+  const snap = await getDocs(collection(db, "daily_devotions"));
+  await Promise.all(
+    snap.docs.map(d => {
+      const data = d.data();
+      const dateKey = data.reflection_date || data.devotion_date || d.id;
+      return setDoc(
+        doc(db, "daily_reflections", dateKey),
+        {
+          ...data,
+          reflection_date: dateKey,
+          devotion_date: dateKey,
+          status: data.status || "Published",
+          updated_at: serverTimestamp()
+        },
+        { merge: true }
+      );
+    })
+  );
+  return count;
 }
 
 // --- 4. MEDIA GALLERIES ---
