@@ -80,6 +80,7 @@
           <button class="tab-btn active px-3.5 py-2 rounded-lg text-xs font-semibold transition" data-tab="public">🏛️ Church Portal</button>
           <button id="nav-my-portal" class="tab-btn hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="myportal">🙋 My Portal</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roster">📅 Sunday Roster</button>
+          <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="care">🌱 Care & Growth</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="disciples">Disciples (360°)</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="content">📖 Content Studio</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roles">Roles</button>
@@ -234,6 +235,117 @@
             <button type="submit" class="bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2 px-4 rounded-lg">Add Block-out</button>
           </form>
           <div id="list-unavailability" class="space-y-1.5 pt-1"></div>
+        </div>
+      </section>
+
+      <!-- TAB CARE & GROWTH (STAGE 3B) -->
+      <section id="panel-care" class="tab-panel hidden space-y-4">
+        <div class="flex flex-wrap gap-2">
+          <button class="care-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="attendance">✅ Sunday Attendance</button>
+          <button class="care-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="dj">🎓 DJ Class Progress</button>
+          <button class="care-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="icare">🏠 iCare Connect</button>
+          <button class="care-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="newcomers">👋 Newcomers / iCorner</button>
+        </div>
+
+        <!-- Subpanel 1: Sunday Attendance -->
+        <div id="care-sub-attendance" class="care-subpanel space-y-3">
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="flex-1">
+                <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Service Date</label>
+                <select id="care-service-select" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold"></select>
+              </div>
+              <div class="sm:self-end">
+                <span id="att-summary-badge" class="inline-block px-3 py-2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold"></span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+              <div>
+                <label class="font-semibold text-slate-600">Search Member</label>
+                <input type="text" id="att-search" placeholder="Filter name..." class="w-full px-3 py-2 border rounded-lg mt-0.5" />
+              </div>
+              <div>
+                <label class="font-semibold text-slate-600">Visitors / Guests</label>
+                <input type="number" id="att-visitors" min="0" value="0" class="w-full px-3 py-2 border rounded-lg mt-0.5" />
+              </div>
+              <div>
+                <label class="font-semibold text-slate-600">Kids / Sunday School</label>
+                <input type="number" id="att-kids" min="0" value="0" class="w-full px-3 py-2 border rounded-lg mt-0.5" />
+              </div>
+              <div>
+                <label class="font-semibold text-slate-600">Service Notes</label>
+                <input type="text" id="att-notes" placeholder="e.g., Holy Communion / Rainy" class="w-full px-3 py-2 border rounded-lg mt-0.5" />
+              </div>
+            </div>
+
+            <div class="flex justify-end">
+              <button id="btn-save-attendance" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg">
+                💾 Save Attendance Record
+              </button>
+            </div>
+          </div>
+
+          <div id="att-checklist" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5"></div>
+        </div>
+
+        <!-- Subpanel 2: DJ Class Progress -->
+        <div id="care-sub-dj" class="care-subpanel hidden space-y-3">
+          <div class="bg-white p-3.5 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 class="font-bold text-sm text-slate-900">Discipleship Journey (DJ 1–4) Matrix</h3>
+              <p class="text-xs text-slate-500">Checking stages automatically updates the disciple's Traffic Light status.</p>
+            </div>
+            <input type="text" id="dj-search" placeholder="Search disciple..." class="px-3 py-2 border rounded-lg text-xs sm:w-64" />
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500">
+                <tr>
+                  <th class="p-3">Disciple</th>
+                  <th class="p-3 text-center">DJ 1: Come</th>
+                  <th class="p-3 text-center">DJ 2: Grow</th>
+                  <th class="p-3 text-center">DJ 3: Serve</th>
+                  <th class="p-3 text-center">DJ 4: Lead</th>
+                  <th class="p-3 text-right">Traffic Light</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-dj-matrix"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Subpanel 3: iCare Connect -->
+        <div id="care-sub-icare" class="care-subpanel hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <form id="form-icare" class="bg-white p-4 rounded-xl border border-slate-200 space-y-3 text-xs h-fit">
+            <h3 class="font-bold text-sm text-slate-900">Add iCare Cell Group</h3>
+            <input type="text" id="icare-name" required placeholder="iCare Name (e.g., iCare Hokowhitu)" class="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" id="icare-leader" required placeholder="Leader Name" class="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" id="icare-schedule" placeholder="Schedule (e.g., Friday 7:00 PM)" class="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" id="icare-location" placeholder="Suburb / Host Home" class="w-full px-3 py-2 border rounded-lg" />
+            <button type="submit" class="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg">Save iCare Group</button>
+          </form>
+          <div id="list-icare-groups" class="lg:col-span-2 space-y-2.5"></div>
+        </div>
+
+        <!-- Subpanel 4: Newcomers / iCorner -->
+        <div id="care-sub-newcomers" class="care-subpanel hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <form id="form-newcomer" class="bg-white p-4 rounded-xl border border-slate-200 space-y-3 text-xs h-fit">
+            <h3 class="font-bold text-sm text-slate-900">Log Sunday Newcomer</h3>
+            <input type="date" id="new-date" required class="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" id="new-name" required placeholder="Full Name" class="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" id="new-phone" placeholder="WhatsApp / Phone" class="w-full px-3 py-2 border rounded-lg" />
+            <input type="email" id="new-email" placeholder="Email (optional)" class="w-full px-3 py-2 border rounded-lg" />
+            <select id="new-category" class="w-full px-3 py-2 border rounded-lg">
+              <option value="Massey / IPU Student">Massey / IPU Student</option>
+              <option value="Working Migrant / Family">Working Migrant / Family</option>
+              <option value="Visiting from Out of Town">Visiting from Out of Town</option>
+            </select>
+            <input type="text" id="new-notes" placeholder="Invited by / Notes" class="w-full px-3 py-2 border rounded-lg" />
+            <button type="submit" class="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg">Save Newcomer</button>
+          </form>
+          <div id="list-newcomers" class="lg:col-span-2 space-y-2.5"></div>
         </div>
       </section>
 
@@ -554,6 +666,7 @@
       const { initContentStudio } = await import("./js/ui-content.js");
       const { initRosterEngine } = await import("./js/ui-roster.js");
       const { initPublicPortal, initMemberSelfService } = await import("./js/ui-portal.js");
+      const { initCareModule } = await import("./js/ui-care.js");
 
       document.querySelectorAll(".tab-btn").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -601,6 +714,7 @@
             await initMasterApp(profile);
             await initContentStudio();
             await initRosterEngine();
+            await initCareModule();
           } else {
             document.querySelectorAll(".admin-only-tab").forEach(el => el.classList.add("hidden"));
           }
