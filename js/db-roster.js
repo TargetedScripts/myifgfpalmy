@@ -48,12 +48,27 @@ export async function saveAssignment(serviceDate, roleObj, discipleObj, status =
   await setDoc(doc(db, "assignments", docId), {
     service_date: serviceDate,
     role_id: roleObj.id,
-    role_name: roleObj.role_name,
-    department_id: roleObj.department_id,
+    role_name: roleObj.role_name || roleObj.name || "",
+    department_id: roleObj.department_id || roleObj.dept_id || "",
     disciple_id: discipleObj.id,
     disciple_name: discipleObj.full_name,
     disciple_phone: discipleObj.phone || "",
     status,
+    updated_at: serverTimestamp()
+  }, { merge: true });
+}
+
+export async function upsertAssignment(existingId, data) {
+  const docId = existingId || `${data.service_date}__${data.role_id || data.role_name}`;
+  await setDoc(doc(db, "assignments", docId), {
+    service_date: data.service_date,
+    role_id: data.role_id || "",
+    role_name: data.role_name || "",
+    department_id: data.department_id || data.dept_id || "",
+    disciple_id: data.disciple_id,
+    disciple_name: data.disciple_name,
+    disciple_phone: data.disciple_phone || "",
+    status: data.status || "Assigned",
     updated_at: serverTimestamp()
   }, { merge: true });
 }
@@ -66,7 +81,13 @@ export async function updateAssignmentStatus(assignmentId, status) {
 }
 
 export async function removeAssignment(assignmentId) {
+  if (!assignmentId) return;
   await deleteDoc(doc(db, "assignments", assignmentId));
+}
+
+// Alias agar ui-roster.js yang memanggil deleteAssignment tetap berjalan lancar
+export async function deleteAssignment(assignmentId) {
+  await removeAssignment(assignmentId);
 }
 
 // --- 3. VOLUNTEER UNAVAILABILITY (FROM / TO DATE RANGE) ---
@@ -80,6 +101,11 @@ export async function getUnavailabilityList() {
       return { id: d.id, ...data, start_date: start, end_date: end };
     })
     .sort((a, b) => a.start_date.localeCompare(b.start_date));
+}
+
+// Alias agar ui-roster.js yang memanggil getUnavailability tetap berjalan lancar
+export async function getUnavailability() {
+  return await getUnavailabilityList();
 }
 
 export async function addUnavailability(data) {
@@ -97,5 +123,6 @@ export async function addUnavailability(data) {
 }
 
 export async function deleteUnavailability(id) {
+  if (!id) return;
   await deleteDoc(doc(db, "volunteer_unavailability", id));
 }
