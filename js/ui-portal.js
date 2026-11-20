@@ -127,7 +127,7 @@ function renderPublicFeed() {
     `;
   }
 
-  // Pathway Perjalanan Bulan Ini (atau Upcoming Services jika bulan belum punya jadwal)
+  // Pathway Perjalanan Bulan Ini
   const monthWeeks = activeMonth
     ? portalState.weeks.filter(w => w.month_key === activeMonth.month_key)
     : [];
@@ -163,20 +163,35 @@ function renderPublicFeed() {
     }
   }
 
-  // Latest Daily Devotions
+  // Daily Devotions: Prioritize Today (NZ) + Next 2 Days
   const devContainer = document.getElementById("public-devotions-list");
   if (devContainer) {
     if (portalState.devotions.length === 0) {
       devContainer.innerHTML = `<div class="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-500">Daily devotions will be published soon. Check back shortly!</div>`;
     } else {
-      devContainer.innerHTML = portalState.devotions.slice(0, 3).map(d => `
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-1.5">
-          <span class="text-[11px] font-mono text-slate-500">${d.devotion_date} • ${d.scripture}</span>
-          <h4 class="font-bold text-sm text-slate-900">${d.title}</h4>
-          <p class="text-xs text-slate-700 whitespace-pre-line">${d.reflection}</p>
-          ${d.prayer ? `<p class="text-xs italic text-slate-600 pt-1 border-t border-slate-100">🙏 ${d.prayer}</p>` : ""}
-        </div>
-      `).join("");
+      const sortedAsc = [...portalState.devotions].sort((a, b) =>
+        (a.devotion_date || "").localeCompare(b.devotion_date || "")
+      );
+      const fromToday = sortedAsc.filter(d => d.devotion_date >= todayISO);
+      const displayDevs = fromToday.length > 0
+        ? fromToday.slice(0, 3)
+        : portalState.devotions.slice(0, 3);
+
+      devContainer.innerHTML = displayDevs.map((d, idx) => {
+        const isToday = d.devotion_date === todayISO || (idx === 0 && fromToday.length > 0);
+        return `
+          <div class="bg-white p-4 rounded-xl border ${isToday ? "border-amber-400 ring-1 ring-amber-200" : "border-slate-200"} shadow-sm space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] font-mono font-semibold text-slate-600">${d.devotion_date}</span>
+              ${d.devotion_date === todayISO ? `<span class="text-[10px] font-extrabold px-2 py-0.5 bg-amber-400 text-slate-950 rounded-full">TODAY</span>` : ""}
+            </div>
+            <p class="text-[11px] font-bold text-amber-800">${d.scripture}</p>
+            <h4 class="font-bold text-sm text-slate-900">${d.title}</h4>
+            <p class="text-xs text-slate-700 whitespace-pre-line leading-relaxed">${d.reflection}</p>
+            ${d.prayer ? `<p class="text-xs italic text-slate-600 pt-1.5 border-t border-slate-100">🙏 ${d.prayer}</p>` : ""}
+          </div>
+        `;
+      }).join("");
     }
   }
 
