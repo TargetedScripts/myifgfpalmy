@@ -1,21 +1,35 @@
 // js/ui-portal.js
-import {
+import * as dbPortal from "./db-portal.js";
+import { getDailyReflections, seedNov20toDec31Reflections } from "./db-content.js";
+import { addUnavailability, deleteUnavailability } from "./db-roster.js";
+
+const {
   getPublicMonthlyThemes,
   getPublicWeeklyInsights,
-  getPublicDailyDevotions,
   getPublicMediaGalleries,
   getMyAssignments,
   respondToAssignment,
   getMyUnavailability,
   updateMyContactProfile
-} from "./db-portal.js";
-import { addUnavailability, deleteUnavailability } from "./db-roster.js";
+} = dbPortal;
+
+async function fetchPublicDailyReflections() {
+  if (typeof dbPortal.getPublicDailyReflections === "function") {
+    const items = await dbPortal.getPublicDailyReflections();
+    if (items && items.length > 0) return items;
+  }
+  if (typeof dbPortal.getPublicDailyDevotions === "function") {
+    const items = await dbPortal.getPublicDailyDevotions();
+    if (items && items.length > 0) return items;
+  }
+  return await getDailyReflections();
+}
 
 let portalState = {
   profile: null,
   months: [],
   weeks: [],
-  devotions: [],
+  reflections: [],
   media: [],
   myDuties: [],
   myBlockouts: [],
@@ -25,15 +39,25 @@ let portalState = {
 // --- 1. PUBLIC PORTAL INITIALIZER (GUEST & LOGGED-IN) ---
 export async function initPublicPortal() {
   try {
-    const [months, weeks, devotions, media] = await Promise.all([
+    let [months, weeks, reflections, media] = await Promise.all([
       getPublicMonthlyThemes(),
       getPublicWeeklyInsights(),
-      getPublicDailyDevotions(),
+      fetchPublicDailyReflections(),
       getPublicMediaGalleries()
     ]);
+
+    if (reflections.length === 0) {
+      try {
+        await seedNov20toDec31Reflections();
+        reflections = await fetchPublicDailyReflections();
+      } catch (seedErr) {
+        console.warn("Auto-seed Daily Reflections skipped on public portal:", seedErr);
+      }
+    }
+
     portalState.months = months;
     portalState.weeks = weeks;
-    portalState.devotions = devotions;
+    portalState.reflections = reflections;
     portalState.media = media;
 
     const todayISO = getAucklandTodayISO();
@@ -163,27 +187,29 @@ function renderPublicFeed() {
     }
   }
 
-  // Daily Devotions: Prioritize Today (NZ) + Next 2 Days
-  const devContainer = document.getElementById("public-devotions-list");
-  if (devContainer) {
-    if (portalState.devotions.length === 0) {
-      devContainer.innerHTML = `<div class="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-500">Daily devotions will be published soon. Check back shortly!</div>`;
+  // Daily Reflections: Prioritize Today (NZ) + Next 2 Days
+  const refContainer = document.getElementById("public-devotions-list");
+  if (refContainer) {
+    if (portalState.reflections.length === 0) {
+      refContainer.innerHTML = `<div class="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-500">Daily reflections will be published soon. Check back shortly!</div>`;
     } else {
-      const sortedAsc = [...portalState.devotions].sort((a, b) =>
-        (a.devotion_date || "").localeCompare(b.devotion_date || "")
-      );
-      const fromToday = sortedAsc.filter(d => d.devotion_date >= todayISO);
-      const displayDevs = fromToday.length > 0
+      const normalized = portalState.reflections.map(d => ({
+        ...d,
+        _date: d.reflection_date || d.devotion_date || d.id || ""
+      }));
+      const sortedAsc = [...normalized].sort((a, b) => a._date.localeCompare(b._date));
+      const fromToday = sortedAsc.filter(d => d._date >= todayISO);
+      const displayRefs = fromToday.length > 0
         ? fromToday.slice(0, 3)
-        : portalState.devotions.slice(0, 3);
+        : normalized.slice(0, 3);
 
-      devContainer.innerHTML = displayDevs.map((d, idx) => {
-        const isToday = d.devotion_date === todayISO || (idx === 0 && fromToday.length > 0);
+      refContainer.innerHTML = displayRefs.map((d, idx) => {
+        const isToday = d._date === todayISO || (idx === 0 && fromToday.length > 0);
         return `
           <div class="bg-white p-4 rounded-xl border ${isToday ? "border-amber-400 ring-1 ring-amber-200" : "border-slate-200"} shadow-sm space-y-2">
             <div class="flex items-center justify-between gap-2">
-              <span class="text-[11px] font-mono font-semibold text-slate-600">${d.devotion_date}</span>
-              ${d.devotion_date === todayISO ? `<span class="text-[10px] font-extrabold px-2 py-0.5 bg-amber-400 text-slate-950 rounded-full">TODAY</span>` : ""}
+              <span class="text-[11px] font-mono font-semibold text-slate-600">${d._date}</span>
+              ${d._date === todayISO ? `<span class="text-[10px] font-extrabold px-2 py-0.5 bg-amber-400 text-slate-950 rounded-full">TODAY</span>` : ""}
             </div>
             <p class="text-[11px] font-bold text-amber-800">${d.scripture}</p>
             <h4 class="font-bold text-sm text-slate-900">${d.title}</h4>
