@@ -34,6 +34,16 @@ export async function getRolesReference() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
+export async function getRoles() {
+  const list = await getRolesReference();
+  return list.map(r => ({
+    ...r,
+    name: r.role_name || r.name || "",
+    dept_id: r.department_id || r.dept_id || "",
+    active: r.is_active !== false
+  }));
+}
+
 export async function saveRoleReference(id, data) {
   if (id) {
     await updateDoc(doc(db, "roles_reference", id), { ...data, updated_at: serverTimestamp() });
@@ -129,7 +139,6 @@ export async function importDisciplesFromCSV(csvText) {
     if (d.email) byEmail.set(d.email.toLowerCase(), d);
   });
 
-  // Deduplikasi & gabungkan baris internal CSV berdasarkan Email terlebih dahulu
   const mergedRecords = new Map();
 
   for (let r = 1; r < rows.length; r++) {
@@ -262,14 +271,17 @@ export async function seedInitialMasterData() {
     { role_name: "Service MC / Host", department_id: "pulpit_editorial", min_dj_level: "Come", can_reimburse: false },
     { role_name: "Weekly Insight Editor", department_id: "pulpit_editorial", min_dj_level: "Grow", can_reimburse: false },
     { role_name: "Worship Leader", department_id: "praise_worship", min_dj_level: "Grow", can_reimburse: false },
-    { role_name: "Singer / Backing Vocal", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
+    { role_name: "Singer 1", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
+    { role_name: "Singer 2", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
+    { role_name: "Singer 3", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
     { role_name: "Acoustic / Electric Guitar", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
     { role_name: "Bass Guitar", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
     { role_name: "Keyboard / Piano", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
     { role_name: "Drums / Cajon", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
     { role_name: "Sound Engineer", department_id: "creative_production", min_dj_level: "Come", can_reimburse: true },
-    { role_name: "Multimedia / Lyrics Operator", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Livestream & Camera", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
+    { role_name: "Lighting", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
+    { role_name: "Multi Media", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
+    { role_name: "Camera", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
     { role_name: "Photographer / Social Media", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
     { role_name: "Graphic Designer (Poster)", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
     { role_name: "Kitchen Lead / Cook", department_id: "kitchen_catering", min_dj_level: "Come", can_reimburse: true },
