@@ -18,10 +18,12 @@ import {
 
 const FALLBACK_ROLE_ORDER = [
   "Service MC / Host",
+  "MD",
   "Worship Leader",
   "Singer 1",
   "Singer 2",
   "Singer 3",
+  "Prayer",
   "Singer / Backing Vocal",
   "Acoustic / Electric Guitar",
   "Electric Guitar",
@@ -29,8 +31,6 @@ const FALLBACK_ROLE_ORDER = [
   "Bass Guitar",
   "Drums / Cajon",
   "Keyboard / Piano",
-  "MD",
-  "Prayer",
   "Sound Engineer",
   "Lighting",
   "Multi Media",
@@ -82,10 +82,12 @@ function roleMatchesDept(role, dept) {
 }
 
 function getNumericOrder(role) {
-  const raw = role?.sort_order;
-  if (typeof raw === "number" && !Number.isNaN(raw)) return raw;
-  const parsed = Number(raw);
-  return !Number.isNaN(parsed) && parsed > 0 ? parsed : null;
+  const raw = role?.sort_order !== undefined && role?.sort_order !== null && role?.sort_order !== ""
+    ? role.sort_order
+    : role?.order;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const parsed = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function sortRolesCustom(roles) {
@@ -434,6 +436,10 @@ function buildWhatsAppRosterText() {
 }
 
 function bindRosterEvents() {
+  document.querySelector('.tab-btn[data-tab="roster"]')?.addEventListener("click", async () => {
+    await refreshRosterContext();
+  });
+
   document.getElementById("roster-service-select")?.addEventListener("change", async (e) => {
     await loadServiceRoster(e.target.value);
   });
