@@ -52,7 +52,7 @@
       <div class="max-w-6xl mx-auto flex items-center justify-between">
         <div>
           <h1 class="font-bold text-lg tracking-tight">MyIFGFPalmy</h1>
-          <p class="text-[11px] text-slate-400">Stage 1 • Master Data & RBAC Foundation</p>
+          <p class="text-[11px] text-slate-400">Stage 1.5 • Master Data & Content Studio</p>
         </div>
         <div class="flex items-center gap-3">
           <div class="text-right hidden sm:block">
@@ -68,15 +68,16 @@
 
     <!-- Main Content -->
     <main class="flex-1 max-w-6xl w-full mx-auto p-4 space-y-4">
-      <!-- Action Bar & Tabs -->
+      <!-- Navigation Bar -->
       <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-        <div class="flex gap-1.5">
+        <div class="flex flex-wrap gap-1.5">
           <button class="tab-btn active px-3.5 py-2 rounded-lg text-xs font-semibold transition" data-tab="disciples">Disciples (360°)</button>
+          <button class="tab-btn px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="content">📖 Content Studio</button>
           <button class="tab-btn px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roles">Roles Reference</button>
           <button class="tab-btn px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="departments">Departments</button>
         </div>
-        <button id="btn-seed-master" class="text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-3.5 py-2 rounded-lg transition">
-          ⚡ Seed Default Data
+        <button id="btn-seed-master" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold px-3 py-2 rounded-lg transition">
+          ⚡ Seed Depts & Roles
         </button>
       </div>
 
@@ -100,7 +101,75 @@
         <div id="list-disciples" class="space-y-2.5"></div>
       </section>
 
-      <!-- TAB 2: ROLES REFERENCE -->
+      <!-- TAB 2: CONTENT STUDIO (STAGE 1.5) -->
+      <section id="panel-content" class="tab-panel hidden space-y-4">
+        <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">2027 Yearly Theme</span>
+            <h2 class="text-lg font-bold">ALIGN IN PURPOSE — Kitab Keluaran</h2>
+            <p class="text-xs text-slate-300">Fase 1: SEE (Jan–Apr) • Fase 2: WALK (Mei–Agu) • Fase 3: DWELL (Sep–Des)</p>
+          </div>
+          <button id="btn-seed-2027" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-4 py-2.5 rounded-xl whitespace-nowrap transition">
+            📖 Seed 2027 Curriculum
+          </button>
+        </div>
+
+        <!-- Sub-tabs Content Studio -->
+        <div class="flex flex-wrap gap-2">
+          <button class="content-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="weekly">Weekly Insights (53)</button>
+          <button class="content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="monthly">Monthly Themes (12)</button>
+          <button class="content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="devotions">Daily Devotions</button>
+          <button class="content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="media">Media Gallery</button>
+        </div>
+
+        <!-- Subpanel: Weekly Insights -->
+        <div id="subpanel-weekly" class="content-subpanel space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <select id="filter-content-month" class="px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"></select>
+          </div>
+          <div id="list-weekly-insights" class="space-y-2.5"></div>
+        </div>
+
+        <!-- Subpanel: Monthly Themes -->
+        <div id="subpanel-monthly" class="content-subpanel hidden">
+          <div id="list-monthly-themes" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+        </div>
+
+        <!-- Subpanel: Daily Devotions -->
+        <div id="subpanel-devotions" class="content-subpanel hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <form id="form-devotion" class="bg-white p-4 rounded-xl border border-slate-200 space-y-3 text-xs h-fit">
+            <h3 class="font-bold text-sm text-slate-900">Publish Daily Devotion</h3>
+            <input type="date" id="dev-date" required class="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" id="dev-title" required placeholder="Devotion Title" class="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" id="dev-verse" required placeholder="Scripture (e.g., Keluaran 3:14)" class="w-full px-3 py-2 border rounded-lg" />
+            <textarea id="dev-body" rows="4" required placeholder="Reflection content..." class="w-full px-3 py-2 border rounded-lg"></textarea>
+            <textarea id="dev-prayer" rows="2" placeholder="Closing prayer..." class="w-full px-3 py-2 border rounded-lg"></textarea>
+            <button type="submit" class="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg">Save Devotion</button>
+          </form>
+          <div id="list-devotions" class="lg:col-span-2 space-y-2.5"></div>
+        </div>
+
+        <!-- Subpanel: Media Gallery -->
+        <div id="subpanel-media" class="content-subpanel hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <form id="form-media" class="bg-white p-4 rounded-xl border border-slate-200 space-y-3 text-xs h-fit">
+            <h3 class="font-bold text-sm text-slate-900">Add Media / Album Link</h3>
+            <input type="date" id="med-date" required class="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" id="med-title" required placeholder="Event Title (e.g., Sunday Service 3 Jan)" class="w-full px-3 py-2 border rounded-lg" />
+            <select id="med-cat" class="w-full px-3 py-2 border rounded-lg">
+              <option value="Sunday Service">Sunday Service</option>
+              <option value="Special Event">Special Event</option>
+              <option value="iCare & Fellowship">iCare & Fellowship</option>
+              <option value="Sermon Video">Sermon Video (YouTube)</option>
+            </select>
+            <input type="url" id="med-url" required placeholder="Google Photos / YouTube URL" class="w-full px-3 py-2 border rounded-lg" />
+            <input type="url" id="med-cover" placeholder="Optional Cover Thumbnail URL" class="w-full px-3 py-2 border rounded-lg" />
+            <button type="submit" class="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg">Save Media</button>
+          </form>
+          <div id="list-media" class="lg:col-span-2 space-y-2.5"></div>
+        </div>
+      </section>
+
+      <!-- TAB 3: ROLES REFERENCE -->
       <section id="panel-roles" class="tab-panel hidden space-y-3">
         <div class="flex justify-between items-center">
           <h2 class="font-bold text-slate-800 text-sm">Ministry Roles Master Table</h2>
@@ -124,7 +193,7 @@
         </div>
       </section>
 
-      <!-- TAB 3: DEPARTMENTS -->
+      <!-- TAB 4: DEPARTMENTS -->
       <section id="panel-departments" class="tab-panel hidden space-y-3">
         <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
           <table class="w-full text-left text-sm">
@@ -141,6 +210,76 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- MODAL: EDIT WEEKLY INSIGHT & SERMON -->
+  <div id="modal-weekly" class="hidden fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-3 my-8">
+      <h3 class="font-bold text-lg text-slate-900">Edit Weekly Insight & Sermon Content</h3>
+      <form id="form-weekly" class="space-y-3 text-xs">
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="font-semibold text-slate-600">Service Date</label>
+            <input type="date" id="wk-date" readonly class="w-full px-2.5 py-2 bg-slate-100 border rounded-lg" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Week Label</label>
+            <input type="text" id="wk-label" class="w-full px-2.5 py-2 border rounded-lg" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Status</label>
+            <select id="wk-status" class="w-full px-2.5 py-2 border rounded-lg">
+              <option value="Scheduled">Scheduled</option>
+              <option value="Published">Published</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="font-semibold text-slate-600">Weekly Theme Title</label>
+          <input type="text" id="wk-title" required class="w-full px-3 py-2 border rounded-lg font-semibold" />
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="font-semibold text-slate-600">Key Verse</label>
+            <input type="text" id="wk-verse" class="w-full px-3 py-2 border rounded-lg" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Scripture Reading</label>
+            <input type="text" id="wk-reading" class="w-full px-3 py-2 border rounded-lg" />
+          </div>
+        </div>
+        <div>
+          <label class="font-semibold text-slate-600">Weekly Focus</label>
+          <input type="text" id="wk-focus" class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label class="font-semibold text-slate-600">Christ Connection</label>
+            <textarea id="wk-christ" rows="2" class="w-full px-3 py-2 border rounded-lg"></textarea>
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Mission Application</label>
+            <textarea id="wk-mission" rows="2" class="w-full px-3 py-2 border rounded-lg"></textarea>
+          </div>
+        </div>
+        <div>
+          <label class="font-semibold text-slate-600">Diaspora Lens (NZ Context)</label>
+          <input type="text" id="wk-diaspora" class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label class="font-semibold text-slate-600">Sermon Summary (Isi Ringkasan Khotbah)</label>
+          <textarea id="wk-summary" rows="3" placeholder="Write sermon outline / key takeaways..." class="w-full px-3 py-2 border rounded-lg"></textarea>
+        </div>
+        <div>
+          <label class="font-semibold text-slate-600">iCare Discussion Questions</label>
+          <textarea id="wk-icare" rows="3" placeholder="1. Sharing question...&#10;2. Application question..." class="w-full px-3 py-2 border rounded-lg"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t">
+          <button type="button" onclick="document.getElementById('modal-weekly').classList.add('hidden')" class="px-4 py-2 font-semibold text-slate-600">Cancel</button>
+          <button type="submit" class="px-4 py-2 font-semibold bg-slate-900 text-white rounded-lg">Save Insight</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- MODAL: DISCIPLE -->
@@ -253,16 +392,16 @@
       `;
     }
 
-    // Pengaman jika loading lebih dari 6 detik
     const bootTimer = setTimeout(() => {
       if (!loadingScreen.classList.contains("hidden")) {
-        showErrorOnLoading("Connection or script timeout. Please check that all 4 files inside /js/ are saved properly.");
+        showErrorOnLoading("Connection or script timeout. Please check all JS modules.");
       }
     }, 6000);
 
     try {
       const { initAuthObserver, loginWithGoogle, sendMagicLink, logoutUser } = await import("./js/auth.js");
       const { initMasterApp } = await import("./js/ui-master.js");
+      const { initContentStudio } = await import("./js/ui-content.js");
 
       document.getElementById("btn-google-login").addEventListener("click", loginWithGoogle);
       document.getElementById("btn-logout").addEventListener("click", logoutUser);
@@ -285,6 +424,7 @@
           loginScreen.classList.add("hidden");
           appScreen.classList.remove("hidden");
           await initMasterApp(profile);
+          await initContentStudio();
         },
         () => {
           clearTimeout(bootTimer);
