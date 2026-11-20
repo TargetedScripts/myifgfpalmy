@@ -18,7 +18,8 @@ let portalState = {
   devotions: [],
   media: [],
   myDuties: [],
-  myBlockouts: []
+  myBlockouts: [],
+  selectedCompassMonth: ""
 };
 
 // --- 1. PUBLIC PORTAL INITIALIZER (GUEST & LOGGED-IN) ---
@@ -35,6 +36,14 @@ export async function initPublicPortal() {
     portalState.devotions = devotions;
     portalState.media = media;
 
+    const todayISO = getAucklandTodayISO();
+    const currentMonthKey = todayISO.slice(0, 7);
+    const defaultMonth =
+      months.find(m => m.month_key === currentMonthKey) ||
+      months.find(m => m.month_key >= currentMonthKey) ||
+      months[0];
+    portalState.selectedCompassMonth = defaultMonth?.month_key || "";
+
     renderPublicFeed();
   } catch (err) {
     console.error("Public portal load error:", err);
@@ -50,12 +59,15 @@ function getAucklandTodayISO() {
   }).format(new Date());
 }
 
+window.selectPublicCompassMonth = (monthKey) => {
+  portalState.selectedCompassMonth = monthKey;
+  renderPublicFeed();
+};
+
 function renderPublicFeed() {
   const todayISO = getAucklandTodayISO();
-  const currentMonthKey = todayISO.slice(0, 7);
-
   const activeMonth =
-    portalState.months.find(m => m.month_key === currentMonthKey) ||
+    portalState.months.find(m => m.month_key === portalState.selectedCompassMonth) ||
     portalState.months[0];
 
   const monthBox = document.getElementById("public-monthly-banner");
@@ -66,34 +78,92 @@ function renderPublicFeed() {
         <span class="text-xs font-mono text-slate-300">${activeMonth.month_key}</span>
       </div>
       <h3 class="text-xl font-bold text-white">${activeMonth.title}</h3>
-      <p class="text-xs text-slate-300 mt-1">📖 <strong>${activeMonth.scripture}</strong> • Pillar: <span class="text-amber-300 font-semibold">${activeMonth.pillar}</span></p>
+      ${activeMonth.subtitle ? `<p class="text-xs text-amber-200 mt-0.5">${activeMonth.subtitle}</p>` : ""}
+      <p class="text-xs text-slate-300 mt-1.5">📖 <strong>${activeMonth.scripture}</strong> • Pillar: <span class="text-amber-300 font-semibold">${activeMonth.pillar}</span></p>
     `;
   }
 
-  const upcomingWeeks = portalState.weeks
-    .filter(w => w.service_date >= todayISO)
-    .slice(0, 4);
+  // Render Month Switcher + Full Monthly Compass Intro & Reflection
+  const compassContainer = document.getElementById("public-compass-detail");
+  if (compassContainer && activeMonth) {
+    const visibleMonths = portalState.months.filter(m => m.compass_intro || m.month_key >= todayISO.slice(0, 7));
+    const switcherHtml = visibleMonths.length > 1
+      ? `<div class="flex flex-wrap gap-1.5 pb-2 border-b border-slate-100">
+          ${visibleMonths.map(m => `
+            <button onclick="window.selectPublicCompassMonth('${m.month_key}')"
+              class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                m.month_key === activeMonth.month_key
+                  ? "bg-slate-900 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }">
+              ${m.month_key} • ${m.title}
+            </button>
+          `).join("")}
+        </div>`
+      : "";
+
+    compassContainer.innerHTML = `
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        ${switcherHtml}
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-extrabold uppercase tracking-wider text-amber-700">🎯 THE MONTHLY COMPASS • ${activeMonth.month_key}</span>
+        </div>
+        <h3 class="text-xl font-extrabold text-slate-900">${activeMonth.title}</h3>
+        ${activeMonth.subtitle ? `<p class="text-xs font-semibold text-slate-600">${activeMonth.subtitle}</p>` : ""}
+        ${activeMonth.compass_intro ? `
+          <div class="text-xs sm:text-sm text-slate-700 leading-relaxed space-y-2 pt-1">
+            <p class="font-bold text-slate-900">Shalom,</p>
+            <p>${activeMonth.compass_intro}</p>
+          </div>
+        ` : ""}
+        ${activeMonth.monthly_reflection ? `
+          <blockquote class="bg-amber-50/80 border-l-4 border-amber-500 p-4 rounded-r-xl text-xs text-slate-800 space-y-1.5">
+            <p class="font-bold text-amber-900">💡 Refleksi Bulan Ini:</p>
+            <p class="italic leading-relaxed">“${activeMonth.monthly_reflection}”</p>
+            <p class="font-semibold text-slate-700 pt-1">Kiranya Tuhan Yesus memberkati.</p>
+          </blockquote>
+        ` : ""}
+      </div>
+    `;
+  }
+
+  // Pathway Perjalanan Bulan Ini (atau Upcoming Services jika bulan belum punya jadwal)
+  const monthWeeks = activeMonth
+    ? portalState.weeks.filter(w => w.month_key === activeMonth.month_key)
+    : [];
+  const displayWeeks = monthWeeks.length > 0
+    ? monthWeeks
+    : portalState.weeks.filter(w => w.service_date >= todayISO).slice(0, 4);
 
   const weeklyContainer = document.getElementById("public-upcoming-services");
   if (weeklyContainer) {
-    if (upcomingWeeks.length === 0) {
-      weeklyContainer.innerHTML = `<p class="text-xs text-slate-500">No upcoming service themes scheduled yet.</p>`;
+    if (displayWeeks.length === 0) {
+      weeklyContainer.innerHTML = `<p class="text-xs text-slate-500">No service pathway scheduled for this month yet.</p>`;
     } else {
-      weeklyContainer.innerHTML = upcomingWeeks.map((w, idx) => `
-        <div class="bg-white p-4 rounded-xl border ${idx === 0 ? "border-amber-400 ring-1 ring-amber-200" : "border-slate-200"} shadow-sm space-y-2">
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-xs font-mono font-bold px-2 py-0.5 bg-slate-900 text-white rounded">${w.service_date}</span>
-            <span class="text-[11px] font-semibold text-amber-700">${idx === 0 ? "NEXT SERVICE • " : ""}${w.week_label}</span>
+      weeklyContainer.innerHTML = displayWeeks.map((w) => {
+        const isNext = w.service_date >= todayISO &&
+          displayWeeks.find(x => x.service_date >= todayISO)?.service_date === w.service_date;
+
+        return `
+          <div class="bg-white p-4 rounded-xl border ${isNext ? "border-amber-400 ring-1 ring-amber-200" : "border-slate-200"} shadow-sm space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-mono font-bold px-2 py-0.5 bg-slate-900 text-white rounded">${w.service_date}</span>
+                <span class="text-[11px] font-semibold text-amber-700">${isNext ? "NEXT SERVICE • " : ""}${w.week_label}</span>
+              </div>
+              ${w.speaker ? `<span class="text-[11px] font-bold px-2.5 py-0.5 bg-blue-50 text-blue-800 rounded-full">🎙️ ${w.speaker}</span>` : ""}
+            </div>
+            <h4 class="font-bold text-slate-900 text-base">${w.title}</h4>
+            <p class="text-xs text-slate-600">🔑 <strong>${w.key_verse}</strong> • Bacaan: ${w.scripture_reading}</p>
+            <p class="text-xs text-slate-700 bg-slate-50 p-3 rounded-lg leading-relaxed">${w.weekly_focus}</p>
+            ${w.diaspora_lens ? `<p class="text-[11px] text-blue-800">🌏 <strong>Lensa Diaspora:</strong> ${w.diaspora_lens}</p>` : ""}
           </div>
-          <h4 class="font-bold text-slate-900 text-base">${w.title}</h4>
-          <p class="text-xs text-slate-600">🔑 <strong>${w.key_verse}</strong> • Bacaan: ${w.scripture_reading}</p>
-          <p class="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-lg">${w.weekly_focus}</p>
-          ${w.diaspora_lens ? `<p class="text-[11px] text-blue-800">🌏 <strong>Lensa Diaspora:</strong> ${w.diaspora_lens}</p>` : ""}
-        </div>
-      `).join("");
+        `;
+      }).join("");
     }
   }
 
+  // Latest Daily Devotions
   const devContainer = document.getElementById("public-devotions-list");
   if (devContainer) {
     if (portalState.devotions.length === 0) {
@@ -110,6 +180,7 @@ function renderPublicFeed() {
     }
   }
 
+  // Media Gallery
   const mediaContainer = document.getElementById("public-media-list");
   if (mediaContainer) {
     if (portalState.media.length === 0) {
