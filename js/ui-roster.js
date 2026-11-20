@@ -16,20 +16,27 @@ import {
   deleteUnavailability
 } from "./db-roster.js";
 
-const ROLE_PRIORITY_ORDER = [
+const FALLBACK_ROLE_ORDER = [
   "Service MC / Host",
   "Worship Leader",
   "Singer 1",
   "Singer 2",
   "Singer 3",
+  "Singer / Backing Vocal",
   "Acoustic / Electric Guitar",
+  "Electric Guitar",
+  "Acoustic Guitar",
   "Bass Guitar",
   "Drums / Cajon",
   "Keyboard / Piano",
+  "MD",
+  "Prayer",
   "Sound Engineer",
   "Lighting",
   "Multi Media",
+  "Multimedia / Lyrics Operator",
   "Camera",
+  "Livestream & Camera",
   "Barista / Coffee Station",
   "Fellowship Refreshments",
   "Greeter / Usher"
@@ -50,6 +57,61 @@ export async function initRosterEngine() {
   await refreshRosterContext();
 }
 
+function normKey(val) {
+  return (val || "")
+    .toString()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+function roleMatchesDept(role, dept) {
+  const deptKeys = new Set([
+    normKey(dept.id),
+    normKey(dept.name)
+  ].filter(Boolean));
+
+  const roleKeys = [
+    normKey(role.department_id),
+    normKey(role.dept_id),
+    normKey(role.dept_name),
+    normKey(role.department_name)
+  ].filter(Boolean);
+
+  return roleKeys.some(k => deptKeys.has(k));
+}
+
+function getNumericOrder(role) {
+  const raw = role?.sort_order;
+  if (typeof raw === "number" && !Number.isNaN(raw)) return raw;
+  const parsed = Number(raw);
+  return !Number.isNaN(parsed) && parsed > 0 ? parsed : null;
+}
+
+function sortRolesCustom(roles) {
+  return [...roles].sort((a, b) => {
+    const orderA = getNumericOrder(a);
+    const orderB = getNumericOrder(b);
+
+    if (orderA !== null && orderB !== null) {
+      if (orderA !== orderB) return orderA - orderB;
+    } else if (orderA !== null) {
+      return -1;
+    } else if (orderB !== null) {
+      return 1;
+    }
+
+    const nameA = a.role_name || a.name || "";
+    const nameB = b.role_name || b.name || "";
+    const idxA = FALLBACK_ROLE_ORDER.indexOf(nameA);
+    const idxB = FALLBACK_ROLE_ORDER.indexOf(nameB);
+    const rankA = idxA === -1 ? 999 : idxA;
+    const rankB = idxB === -1 ? 999 : idxB;
+    if (rankA !== rankB) return rankA - rankB;
+    return nameA.localeCompare(nameB);
+  });
+}
+
 async function refreshRosterContext() {
   const [depts, roles, disciples, weeks, unavail] = await Promise.all([
     getDepartments(),
@@ -59,8 +121,10 @@ async function refreshRosterContext() {
     getUnavailability()
   ]);
 
-  rosterState.departments = depts.filter(d => d.active !== false);
-  rosterState.roles = sortRolesCustom(roles.filter(r => r.active !== false));
+  rosterState.departments = depts.filter(d => d.active !== false && d.is_active !== false);
+  rosterState.roles = sortRolesCustom(
+    roles.filter(r => r.active !== false && r.is_active !== false)
+  );
   rosterState.disciples = disciples.filter(d => (d.status || "Active") === "Active");
   rosterState.unavailability = unavail;
 
@@ -102,17 +166,6 @@ async function refreshRosterContext() {
   if (rosterState.selectedDate) {
     await loadServiceRoster(rosterState.selectedDate);
   }
-}
-
-function sortRolesCustom(roles) {
-  return [...roles].sort((a, b) => {
-    const idxA = ROLE_PRIORITY_ORDER.indexOf(a.name);
-    const idxB = ROLE_PRIORITY_ORDER.indexOf(b.name);
-    const rankA = idxA === -1 ? 999 : idxA;
-    const rankB = idxB === -1 ? 999 : idxB;
-    if (rankA !== rankB) return rankA - rankB;
-    return (a.sort_order ?? 99) - (b.sort_order ?? 99);
-  });
 }
 
 function getAucklandTodayISO() {
@@ -169,7 +222,7 @@ async function loadServiceRoster(serviceDate) {
 function isDiscipleUnavailable(discipleId, serviceDate) {
   return rosterState.unavailability.find(u => {
     if (u.disciple_id !== discipleId) return false;
-    const start = u.start_date || "";
+    const start = u.start_date || u.unavailable_date || "";
     const end = u.end_date || start;
     return serviceDate >= start && serviceDate <= end;
   });
@@ -203,17 +256,23 @@ function renderRosterBoard() {
   });
 
   const deptCards = rosterState.departments.map(dept => {
-    const deptRoles = rosterState.roles.filter(r => r.dept_id === dept.id || r.dept_name === dept.name);
+    const deptRoles = rosterState.roles.filter(r => roleMatchesDept(r, dept));
     if (deptRoles.length === 0) return "";
 
-    const filledCount = deptRoles.filter(r =>
-      rosterState.assignments.some(a => (a.role_id === r.id || a.role_name === r.name) && a.disciple_id)
-    ).length;
+    const filledCount = deptRoles.filter(r => {
+      const rName = r.role_name || r.name;
+      return rosterState.assignments.some(
+        a => (a.role_id === r.id || a.role_name === rName) && a.disciple_id
+      );
+    }).length;
 
     const rowsHtml = deptRoles.map(role => {
-      const current = rosterState.assignments.find(a => a.role_id === role.id || a.role_name === role.name);
+      const rName = role.role_name || role.name || "Role";
+      const current = rosterState.assignments.find(
+        a => a.role_id === role.id || a.role_name === rName
+      );
       const selectedId = current?.disciple_id || "";
-      const isVocalTeam = ["Worship Leader", "Singer 1", "Singer 2", "Singer 3"].includes(role.name);
+      const isVocalTeam = ["Worship Leader", "Singer 1", "Singer 2", "Singer 3"].includes(rName);
 
       const optionsHtml = rosterState.disciples.map(d => {
         const unavail = isDiscipleUnavailable(d.id, rosterState.selectedDate);
@@ -243,7 +302,7 @@ function renderRosterBoard() {
           isVocalTeam ? "bg-amber-50/35 -mx-2 px-2 rounded-lg" : ""
         }">
           <div class="min-w-0">
-            <p class="text-xs font-bold text-slate-900">${role.name}</p>
+            <p class="text-xs font-bold text-slate-900">${rName}</p>
             <p class="text-[11px] text-slate-500">Min DJ: ${role.min_dj_level || "Come"}${role.can_reimburse ? " • Reimbursable" : ""}</p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
@@ -271,7 +330,7 @@ function renderRosterBoard() {
     `;
   }).filter(Boolean).join("");
 
-  board.innerHTML = deptCards || `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500 col-span-full">Click "⚡ Seed Depts & Roles" first to initialize departments and roles.</div>`;
+  board.innerHTML = deptCards || `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500 col-span-full">Click "Seed Master Data" first to initialize departments and roles.</div>`;
 }
 
 function renderConflicts() {
@@ -291,10 +350,11 @@ function renderConflicts() {
       warnings.push(`🚫 <strong>${a.disciple_name}</strong> is marked unavailable for <strong>${roleNameOr(a.role_name)}</strong>${unavail.reason ? ` (${unavail.reason})` : ""}.`);
     }
 
-    const role = rosterState.roles.find(r => r.id === a.role_id || r.name === a.role_name);
+    const role = rosterState.roles.find(r => r.id === a.role_id || (r.role_name || r.name) === a.role_name);
     const disciple = rosterState.disciples.find(d => d.id === a.disciple_id);
     if (role && disciple && !meetsMinDj(disciple, role.min_dj_level)) {
-      warnings.push(`⚠️ <strong>${a.disciple_name}</strong> is assigned to <strong>${role.name}</strong> (Min DJ: ${role.min_dj_level}).`);
+      const rName = role.role_name || role.name;
+      warnings.push(`⚠️ <strong>${a.disciple_name}</strong> is assigned to <strong>${rName}</strong> (Min DJ: ${role.min_dj_level}).`);
     }
   });
 
@@ -355,14 +415,17 @@ function buildWhatsAppRosterText() {
   ].filter(Boolean);
 
   rosterState.departments.forEach(dept => {
-    const deptRoles = rosterState.roles.filter(r => r.dept_id === dept.id || r.dept_name === dept.name);
+    const deptRoles = rosterState.roles.filter(r => roleMatchesDept(r, dept));
     if (deptRoles.length === 0) return;
 
     lines.push(`*${dept.name}*`);
     deptRoles.forEach(role => {
-      const assigned = rosterState.assignments.find(a => a.role_id === role.id || a.role_name === role.name);
+      const rName = role.role_name || role.name || "Role";
+      const assigned = rosterState.assignments.find(
+        a => a.role_id === role.id || a.role_name === rName
+      );
       const person = assigned?.disciple_name || "_Unassigned_";
-      lines.push(`• ${role.name}: ${person}`);
+      lines.push(`• ${rName}: ${person}`);
     });
     lines.push(``);
   });
@@ -441,7 +504,10 @@ window.assignRosterSlot = async (roleId, discipleId) => {
   const role = rosterState.roles.find(r => r.id === roleId);
   if (!role || !rosterState.selectedDate) return;
 
-  const existing = rosterState.assignments.find(a => a.role_id === role.id || a.role_name === role.name);
+  const rName = role.role_name || role.name || "Role";
+  const existing = rosterState.assignments.find(
+    a => a.role_id === role.id || a.role_name === rName
+  );
 
   if (!discipleId) {
     if (existing?.id) {
@@ -452,10 +518,10 @@ window.assignRosterSlot = async (roleId, discipleId) => {
     if (!disciple) return;
     await upsertAssignment(existing?.id || null, {
       service_date: rosterState.selectedDate,
-      dept_id: role.dept_id || "",
+      dept_id: role.department_id || role.dept_id || "",
       dept_name: role.dept_name || "",
       role_id: role.id,
-      role_name: role.name,
+      role_name: rName,
       disciple_id: disciple.id,
       disciple_name: disciple.full_name,
       status: "Assigned"
