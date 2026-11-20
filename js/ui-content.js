@@ -1,29 +1,165 @@
 // js/ui-content.js
+import { seed2027Curriculum } from "./seed-2027.js";
+import { seedNovDec2026Compass } from "./seed-2026-compass.js";
 import {
   getMonthlyThemes,
-  saveMonthlyTheme,
   getWeeklyInsights,
-  saveWeeklyInsight,
+  updateWeeklyInsight,
   getDailyDevotions,
-  saveDailyDevotion,
+  addDailyDevotion,
+  deleteDailyDevotion,
   getMediaGalleries,
-  saveMediaGallery,
-  deleteContentItem,
-  seedCurriculum2027
+  addMediaGallery,
+  deleteMediaGallery
 } from "./db-content.js";
+import { initPublicPortal } from "./ui-portal.js";
 
 let contentState = {
   months: [],
   weeks: [],
   devotions: [],
-  media: [],
-  subTab: "weekly",
-  selectedMonthFilter: "ALL"
+  media: []
 };
 
 export async function initContentStudio() {
   bindContentEvents();
   await refreshContentData();
+}
+
+async function refreshContentData() {
+  const [months, weeks, devotions, media] = await Promise.all([
+    getMonthlyThemes(),
+    getWeeklyInsights(),
+    getDailyDevotions(),
+    getMediaGalleries()
+  ]);
+
+  contentState.months = months;
+  contentState.weeks = weeks;
+  contentState.devotions = devotions;
+  contentState.media = media;
+
+  populateMonthFilter();
+  renderMonthlyThemes();
+  renderWeeklyInsights();
+  renderDevotions();
+  renderMedia();
+}
+
+function populateMonthFilter() {
+  const select = document.getElementById("filter-content-month");
+  if (!select) return;
+  const current = select.value || "ALL";
+  select.innerHTML =
+    `<option value="ALL">All Scheduled Weeks (${contentState.weeks.length})</option>` +
+    contentState.months
+      .map(m => `<option value="${m.month_key}">${m.month_key} — ${m.title}</option>`)
+      .join("");
+  select.value = current;
+}
+
+function renderMonthlyThemes() {
+  const container = document.getElementById("list-monthly-themes");
+  if (!container) return;
+
+  if (contentState.months.length === 0) {
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500 col-span-full">Click "✨ Seed Nov–Dec 2026" or "📖 Seed 2027 Curriculum" to populate monthly themes.</div>`;
+    return;
+  }
+
+  container.innerHTML = contentState.months.map(m => `
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-900 text-white">${m.month_key}</span>
+        <span class="text-[11px] font-semibold text-amber-700">${m.phase}</span>
+      </div>
+      <h3 class="font-bold text-slate-900 text-base">${m.title}</h3>
+      ${m.subtitle ? `<p class="text-[11px] text-slate-600">${m.subtitle}</p>` : ""}
+      <p class="text-xs text-slate-600">📖 <strong>${m.scripture}</strong></p>
+      <p class="text-xs text-slate-500">Pillar: <span class="font-medium text-slate-800">${m.pillar}</span></p>
+    </div>
+  `).join("");
+}
+
+function renderWeeklyInsights() {
+  const container = document.getElementById("list-weekly-insights");
+  if (!container) return;
+
+  const filterMonth = document.getElementById("filter-content-month")?.value || "ALL";
+  const filtered =
+    filterMonth === "ALL"
+      ? contentState.weeks
+      : contentState.weeks.filter(w => w.month_key === filterMonth);
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500">No weekly insights found for this filter.</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(w => `
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-mono font-bold px-2 py-0.5 bg-slate-100 text-slate-800 rounded">${w.service_date}</span>
+          <span class="text-xs font-semibold text-amber-700">${w.week_label}</span>
+          ${w.speaker ? `<span class="text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-semibold">🎙️ ${w.speaker}</span>` : ""}
+        </div>
+        <button onclick="window.openWeeklyModal('${w.service_date}')" class="text-xs font-semibold text-blue-600 hover:underline">
+          Edit Sermon & iCare
+        </button>
+      </div>
+      <h4 class="font-bold text-slate-900">${w.title}</h4>
+      <p class="text-xs text-slate-600">🔑 <strong>${w.key_verse}</strong> • Bacaan: ${w.scripture_reading}</p>
+      <p class="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-lg">${w.weekly_focus}</p>
+      ${w.diaspora_lens ? `<p class="text-[11px] text-blue-800">🌏 <strong>Diaspora Lens:</strong> ${w.diaspora_lens}</p>` : ""}
+    </div>
+  `).join("");
+}
+
+function renderDevotions() {
+  const container = document.getElementById("list-devotions");
+  if (!container) return;
+
+  if (contentState.devotions.length === 0) {
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500">No daily devotions published yet.</div>`;
+    return;
+  }
+
+  container.innerHTML = contentState.devotions.map(d => `
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-1.5">
+      <div class="flex justify-between items-start">
+        <div>
+          <span class="text-xs font-mono text-slate-500">${d.devotion_date} • ${d.scripture}</span>
+          <h4 class="font-bold text-slate-900">${d.title}</h4>
+        </div>
+        <button onclick="window.removeDevotion('${d.id}')" class="text-xs text-red-600 hover:underline">Delete</button>
+      </div>
+      <p class="text-xs text-slate-700 whitespace-pre-line">${d.reflection}</p>
+      ${d.prayer ? `<p class="text-xs italic text-slate-600 pt-1 border-t border-slate-100">🙏 ${d.prayer}</p>` : ""}
+    </div>
+  `).join("");
+}
+
+function renderMedia() {
+  const container = document.getElementById("list-media");
+  if (!container) return;
+
+  if (contentState.media.length === 0) {
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500">No media galleries added yet.</div>`;
+    return;
+  }
+
+  container.innerHTML = contentState.media.map(m => `
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-3">
+      <div>
+        <span class="text-[11px] px-2 py-0.5 bg-purple-50 text-purple-700 rounded font-semibold">${m.category}</span>
+        <span class="text-xs text-slate-500 ml-1">${m.event_date}</span>
+        <h4 class="font-bold text-slate-900 mt-1">${m.title}</h4>
+        <a href="${m.media_url}" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline break-all">${m.media_url}</a>
+      </div>
+      <button onclick="window.removeMedia('${m.id}')" class="text-xs text-red-600 hover:underline shrink-0">Delete</button>
+    </div>
+  `).join("");
 }
 
 function bindContentEvents() {
@@ -36,41 +172,51 @@ function bindContentEvents() {
       btn.classList.remove("bg-slate-100", "text-slate-700");
       btn.classList.add("bg-slate-900", "text-white");
 
-      contentState.subTab = btn.dataset.subtab;
       document.querySelectorAll(".content-subpanel").forEach(p => p.classList.add("hidden"));
-      document.getElementById(`subpanel-${contentState.subTab}`)?.classList.remove("hidden");
+      document.getElementById(`subpanel-${btn.dataset.subtab}`)?.classList.remove("hidden");
     });
   });
 
-  document.getElementById("filter-content-month")?.addEventListener("change", (e) => {
-    contentState.selectedMonthFilter = e.target.value;
-    renderWeeklyList();
+  document.getElementById("filter-content-month")?.addEventListener("change", renderWeeklyInsights);
+
+  document.getElementById("btn-seed-2026-compass")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Seeding Nov–Dec 2026...";
+    try {
+      const res = await seedNovDec2026Compass();
+      alert(`Success! Seeded ${res.months} Monthly Compass themes (Oct–Dec 2026) and ${res.weeks} Nov–Dec 2026 services.`);
+      await refreshContentData();
+      await initPublicPortal();
+    } catch (err) {
+      alert("Error seeding 2026 Compass: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "✨ Seed Nov–Dec 2026";
+    }
   });
 
-  document.getElementById("btn-seed-2027")?.addEventListener("click", async () => {
-    if (!confirm("Seed complete 2027 Curriculum (12 Monthly Themes & 53 Sunday/Special Insights for Align in Purpose — Exodus)?")) return;
-    const btn = document.getElementById("btn-seed-2027");
+  document.getElementById("btn-seed-2027")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
     btn.disabled = true;
     btn.textContent = "Seeding 2027...";
     try {
-      await seedCurriculum2027();
+      const res = await seed2027Curriculum();
+      alert(`Success! Seeded ${res.months} Monthly Themes and ${res.weeks} Weekly Insights for 2027.`);
       await refreshContentData();
-      alert("2027 Curriculum seeded successfully (12 Months + 53 Services)!");
+      await initPublicPortal();
     } catch (err) {
-      alert("Error seeding curriculum: " + err.message);
+      alert("Error seeding 2027 curriculum: " + err.message);
     } finally {
       btn.disabled = false;
       btn.textContent = "📖 Seed 2027 Curriculum";
     }
   });
 
-  // Save Weekly Insight Modal Form
   document.getElementById("form-weekly")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const serviceDate = document.getElementById("wk-date").value;
-    const payload = {
-      service_date: serviceDate,
-      month_key: serviceDate.slice(0, 7),
+    const dateKey = document.getElementById("wk-date").value;
+    await updateWeeklyInsight(dateKey, {
       week_label: document.getElementById("wk-label").value.trim(),
       title: document.getElementById("wk-title").value.trim(),
       key_verse: document.getElementById("wk-verse").value.trim(),
@@ -82,18 +228,16 @@ function bindContentEvents() {
       sermon_summary: document.getElementById("wk-summary").value.trim(),
       icare_questions: document.getElementById("wk-icare").value.trim(),
       status: document.getElementById("wk-status").value
-    };
-    await saveWeeklyInsight(serviceDate, payload);
+    });
     document.getElementById("modal-weekly").classList.add("hidden");
     await refreshContentData();
+    await initPublicPortal();
   });
 
-  // Save Devotion Form
   document.getElementById("form-devotion")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const dateVal = document.getElementById("dev-date").value;
-    await saveDailyDevotion(dateVal, {
-      devotion_date: dateVal,
+    await addDailyDevotion({
+      devotion_date: document.getElementById("dev-date").value,
       title: document.getElementById("dev-title").value.trim(),
       scripture: document.getElementById("dev-verse").value.trim(),
       reflection: document.getElementById("dev-body").value.trim(),
@@ -101,12 +245,12 @@ function bindContentEvents() {
     });
     e.target.reset();
     await refreshContentData();
+    await initPublicPortal();
   });
 
-  // Save Media Form
   document.getElementById("form-media")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await saveMediaGallery(null, {
+    await addMediaGallery({
       event_date: document.getElementById("med-date").value,
       title: document.getElementById("med-title").value.trim(),
       category: document.getElementById("med-cat").value,
@@ -115,137 +259,11 @@ function bindContentEvents() {
     });
     e.target.reset();
     await refreshContentData();
+    await initPublicPortal();
   });
 }
 
-export async function refreshContentData() {
-  const [months, weeks, devotions, media] = await Promise.all([
-    getMonthlyThemes(),
-    getWeeklyInsights(),
-    getDailyDevotions(),
-    getMediaGalleries()
-  ]);
-  contentState.months = months;
-  contentState.weeks = weeks;
-  contentState.devotions = devotions;
-  contentState.media = media;
-
-  populateMonthFilter();
-  renderMonthlyThemes();
-  renderWeeklyList();
-  renderDevotionsList();
-  renderMediaList();
-}
-
-function populateMonthFilter() {
-  const sel = document.getElementById("filter-content-month");
-  if (!sel) return;
-  const current = contentState.selectedMonthFilter;
-  sel.innerHTML = `<option value="ALL">All Months (${contentState.weeks.length} Services)</option>` +
-    contentState.months.map(m => `<option value="${m.month_key}">${m.month_key} — ${m.title} (${m.scripture})</option>`).join("");
-  sel.value = current;
-}
-
-function renderMonthlyThemes() {
-  const container = document.getElementById("list-monthly-themes");
-  if (!container) return;
-  if (contentState.months.length === 0) {
-    container.innerHTML = `<div class="p-6 text-center text-slate-500 bg-white rounded-xl border">No monthly themes yet. Click "📖 Seed 2027 Curriculum" above.</div>`;
-    return;
-  }
-  container.innerHTML = contentState.months.map(m => `
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-1.5">
-      <div class="flex items-center justify-between">
-        <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">${m.phase || "2027"}</span>
-        <span class="text-xs font-mono text-slate-500">${m.month_key}</span>
-      </div>
-      <h3 class="font-bold text-slate-900 text-base">${m.title}</h3>
-      <p class="text-xs text-slate-600">📖 <strong>${m.scripture}</strong> • Pillar: <span class="text-blue-700 font-semibold">${m.pillar}</span></p>
-      <div class="pt-2 flex justify-end">
-        <button onclick="window.editMonthlyBanner('${m.month_key}')" class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded font-medium">Set Banner URL</button>
-      </div>
-    </div>
-  `).join("");
-}
-
-function renderWeeklyList() {
-  const container = document.getElementById("list-weekly-insights");
-  if (!container) return;
-
-  const list = contentState.selectedMonthFilter === "ALL"
-    ? contentState.weeks
-    : contentState.weeks.filter(w => w.month_key === contentState.selectedMonthFilter);
-
-  if (list.length === 0) {
-    container.innerHTML = `<div class="p-6 text-center text-slate-500 bg-white rounded-xl border">No weekly insights found. Click "📖 Seed 2027 Curriculum" to load all 53 services.</div>`;
-    return;
-  }
-
-  container.innerHTML = list.map(w => `
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-mono font-bold px-2 py-0.5 bg-slate-900 text-white rounded">${w.service_date}</span>
-          <span class="text-xs font-semibold text-amber-700">${w.week_label}</span>
-          <span class="text-xs px-2 py-0.5 rounded-full ${w.status === "Published" ? "badge-green" : "bg-slate-100 text-slate-600"}">${w.status || "Scheduled"}</span>
-        </div>
-        <button onclick="window.openEditWeekly('${w.service_date}')" class="text-xs px-3 py-1.5 bg-slate-900 hover:bg-slate-700 text-white font-semibold rounded-lg">
-          Edit Sermon & iCare
-        </button>
-      </div>
-      <div>
-        <h3 class="font-bold text-slate-900 text-base">${w.title}</h3>
-        <p class="text-xs text-slate-600 mt-0.5">🔑 <strong>${w.key_verse}</strong> • Bacaan: ${w.scripture_reading}</p>
-      </div>
-      <p class="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-        <strong>Fokus:</strong> ${w.weekly_focus}<br/>
-        <span class="text-blue-800"><strong>Christ Connection:</strong> ${w.christ_connection}</span>
-      </p>
-      ${w.sermon_summary ? `<p class="text-xs text-emerald-800 font-medium">✅ Sermon Summary & iCare Guide filled</p>` : ""}
-    </div>
-  `).join("");
-}
-
-function renderDevotionsList() {
-  const container = document.getElementById("list-devotions");
-  if (!container) return;
-  if (contentState.devotions.length === 0) {
-    container.innerHTML = `<p class="text-xs text-slate-500">No daily devotions published yet.</p>`;
-    return;
-  }
-  container.innerHTML = contentState.devotions.map(d => `
-    <div class="bg-white p-3.5 rounded-xl border border-slate-200 flex justify-between items-start gap-3">
-      <div>
-        <span class="text-[11px] font-mono text-slate-500">${d.devotion_date} • ${d.scripture}</span>
-        <h4 class="font-bold text-sm text-slate-900">${d.title}</h4>
-        <p class="text-xs text-slate-600 mt-1 line-clamp-2">${d.reflection}</p>
-      </div>
-      <button onclick="window.removeContent('daily_devotions', '${d.id}')" class="text-xs text-red-600 hover:underline">Delete</button>
-    </div>
-  `).join("");
-}
-
-function renderMediaList() {
-  const container = document.getElementById("list-media");
-  if (!container) return;
-  if (contentState.media.length === 0) {
-    container.innerHTML = `<p class="text-xs text-slate-500">No media galleries added yet.</p>`;
-    return;
-  }
-  container.innerHTML = contentState.media.map(m => `
-    <div class="bg-white p-3.5 rounded-xl border border-slate-200 flex justify-between items-center gap-3">
-      <div>
-        <span class="text-[11px] px-2 py-0.5 bg-purple-50 text-purple-700 rounded font-semibold">${m.category}</span>
-        <span class="text-[11px] font-mono text-slate-500 ml-1">${m.event_date}</span>
-        <h4 class="font-bold text-sm text-slate-900 mt-1">${m.title}</h4>
-        <a href="${m.media_url}" target="_blank" class="text-xs text-blue-600 underline break-all">${m.media_url}</a>
-      </div>
-      <button onclick="window.removeContent('media_galleries', '${m.id}')" class="text-xs text-red-600 hover:underline">Delete</button>
-    </div>
-  `).join("");
-}
-
-window.openEditWeekly = (serviceDate) => {
+window.openWeeklyModal = (serviceDate) => {
   const w = contentState.weeks.find(x => x.service_date === serviceDate);
   if (!w) return;
   document.getElementById("wk-date").value = w.service_date;
@@ -263,18 +281,14 @@ window.openEditWeekly = (serviceDate) => {
   document.getElementById("modal-weekly").classList.remove("hidden");
 };
 
-window.editMonthlyBanner = async (monthKey) => {
-  const m = contentState.months.find(x => x.month_key === monthKey);
-  if (!m) return;
-  const url = prompt(`Banner Image URL for ${m.title} (${monthKey}):`, m.banner_url || "");
-  if (url !== null) {
-    await saveMonthlyTheme(monthKey, { banner_url: url.trim() });
-    await refreshContentData();
-  }
+window.removeDevotion = async (id) => {
+  if (!confirm("Delete this devotion?")) return;
+  await deleteDailyDevotion(id);
+  await refreshContentData();
 };
 
-window.removeContent = async (colName, id) => {
-  if (!confirm("Delete this item?")) return;
-  await deleteContentItem(colName, id);
+window.removeMedia = async (id) => {
+  if (!confirm("Delete this media entry?")) return;
+  await deleteMediaGallery(id);
   await refreshContentData();
 };
