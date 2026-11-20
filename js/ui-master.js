@@ -1,4 +1,3 @@
-
 // js/ui-master.js
 import {
   getDepartments,
@@ -8,6 +7,7 @@ import {
   toggleRoleActive,
   getDisciples,
   saveDisciple,
+  importDisciplesFromCSV,
   seedInitialMasterData
 } from "./db-master.js";
 
@@ -113,39 +113,51 @@ function renderRoles() {
 // --- RENDER DISCIPLES ---
 function renderDisciples() {
   const container = document.getElementById("list-disciples");
+  const countBadge = document.getElementById("disciple-count-badge");
   const search = (document.getElementById("search-disciple")?.value || "").toLowerCase();
 
   const filtered = state.disciples.filter(d =>
     (d.full_name || "").toLowerCase().includes(search) ||
-    (d.email || "").toLowerCase().includes(search)
+    (d.email || "").toLowerCase().includes(search) ||
+    (d.member_id || "").toLowerCase().includes(search)
   );
 
+  if (countBadge) countBadge.textContent = `${filtered.length} Disciples`;
+
   if (filtered.length === 0) {
-    container.innerHTML = `<div class="p-6 text-center text-slate-500 bg-white rounded-xl border border-slate-200">No disciples found. Click "+ Add Disciple" to create the first profile.</div>`;
+    container.innerHTML = `<div class="p-6 text-center text-slate-500 bg-white rounded-xl border border-slate-200">No disciples found. Click "+ Add Disciple" or "📥 Import CSV".</div>`;
     return;
   }
 
   const lightIcon = { green: "🟢", amber: "🟠", red: "🔴" };
 
-  container.innerHTML = filtered.map(d => `
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div>
-        <div class="flex items-center gap-2">
-          <span title="Discipleship Traffic Light">${lightIcon[d.dj_traffic_light] || "🔴"}</span>
-          <h3 class="font-bold text-slate-900">${d.full_name}</h3>
-          <span class="px-2 py-0.5 text-xs rounded-full font-medium ${d.status === "Active" ? "badge-green" : "badge-amber"}">
-            ${d.status || "Active"}
-          </span>
+  container.innerHTML = filtered.map(d => {
+    const interests = (d.ministry_interests || []).join(", ");
+    return `
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span title="Discipleship Traffic Light">${lightIcon[d.dj_traffic_light] || "🔴"}</span>
+            ${d.member_id ? `<span class="text-[11px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">${d.member_id}</span>` : ""}
+            <h3 class="font-bold text-slate-900">${d.full_name}</h3>
+            <span class="px-2 py-0.5 text-xs rounded-full font-medium ${d.status === "Active" ? "badge-green" : "badge-amber"}">
+              ${d.status || "Active"}
+            </span>
+            ${d.nz_status ? `<span class="text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full">${d.nz_status}</span>` : ""}
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            ${d.email || "No email"} • ${d.phone || "No phone"} • Role: <strong class="text-slate-700">${d.system_role || "member"}</strong>
+          </p>
+          ${interests ? `<p class="text-[11px] text-amber-800 mt-1">🎯 Interest: ${interests}</p>` : ""}
         </div>
-        <p class="text-xs text-slate-500 mt-1">${d.email || "No email"} • ${d.phone || "No phone"} • Role: <strong class="text-slate-700">${d.system_role || "member"}</strong></p>
+        <div class="flex items-center gap-2 self-end sm:self-center">
+          <button onclick="window.editDisciple('${d.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-900 text-white rounded-lg hover:bg-slate-700">
+            Edit Profile
+          </button>
+        </div>
       </div>
-      <div class="flex items-center gap-2 self-end sm:self-center">
-        <button onclick="window.editDisciple('${d.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-900 text-white rounded-lg hover:bg-slate-700">
-          Edit Profile
-        </button>
-      </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
 function populateDepartmentSelect() {
@@ -166,6 +178,41 @@ function bindModalsAndActions() {
     btn.disabled = false;
     btn.textContent = "⚡ Seed Default Data";
     alert("Master Departments & Roles seeded successfully!");
+  });
+
+  // CSV Import Handler
+  const csvInput = document.getElementById("input-csv-disciples");
+  document.getElementById("btn-import-csv")?.addEventListener("click", () => {
+    csvInput?.click();
+  });
+
+  csvInput?.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const btn = document.getElementById("btn-import-csv");
+    btn.disabled = true;
+    btn.textContent = "Importing...";
+
+    try {
+      const text = await file.text();
+      const res = await importDisciplesFromCSV(text);
+      await refreshAllData();
+      alert(
+        `CSV Import Complete!\n` +
+        `• Rows read: ${res.totalRows}\n` +
+        `• Unique profiles: ${res.uniqueProfiles}\n` +
+        `• Newly created: ${res.createdCount}\n` +
+        `• Updated / merged: ${res.updatedCount}`
+      );
+    } catch (err) {
+      console.error("CSV Import Error:", err);
+      alert("CSV Import Failed: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "📥 Import CSV";
+      csvInput.value = "";
+    }
   });
 
   document.getElementById("search-disciple")?.addEventListener("input", renderDisciples);
