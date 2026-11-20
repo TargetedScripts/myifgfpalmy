@@ -24,7 +24,6 @@ let rosterState = {
   unavailability: []
 };
 
-// Pemetaan kata kunci minat pelayanan dari Google Form ke Departemen
 const DEPT_INTEREST_KEYWORDS = {
   pulpit_editorial: ["preach", "mc", "editorial", "pulpit"],
   praise_worship: ["worship", "wl", "singer", "musician"],
@@ -71,7 +70,6 @@ function populateServiceDateSelector() {
   const sel = document.getElementById("roster-service-select");
   if (!sel) return;
 
-  // Gabungkan jadwal dari weekly_insights (2027) dan custom sunday_services
   const dateMap = new Map();
   rosterState.insights.forEach(w => {
     dateMap.set(w.service_date, {
@@ -123,6 +121,12 @@ async function loadAssignmentsForSelectedDate() {
   renderRosterBoard();
 }
 
+function isDateWithinBlockout(u, targetDate) {
+  const start = u.start_date || u.unavailable_date || "";
+  const end = u.end_date || u.unavailable_date || start;
+  return start <= targetDate && targetDate <= end;
+}
+
 function renderConflictBanner() {
   const banner = document.getElementById("roster-conflict-banner");
   if (!banner) return;
@@ -131,11 +135,11 @@ function renderConflictBanner() {
   const counts = {};
 
   rosterState.assignments.forEach(a => {
-    counts[a.disciple_id] = (counts[a.disciple_id] || []);
+    counts[a.disciple_id] = counts[a.disciple_id] || [];
     counts[a.disciple_id].push(a.role_name);
 
     const isBlocked = rosterState.unavailability.some(
-      u => u.disciple_id === a.disciple_id && u.unavailable_date === rosterState.selectedDate
+      u => u.disciple_id === a.disciple_id && isDateWithinBlockout(u, rosterState.selectedDate)
     );
     if (isBlocked) {
       warnings.push(`⚠️ <strong>${a.disciple_name}</strong> (${a.role_name}) marked UNAVAILABLE on ${rosterState.selectedDate}.`);
@@ -176,7 +180,7 @@ function renderRosterBoard() {
   const assignByRole = Object.fromEntries(rosterState.assignments.map(a => [a.role_id, a]));
   const blockedIds = new Set(
     rosterState.unavailability
-      .filter(u => u.unavailable_date === rosterState.selectedDate)
+      .filter(u => isDateWithinBlockout(u, rosterState.selectedDate))
       .map(u => u.disciple_id)
   );
 
@@ -259,16 +263,21 @@ function renderUnavailabilityList() {
     container.innerHTML = `<p class="text-xs text-slate-500">No volunteer block-out dates recorded.</p>`;
     return;
   }
-  container.innerHTML = rosterState.unavailability.map(u => `
-    <div class="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
-      <div>
-        <span class="font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded">${u.unavailable_date}</span>
-        <strong class="text-slate-900 ml-1.5">${u.disciple_name}</strong>
-        ${u.reason ? `<span class="text-slate-500"> — ${u.reason}</span>` : ""}
+  container.innerHTML = rosterState.unavailability.map(u => {
+    const rangeLabel = !u.end_date || u.start_date === u.end_date
+      ? u.start_date
+      : `${u.start_date} → ${u.end_date}`;
+    return `
+      <div class="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+        <div>
+          <span class="font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded">${rangeLabel}</span>
+          <strong class="text-slate-900 ml-1.5">${u.disciple_name}</strong>
+          ${u.reason ? `<span class="text-slate-500"> — ${u.reason}</span>` : ""}
+        </div>
+        <button onclick="window.removeUnavail('${u.id}')" class="text-red-600 hover:underline font-medium">Remove</button>
       </div>
-      <button onclick="window.removeUnavail('${u.id}')" class="text-red-600 hover:underline font-medium">Remove</button>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
 function generateWhatsAppText() {
@@ -332,14 +341,21 @@ function bindRosterEvents() {
     e.preventDefault();
     const discipleId = document.getElementById("unavail-disciple").value;
     const disciple = rosterState.disciples.find(d => d.id === discipleId);
-    const dateVal = document.getElementById("unavail-date").value;
+    const fromDate = document.getElementById("unavail-from").value;
+    const toDate = document.getElementById("unavail-to").value || fromDate;
     const reason = document.getElementById("unavail-reason").value.trim();
-    if (!disciple || !dateVal) return;
+    if (!disciple || !fromDate) return;
+
+    if (toDate < fromDate) {
+      alert("'To Date' cannot be earlier than 'From Date'.");
+      return;
+    }
 
     await addUnavailability({
       disciple_id: disciple.id,
       disciple_name: disciple.full_name,
-      unavailable_date: dateVal,
+      start_date: fromDate,
+      end_date: toDate,
       reason
     });
     e.target.reset();
