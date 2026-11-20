@@ -5,13 +5,12 @@ import { seedNov20toDec31Devotions } from "./seed-devotions-nov2026.js";
 import {
   getMonthlyThemes,
   getWeeklyInsights,
-  updateWeeklyInsight,
+  saveWeeklyInsight,
   getDailyDevotions,
-  addDailyDevotion,
-  deleteDailyDevotion,
+  saveDailyDevotion,
   getMediaGalleries,
-  addMediaGallery,
-  deleteMediaGallery
+  saveMediaGallery,
+  deleteContentItem
 } from "./db-content.js";
 import { initPublicPortal } from "./ui-portal.js";
 
@@ -234,7 +233,7 @@ function bindContentEvents() {
   document.getElementById("form-weekly")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const dateKey = document.getElementById("wk-date").value;
-    await updateWeeklyInsight(dateKey, {
+    await saveWeeklyInsight(dateKey, {
       week_label: document.getElementById("wk-label").value.trim(),
       title: document.getElementById("wk-title").value.trim(),
       key_verse: document.getElementById("wk-verse").value.trim(),
@@ -254,8 +253,9 @@ function bindContentEvents() {
 
   document.getElementById("form-devotion")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await addDailyDevotion({
-      devotion_date: document.getElementById("dev-date").value,
+    const devDate = document.getElementById("dev-date").value;
+    await saveDailyDevotion(devDate || null, {
+      devotion_date: devDate,
       title: document.getElementById("dev-title").value.trim(),
       scripture: document.getElementById("dev-verse").value.trim(),
       reflection: document.getElementById("dev-body").value.trim(),
@@ -268,7 +268,7 @@ function bindContentEvents() {
 
   document.getElementById("form-media")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await addMediaGallery({
+    await saveMediaGallery(null, {
       event_date: document.getElementById("med-date").value,
       title: document.getElementById("med-title").value.trim(),
       category: document.getElementById("med-cat").value,
@@ -301,12 +301,12 @@ window.openWeeklyModal = (serviceDate) => {
 
 window.removeDevotion = async (id) => {
   if (!confirm("Delete this devotion?")) return;
-  await deleteDailyDevotion(id);
+  await deleteContentItem("daily_devotions", id);
   await refreshContentData();
 };
 
 window.removeMedia = async (id) => {
   if (!confirm("Delete this media entry?")) return;
-  await deleteMediaGallery(id);
+  await deleteContentItem("media_galleries", id);
   await refreshContentData();
 };
