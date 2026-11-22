@@ -1,14 +1,10 @@
 // js/ui-content.js
-import { seed2027Curriculum } from "./seed-2027.js";
-import { seedNovDec2026Compass } from "./seed-2026-compass.js";
-import { SUNDAY_SERVICES_2026 } from "./seed-sunday-services.js";
 import {
   getMonthlyThemes,
   getWeeklyInsights,
   saveWeeklyInsight,
   getDailyReflections,
   saveDailyReflection,
-  seedNov20toDec31Reflections,
   getMediaGalleries,
   saveMediaGallery,
   deleteContentItem,
@@ -19,7 +15,7 @@ import {
   getSundayServices,
   saveSundayService,
   deleteSundayService,
-  seedSundayServicesFromList
+  uploadSundayPosterFile
 } from "./db-content.js";
 import { initPublicPortal } from "./ui-portal.js";
 
@@ -187,17 +183,7 @@ function ensureSundayServicesStudioUI() {
         <h3 class="font-bold text-sm text-slate-900">🎬 Sunday Service Poster & Cinema Data</h3>
         <button type="button" id="btn-reset-sunday-service" class="text-[11px] text-slate-500 hover:underline">New Entry</button>
       </div>
-      <p class="text-[11px] text-slate-500">Kelola koleksi <code class="font-mono">sunday_services</code> untuk galeri model bioskop di <code class="font-mono">ifgfpalmy.org</code>. Gunakan tombol seed untuk memasukkan 27 data poster 2026 sekaligus.</p>
-
-      <div class="p-3 bg-amber-50/80 border border-amber-200 rounded-xl flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div class="font-bold text-slate-900">Bulk Seed 27 Posters (Jun–Nov 2026)</div>
-          <div class="text-[11px] text-slate-600">Menyimpan 27 ibadah & poster ke koleksi <span class="font-mono">sunday_services</span>.</div>
-        </div>
-        <button type="button" id="btn-seed-sunday-services" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg shrink-0">
-          ⚡ Seed 27 Sunday Services
-        </button>
-      </div>
+      <p class="text-[11px] text-slate-500">Kelola koleksi <code class="font-mono">sunday_services</code> untuk galeri model bioskop di <code class="font-mono">ifgfpalmy.org</code>. Anda bisa menempel URL poster maupun mengunggah file gambar langsung.</p>
 
       <form id="form-sunday-service" class="space-y-2.5">
         <input type="hidden" id="ss-edit-id" value="" />
@@ -219,7 +205,12 @@ function ensureSundayServicesStudioUI() {
 
         <div>
           <label class="font-semibold text-slate-600">Poster Image URL *</label>
-          <input type="url" id="ss-poster" required placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          <input type="url" id="ss-poster" placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-600">Atau Upload File Poster (Opsional)</label>
+          <input type="file" id="ss-poster-file" accept="image/*" class="w-full text-[11px] text-slate-600 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 mt-0.5" />
         </div>
 
         <div>
@@ -288,7 +279,7 @@ export async function initContentStudio() {
 }
 
 async function refreshContentData() {
-  let [months, weeks, reflections, media, editorsInsights, sundayServices] = await Promise.all([
+  const [months, weeks, reflections, media, editorsInsights, sundayServices] = await Promise.all([
     getMonthlyThemes(),
     getWeeklyInsights(),
     getDailyReflections(),
@@ -304,15 +295,6 @@ async function refreshContentData() {
       return [];
     })
   ]);
-
-  if (reflections.length === 0) {
-    try {
-      await seedNov20toDec31Reflections();
-      reflections = await getDailyReflections();
-    } catch (err) {
-      console.warn("Auto-seed Daily Reflections skipped:", err);
-    }
-  }
 
   contentState.months = months;
   contentState.weeks = weeks;
@@ -347,7 +329,7 @@ function renderMonthlyThemes() {
   if (!container) return;
 
   if (contentState.months.length === 0) {
-    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500 col-span-full">Click "✨ Seed Nov–Dec 2026" or "📖 Seed 2027 Curriculum" to populate monthly themes.</div>`;
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500 col-span-full">No monthly themes found.</div>`;
     return;
   }
 
@@ -530,7 +512,7 @@ function renderSundayServicesList() {
   }
 
   if (list.length === 0) {
-    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500">Belum ada data di <code class="font-mono">sunday_services</code>. Klik "⚡ Seed 27 Sunday Services" atau tambah manual di formulir kiri.</div>`;
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500">Belum ada data di <code class="font-mono">sunday_services</code>. Tambahkan data baru melalui formulir di sebelah kiri.</div>`;
     return;
   }
 
@@ -571,6 +553,8 @@ function resetSundayServiceForm() {
   document.getElementById("ss-speaker").value = "";
   document.getElementById("ss-title").value = "";
   document.getElementById("ss-poster").value = "";
+  const fileEl = document.getElementById("ss-poster-file");
+  if (fileEl) fileEl.value = "";
   document.getElementById("ss-youtube").value = "";
   document.getElementById("ss-post").value = "";
   document.getElementById("ss-published").checked = true;
@@ -614,29 +598,6 @@ function bindContentEvents() {
   document.getElementById("filter-content-month")?.addEventListener("change", renderWeeklyInsights);
   document.getElementById("ss-filter-query")?.addEventListener("input", renderSundayServicesList);
 
-  document.getElementById("btn-seed-sunday-services")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    if (!confirm("Seed 27 Sunday Service posters (2026-06-07 s/d 2026-11-22) ke koleksi sunday_services?")) return;
-    btn.disabled = true;
-    const prev = btn.textContent;
-    btn.textContent = "Seeding 27 Services...";
-    setSundayServiceStatus("Menyimpan 27 data ke Firestore...");
-    try {
-      const count = await seedSundayServicesFromList(SUNDAY_SERVICES_2026);
-      await refreshContentData();
-      setSundayServiceStatus(`Berhasil seed ${count} Sunday Services.`);
-      alert(`Success! Seeded ${count} Sunday Services into Firestore collection sunday_services.`);
-    } catch (err) {
-      console.error("Error seeding sunday_services:", err);
-      const msg = err?.message || String(err);
-      setSundayServiceStatus("Gagal seed: " + msg, true);
-      alert("Gagal seed Sunday Services: " + msg);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = prev;
-    }
-  });
-
   document.getElementById("btn-reset-sunday-service")?.addEventListener("click", () => {
     resetSundayServiceForm();
     setSundayServiceStatus("");
@@ -644,20 +605,37 @@ function bindContentEvents() {
 
   document.getElementById("form-sunday-service")?.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const btn = document.getElementById("btn-save-sunday-service");
     const editId = document.getElementById("ss-edit-id").value.trim();
     const serviceDate = document.getElementById("ss-date").value.trim();
-    const payload = {
-      service_date: serviceDate,
-      title: document.getElementById("ss-title").value.trim(),
-      speaker: document.getElementById("ss-speaker").value.trim(),
-      poster_url: document.getElementById("ss-poster").value.trim(),
-      youtube_url: document.getElementById("ss-youtube").value.trim(),
-      post_url: document.getElementById("ss-post").value.trim(),
-      published: document.getElementById("ss-published").checked
-    };
+    const fileInput = document.getElementById("ss-poster-file");
+    const selectedFile = fileInput?.files?.[0] || null;
 
+    let posterUrl = document.getElementById("ss-poster").value.trim();
+    if (!posterUrl && !selectedFile) {
+      setSundayServiceStatus("Isi Poster Image URL atau pilih file poster untuk diupload.", true);
+      return;
+    }
+
+    if (btn) btn.disabled = true;
     try {
-      setSundayServiceStatus("Menyimpan...");
+      if (selectedFile) {
+        setSundayServiceStatus("Mengupload file poster ke Firebase Storage...");
+        posterUrl = await uploadSundayPosterFile(selectedFile, serviceDate);
+        document.getElementById("ss-poster").value = posterUrl;
+      }
+
+      const payload = {
+        service_date: serviceDate,
+        title: document.getElementById("ss-title").value.trim(),
+        speaker: document.getElementById("ss-speaker").value.trim(),
+        poster_url: posterUrl,
+        youtube_url: document.getElementById("ss-youtube").value.trim(),
+        post_url: document.getElementById("ss-post").value.trim(),
+        published: document.getElementById("ss-published").checked
+      };
+
+      setSundayServiceStatus("Menyimpan ke Firestore...");
       await saveSundayService(editId || serviceDate, payload);
       resetSundayServiceForm();
       await refreshContentData();
@@ -667,6 +645,8 @@ function bindContentEvents() {
       const msg = err?.message || String(err);
       setSundayServiceStatus("Gagal menyimpan: " + msg, true);
       alert("Gagal menyimpan Sunday Service: " + msg);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   });
 
@@ -724,40 +704,6 @@ function bindContentEvents() {
     document.getElementById("ei-parsed-preview")?.classList.add("hidden");
     setEditorStatus("");
     contentState.parsedDraft = null;
-  });
-
-  document.getElementById("btn-seed-2026-compass")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    btn.textContent = "Seeding Nov–Dec 2026...";
-    try {
-      const res = await seedNovDec2026Compass();
-      alert(`Success! Seeded ${res.months} Monthly Compass themes (Oct–Dec 2026) and ${res.weeks} Nov–Dec 2026 services.`);
-      await refreshContentData();
-      await initPublicPortal();
-    } catch (err) {
-      alert("Error seeding 2026 Compass: " + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "✨ Seed Nov–Dec 2026";
-    }
-  });
-
-  document.getElementById("btn-seed-2027")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    btn.textContent = "Seeding 2027...";
-    try {
-      const res = await seed2027Curriculum();
-      alert(`Success! Seeded ${res.months} Monthly Themes and ${res.weeks} Weekly Insights for 2027.`);
-      await refreshContentData();
-      await initPublicPortal();
-    } catch (err) {
-      alert("Error seeding 2027 curriculum: " + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "📖 Seed 2027 Curriculum";
-    }
   });
 
   document.getElementById("form-weekly")?.addEventListener("submit", async (e) => {
@@ -822,6 +768,8 @@ window.editSundayServiceItem = (id) => {
   document.getElementById("ss-speaker").value = item.speaker || "";
   document.getElementById("ss-title").value = item.title || "";
   document.getElementById("ss-poster").value = item.poster_url || "";
+  const fileEl = document.getElementById("ss-poster-file");
+  if (fileEl) fileEl.value = "";
   document.getElementById("ss-youtube").value = item.youtube_url || "";
   document.getElementById("ss-post").value = item.post_url || "";
   document.getElementById("ss-published").checked = item.published !== false;
