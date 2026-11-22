@@ -1,6 +1,7 @@
 // js/ui-content.js
 import { seed2027Curriculum } from "./seed-2027.js";
 import { seedNovDec2026Compass } from "./seed-2026-compass.js";
+import { SUNDAY_SERVICES_2026 } from "./seed-sunday-services.js";
 import {
   getMonthlyThemes,
   getWeeklyInsights,
@@ -14,7 +15,11 @@ import {
   getEditorsInsights,
   saveEditorsInsight,
   deleteEditorsInsight,
-  parseEditorInsightRawText
+  parseEditorInsightRawText,
+  getSundayServices,
+  saveSundayService,
+  deleteSundayService,
+  seedSundayServicesFromList
 } from "./db-content.js";
 import { initPublicPortal } from "./ui-portal.js";
 
@@ -24,6 +29,7 @@ let contentState = {
   reflections: [],
   media: [],
   editorsInsights: [],
+  sundayServices: [],
   parsedDraft: null
 };
 
@@ -160,8 +166,112 @@ function ensureEditorsInsightStudioUI() {
   mediaPanel.parentElement.appendChild(panel);
 }
 
+function ensureSundayServicesStudioUI() {
+  const subtabBar = document.querySelector(".content-subtab")?.parentElement;
+  const mediaPanel = document.getElementById("subpanel-media");
+  if (!subtabBar || !mediaPanel || document.getElementById("subpanel-sunday")) return;
+
+  const tabBtn = document.createElement("button");
+  tabBtn.type = "button";
+  tabBtn.className = "content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold";
+  tabBtn.dataset.subtab = "sunday";
+  tabBtn.textContent = "🎬 Sunday Services";
+  subtabBar.appendChild(tabBtn);
+
+  const panel = document.createElement("div");
+  panel.id = "subpanel-sunday";
+  panel.className = "content-subpanel hidden grid grid-cols-1 lg:grid-cols-12 gap-4";
+  panel.innerHTML = `
+    <div class="lg:col-span-5 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="font-bold text-sm text-slate-900">🎬 Sunday Service Poster & Cinema Data</h3>
+        <button type="button" id="btn-reset-sunday-service" class="text-[11px] text-slate-500 hover:underline">New Entry</button>
+      </div>
+      <p class="text-[11px] text-slate-500">Kelola koleksi <code class="font-mono">sunday_services</code> untuk galeri model bioskop di <code class="font-mono">ifgfpalmy.org</code>. Gunakan tombol seed untuk memasukkan 27 data poster 2026 sekaligus.</p>
+
+      <div class="p-3 bg-amber-50/80 border border-amber-200 rounded-xl flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div class="font-bold text-slate-900">Bulk Seed 27 Posters (Jun–Nov 2026)</div>
+          <div class="text-[11px] text-slate-600">Menyimpan 27 ibadah & poster ke koleksi <span class="font-mono">sunday_services</span>.</div>
+        </div>
+        <button type="button" id="btn-seed-sunday-services" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg shrink-0">
+          ⚡ Seed 27 Sunday Services
+        </button>
+      </div>
+
+      <form id="form-sunday-service" class="space-y-2.5">
+        <input type="hidden" id="ss-edit-id" value="" />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label class="font-semibold text-slate-600">Tanggal Ibadah *</label>
+            <input type="date" id="ss-date" required class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Pembicara *</label>
+            <input type="text" id="ss-speaker" required placeholder="e.g., Tikva Mooy" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          </div>
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-600">Judul Ibadah / Seri *</label>
+          <input type="text" id="ss-title" required placeholder="e.g., From Prison To Palace" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-600">Poster Image URL *</label>
+          <input type="url" id="ss-poster" required placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-600">YouTube URL (opsional)</label>
+          <input type="url" id="ss-youtube" placeholder="https://www.youtube.com/live/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-600">Post / Artikel URL (opsional)</label>
+          <input type="url" id="ss-post" placeholder="https://ifgfpalmy.org/2026/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+
+        <label class="flex items-center gap-2 pt-1 cursor-pointer">
+          <input type="checkbox" id="ss-published" checked class="rounded border-slate-300" />
+          <span class="font-semibold text-slate-700">Published di Galeri Publik</span>
+        </label>
+
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+          <button type="submit" id="btn-save-sunday-service" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
+            💾 Save Sunday Service
+          </button>
+          <span id="ss-status-msg" class="text-[11px] font-medium text-slate-600"></span>
+        </div>
+      </form>
+    </div>
+
+    <div class="lg:col-span-7 space-y-2.5">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-bold text-sm text-slate-900">🎞️ Published Sunday Services (Cinema Gallery)</h3>
+        <div class="flex items-center gap-2">
+          <input type="text" id="ss-filter-query" placeholder="Cari tanggal, judul, pembicara..." class="px-2.5 py-1 border rounded-lg text-xs bg-white" />
+          <span id="ss-count-badge" class="text-xs text-slate-500"></span>
+        </div>
+      </div>
+      <div id="list-sunday-services" class="space-y-2.5"></div>
+    </div>
+  `;
+
+  mediaPanel.parentElement.appendChild(panel);
+}
+
 function setEditorStatus(msg, isError = false) {
   const el = document.getElementById("ei-status-msg");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = isError
+    ? "text-[11px] font-semibold text-red-600"
+    : "text-[11px] font-semibold text-emerald-700";
+}
+
+function setSundayServiceStatus(msg, isError = false) {
+  const el = document.getElementById("ss-status-msg");
   if (!el) return;
   el.textContent = msg;
   el.className = isError
@@ -172,12 +282,13 @@ function setEditorStatus(msg, isError = false) {
 export async function initContentStudio() {
   ensureWeeklyPosterFields();
   ensureEditorsInsightStudioUI();
+  ensureSundayServicesStudioUI();
   bindContentEvents();
   await refreshContentData();
 }
 
 async function refreshContentData() {
-  let [months, weeks, reflections, media, editorsInsights] = await Promise.all([
+  let [months, weeks, reflections, media, editorsInsights, sundayServices] = await Promise.all([
     getMonthlyThemes(),
     getWeeklyInsights(),
     getDailyReflections(),
@@ -185,6 +296,11 @@ async function refreshContentData() {
     getEditorsInsights().catch(err => {
       console.error("Failed to load editors_insights:", err);
       setEditorStatus("Gagal memuat editors_insights: " + (err.message || err), true);
+      return [];
+    }),
+    getSundayServices().catch(err => {
+      console.error("Failed to load sunday_services:", err);
+      setSundayServiceStatus("Gagal memuat sunday_services: " + (err.message || err), true);
       return [];
     })
   ]);
@@ -203,6 +319,7 @@ async function refreshContentData() {
   contentState.reflections = reflections;
   contentState.media = media;
   contentState.editorsInsights = editorsInsights;
+  contentState.sundayServices = sundayServices;
 
   populateMonthFilter();
   renderMonthlyThemes();
@@ -210,6 +327,7 @@ async function refreshContentData() {
   renderReflections();
   renderMedia();
   renderEditorsInsightsList();
+  renderSundayServicesList();
 }
 
 function populateMonthFilter() {
@@ -391,6 +509,73 @@ function renderEditorsInsightsList() {
   `).join("");
 }
 
+function renderSundayServicesList() {
+  const container = document.getElementById("list-sunday-services");
+  const badge = document.getElementById("ss-count-badge");
+  if (!container) return;
+
+  const queryText = (document.getElementById("ss-filter-query")?.value || "").trim().toLowerCase();
+  const list = queryText
+    ? contentState.sundayServices.filter(item =>
+        [item.service_date, item.title, item.speaker]
+          .filter(Boolean)
+          .some(v => String(v).toLowerCase().includes(queryText))
+      )
+    : contentState.sundayServices;
+
+  if (badge) {
+    badge.textContent = queryText
+      ? `${list.length} / ${contentState.sundayServices.length} items`
+      : `${contentState.sundayServices.length} items`;
+  }
+
+  if (list.length === 0) {
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500">Belum ada data di <code class="font-mono">sunday_services</code>. Klik "⚡ Seed 27 Sunday Services" atau tambah manual di formulir kiri.</div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(item => `
+    <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between gap-3 text-xs">
+      <div class="flex items-start gap-3 min-w-0">
+        ${item.poster_url
+          ? `<img src="${item.poster_url}" alt="${item.title}" class="w-14 h-20 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-100" />`
+          : `<div class="w-14 h-20 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 shrink-0">No Poster</div>`
+        }
+        <div class="min-w-0 space-y-1">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">${item.service_date || item.id}</span>
+            ${item.speaker ? `<span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-semibold text-[10px]">🎙️ ${item.speaker}</span>` : ""}
+            <span class="px-2 py-0.5 ${item.published !== false ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"} rounded font-semibold text-[10px]">
+              ${item.published !== false ? "Published" : "Draft"}
+            </span>
+          </div>
+          <h4 class="font-bold text-sm text-slate-900 truncate">${item.title || "Sunday Service"}</h4>
+          <div class="flex flex-wrap gap-2 text-[11px]">
+            ${item.poster_url ? `<a href="${item.poster_url}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">Poster</a>` : ""}
+            ${item.youtube_url ? `<a href="${item.youtube_url}" target="_blank" rel="noopener" class="text-red-600 hover:underline">YouTube</a>` : `<span class="text-slate-400">No YouTube</span>`}
+            ${item.post_url ? `<a href="${item.post_url}" target="_blank" rel="noopener" class="text-emerald-700 hover:underline">Post</a>` : `<span class="text-slate-400">No Post</span>`}
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button type="button" onclick="window.editSundayServiceItem('${item.id}')" class="text-blue-600 hover:underline font-semibold">Edit</button>
+        <button type="button" onclick="window.removeSundayServiceItem('${item.id}')" class="text-red-600 hover:underline font-semibold">Delete</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function resetSundayServiceForm() {
+  document.getElementById("ss-edit-id").value = "";
+  document.getElementById("ss-date").value = "";
+  document.getElementById("ss-speaker").value = "";
+  document.getElementById("ss-title").value = "";
+  document.getElementById("ss-poster").value = "";
+  document.getElementById("ss-youtube").value = "";
+  document.getElementById("ss-post").value = "";
+  document.getElementById("ss-published").checked = true;
+}
+
 function runEditorInsightParse() {
   const rawText = document.getElementById("ei-raw-text")?.value || "";
   const start_date = document.getElementById("ei-start-date")?.value || "";
@@ -427,6 +612,63 @@ function bindContentEvents() {
   });
 
   document.getElementById("filter-content-month")?.addEventListener("change", renderWeeklyInsights);
+  document.getElementById("ss-filter-query")?.addEventListener("input", renderSundayServicesList);
+
+  document.getElementById("btn-seed-sunday-services")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    if (!confirm("Seed 27 Sunday Service posters (2026-06-07 s/d 2026-11-22) ke koleksi sunday_services?")) return;
+    btn.disabled = true;
+    const prev = btn.textContent;
+    btn.textContent = "Seeding 27 Services...";
+    setSundayServiceStatus("Menyimpan 27 data ke Firestore...");
+    try {
+      const count = await seedSundayServicesFromList(SUNDAY_SERVICES_2026);
+      await refreshContentData();
+      setSundayServiceStatus(`Berhasil seed ${count} Sunday Services.`);
+      alert(`Success! Seeded ${count} Sunday Services into Firestore collection sunday_services.`);
+    } catch (err) {
+      console.error("Error seeding sunday_services:", err);
+      const msg = err?.message || String(err);
+      setSundayServiceStatus("Gagal seed: " + msg, true);
+      alert("Gagal seed Sunday Services: " + msg);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prev;
+    }
+  });
+
+  document.getElementById("btn-reset-sunday-service")?.addEventListener("click", () => {
+    resetSundayServiceForm();
+    setSundayServiceStatus("");
+  });
+
+  document.getElementById("form-sunday-service")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const editId = document.getElementById("ss-edit-id").value.trim();
+    const serviceDate = document.getElementById("ss-date").value.trim();
+    const payload = {
+      service_date: serviceDate,
+      title: document.getElementById("ss-title").value.trim(),
+      speaker: document.getElementById("ss-speaker").value.trim(),
+      poster_url: document.getElementById("ss-poster").value.trim(),
+      youtube_url: document.getElementById("ss-youtube").value.trim(),
+      post_url: document.getElementById("ss-post").value.trim(),
+      published: document.getElementById("ss-published").checked
+    };
+
+    try {
+      setSundayServiceStatus("Menyimpan...");
+      await saveSundayService(editId || serviceDate, payload);
+      resetSundayServiceForm();
+      await refreshContentData();
+      setSundayServiceStatus(`Tersimpan (${serviceDate} — ${payload.title})`);
+    } catch (err) {
+      console.error("Error saving sunday service:", err);
+      const msg = err?.message || String(err);
+      setSundayServiceStatus("Gagal menyimpan: " + msg, true);
+      alert("Gagal menyimpan Sunday Service: " + msg);
+    }
+  });
 
   document.getElementById("ei-start-date")?.addEventListener("change", (e) => {
     const labels = computeEditorDateLabels(e.target.value);
@@ -571,6 +813,31 @@ function bindContentEvents() {
     await initPublicPortal();
   });
 }
+
+window.editSundayServiceItem = (id) => {
+  const item = contentState.sundayServices.find(x => x.id === id);
+  if (!item) return;
+  document.getElementById("ss-edit-id").value = item.id;
+  document.getElementById("ss-date").value = item.service_date || item.id || "";
+  document.getElementById("ss-speaker").value = item.speaker || "";
+  document.getElementById("ss-title").value = item.title || "";
+  document.getElementById("ss-poster").value = item.poster_url || "";
+  document.getElementById("ss-youtube").value = item.youtube_url || "";
+  document.getElementById("ss-post").value = item.post_url || "";
+  document.getElementById("ss-published").checked = item.published !== false;
+  setSundayServiceStatus(`Editing ${item.service_date || item.id}`);
+};
+
+window.removeSundayServiceItem = async (id) => {
+  if (!confirm("Hapus data Sunday Service ini dari Firestore?")) return;
+  try {
+    await deleteSundayService(id);
+    await refreshContentData();
+    setSundayServiceStatus("Data dihapus.");
+  } catch (err) {
+    alert("Gagal menghapus: " + (err.message || err));
+  }
+};
 
 window.editEditorInsightItem = (id) => {
   const item = contentState.editorsInsights.find(x => x.id === id);
