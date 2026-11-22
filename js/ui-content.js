@@ -135,13 +135,14 @@ function ensureEditorsInsightStudioUI() {
         <textarea id="ei-raw-text" rows="11" placeholder="Tempel teks lengkap beserta **Judul**, *Ayat*, Shalom, isi paragraf dengan **English Hook**, dan Tuhan Yesus Memberkati." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5 font-sans leading-relaxed"></textarea>
       </div>
 
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <button type="button" id="btn-parse-editor-insight" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg">
           ⚡ Auto-Parse & Preview
         </button>
         <button type="button" id="btn-save-editor-insight" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
           💾 Save to Firestore
         </button>
+        <span id="ei-status-msg" class="text-[11px] font-medium text-slate-600"></span>
       </div>
 
       <div id="ei-parsed-preview" class="hidden p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-[11px]"></div>
@@ -159,6 +160,15 @@ function ensureEditorsInsightStudioUI() {
   mediaPanel.parentElement.appendChild(panel);
 }
 
+function setEditorStatus(msg, isError = false) {
+  const el = document.getElementById("ei-status-msg");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = isError
+    ? "text-[11px] font-semibold text-red-600"
+    : "text-[11px] font-semibold text-emerald-700";
+}
+
 export async function initContentStudio() {
   ensureWeeklyPosterFields();
   ensureEditorsInsightStudioUI();
@@ -172,7 +182,11 @@ async function refreshContentData() {
     getWeeklyInsights(),
     getDailyReflections(),
     getMediaGalleries(),
-    getEditorsInsights().catch(() => [])
+    getEditorsInsights().catch(err => {
+      console.error("Failed to load editors_insights:", err);
+      setEditorStatus("Gagal memuat editors_insights: " + (err.message || err), true);
+      return [];
+    })
   ]);
 
   if (reflections.length === 0) {
@@ -414,7 +428,6 @@ function bindContentEvents() {
 
   document.getElementById("filter-content-month")?.addEventListener("change", renderWeeklyInsights);
 
-  // Auto-fill date_label & header_date when start_date changes
   document.getElementById("ei-start-date")?.addEventListener("change", (e) => {
     const labels = computeEditorDateLabels(e.target.value);
     if (labels.date_label) document.getElementById("ei-date-label").value = labels.date_label;
@@ -424,25 +437,50 @@ function bindContentEvents() {
 
   document.getElementById("btn-parse-editor-insight")?.addEventListener("click", () => {
     const parsed = runEditorInsightParse();
-    if (!parsed) alert("Tempel teks materi lengkap terlebih dahulu.");
+    if (!parsed) {
+      setEditorStatus("Tempel teks materi lengkap terlebih dahulu.", true);
+      alert("Tempel teks materi lengkap terlebih dahulu.");
+    } else {
+      setEditorStatus("Preview berhasil dibuat. Klik Save to Firestore untuk menyimpan.");
+    }
   });
 
-  document.getElementById("btn-save-editor-insight")?.addEventListener("click", async () => {
+  document.getElementById("btn-save-editor-insight")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
     const parsed = runEditorInsightParse();
     if (!parsed || !parsed.start_date || !parsed.title) {
+      setEditorStatus("Pastikan Start Date terisi dan teks materi sudah ditempel.", true);
       alert("Pastikan Start Date terisi dan teks materi sudah ditempel.");
       return;
     }
-    const editId = document.getElementById("ei-edit-id")?.value.trim() || parsed.start_date;
-    await saveEditorsInsight(editId, parsed);
-    alert(`Saved Editor's Insight (${parsed.start_date} — ${parsed.title}) to Firestore!`);
-    await refreshContentData();
+
+    btn.disabled = true;
+    const prevText = btn.textContent;
+    btn.textContent = "Saving...";
+    setEditorStatus("Menyimpan ke Firestore...");
+
+    try {
+      const editId = document.getElementById("ei-edit-id")?.value.trim() || parsed.start_date;
+      await saveEditorsInsight(editId, parsed);
+      await refreshContentData();
+      setEditorStatus(`Tersimpan (${parsed.start_date} • ${parsed.edition_no || ""})`);
+      alert(`Berhasil menyimpan Editor's Insight (${parsed.start_date} — ${parsed.title}) ke Firestore!`);
+    } catch (err) {
+      console.error("Error saving editors_insights:", err);
+      const errMsg = err?.message || String(err);
+      setEditorStatus("Gagal menyimpan: " + errMsg, true);
+      alert("Gagal menyimpan ke Firestore: " + errMsg);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
   });
 
   document.getElementById("btn-reset-editor-insight")?.addEventListener("click", () => {
     document.getElementById("ei-edit-id").value = "";
     document.getElementById("ei-raw-text").value = "";
     document.getElementById("ei-parsed-preview")?.classList.add("hidden");
+    setEditorStatus("");
     contentState.parsedDraft = null;
   });
 
@@ -562,8 +600,13 @@ window.editEditorInsightItem = (id) => {
 
 window.removeEditorInsightItem = async (id) => {
   if (!confirm("Hapus edisi The Editor's Insight ini?")) return;
-  await deleteEditorsInsight(id);
-  await refreshContentData();
+  try {
+    await deleteEditorsInsight(id);
+    await refreshContentData();
+    setEditorStatus("Edisi dihapus.");
+  } catch (err) {
+    alert("Gagal menghapus: " + (err.message || err));
+  }
 };
 
 window.openWeeklyModal = (serviceDate) => {
