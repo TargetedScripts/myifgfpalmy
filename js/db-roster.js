@@ -22,15 +22,22 @@ export async function getSundayServices() {
 }
 
 export async function ensureServiceRecord(serviceDate, meta = {}) {
+  if (!serviceDate) return;
   const ref = doc(db, "sunday_services", serviceDate);
   await setDoc(ref, {
     service_date: serviceDate,
     service_time: meta.service_time || "10:30 AM",
     title: meta.title || "Sunday Celebration Service",
     key_verse: meta.key_verse || "",
+    week_label: meta.week_label || "",
     status: meta.status || "Draft",
     updated_at: serverTimestamp()
   }, { merge: true });
+}
+
+export async function deleteSundayService(serviceDate) {
+  if (!serviceDate) return;
+  await deleteDoc(doc(db, "sunday_services", serviceDate));
 }
 
 // --- 2. ASSIGNMENTS (PER SERVICE DATE) ---
@@ -50,6 +57,7 @@ export async function saveAssignment(serviceDate, roleObj, discipleObj, status =
     role_id: roleObj.id,
     role_name: roleObj.role_name || roleObj.name || "",
     department_id: roleObj.department_id || roleObj.dept_id || "",
+    dept_name: roleObj.dept_name || roleObj.department_name || "",
     disciple_id: discipleObj.id,
     disciple_name: discipleObj.full_name,
     disciple_phone: discipleObj.phone || "",
@@ -65,6 +73,7 @@ export async function upsertAssignment(existingId, data) {
     role_id: data.role_id || "",
     role_name: data.role_name || "",
     department_id: data.department_id || data.dept_id || "",
+    dept_name: data.dept_name || data.department_name || "",
     disciple_id: data.disciple_id,
     disciple_name: data.disciple_name,
     disciple_phone: data.disciple_phone || "",
@@ -74,6 +83,7 @@ export async function upsertAssignment(existingId, data) {
 }
 
 export async function updateAssignmentStatus(assignmentId, status) {
+  if (!assignmentId) return;
   await updateDoc(doc(db, "assignments", assignmentId), {
     status,
     updated_at: serverTimestamp()
