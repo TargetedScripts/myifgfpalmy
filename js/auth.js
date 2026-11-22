@@ -1,4 +1,3 @@
-
 // js/auth.js
 import { auth, db } from "./firebase-config.js";
 import {
@@ -72,43 +71,63 @@ export async function logoutUser() {
   await signOut(auth);
 }
 
-// Resolusi RBAC & Profil Disciple
+function extractLeadEmails(deptData) {
+  const raw = deptData?.lead_emails || deptData?.lead_email || deptData?.head_email || [];
+  if (Array.isArray(raw)) {
+    return raw.map(e => (e || "").toString().trim().toLowerCase()).filter(Boolean);
+  }
+  return raw
+    .toString()
+    .split(/[,;\n]+/)
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+async function findDepartmentsLedByEmail(email) {
+  const snap = await getDocs(collection(db, "departments"));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(d => d.active !== false && d.is_active !== false)
+    .filter(d => extractLeadEmails(d).includes(email));
+}
+
+// Resolusi RBAC & Profil Disciple + Department Lead
 export async function resolveUserProfile(user) {
-  const email = user.email.toLowerCase();
+  const email = (user.email || "").trim().toLowerCase();
   const isBootstrapAdmin = BOOTSTRAP_ADMINS.includes(email);
 
-  const q = query(collection(db, "disciples"), where("email", "==", email));
-  const snap = await getDocs(q);
+  const [discipleSnap, ledDepartments] = await Promise.all([
+    getDocs(query(collection(db, "disciples"), where("email", "==", email))),
+    findDepartmentsLedByEmail(email)
+  ]);
 
-  if (snap.empty) {
-    return {
-      uid: user.uid,
-      email: email,
-      displayName: user.displayName || email.split("@")[0],
-      discipleDoc: null,
-      accessLevel: isBootstrapAdmin ? "super_admin" : "unregistered"
-    };
-  }
+  const data = !discipleSnap.empty
+    ? { id: discipleSnap.docs[0].id, ...discipleSnap.docs[0].data() }
+    : null;
 
-  const docSnap = snap.docs[0];
-  const data = { id: docSnap.id, ...docSnap.data() };
+  const coordDepts = Array.isArray(data?.coordinator_departments)
+    ? data.coordinator_departments
+    : [];
 
-  // Penentuan RBAC sesuai Master Spec Bagian 2
-  let accessLevel = "member";
-  if (isBootstrapAdmin || data.system_role === "super_admin") {
+  let accessLevel = data ? "member" : "unregistered";
+  if (isBootstrapAdmin || data?.system_role === "super_admin") {
     accessLevel = "super_admin";
-  } else if (data.coordinator_departments && data.coordinator_departments.length > 0) {
+  } else if (ledDepartments.length > 0) {
+    accessLevel = "department_lead";
+  } else if (coordDepts.length > 0) {
     accessLevel = "coordinator";
-  } else if (data.has_active_roles === true) {
+  } else if (data?.has_active_roles === true) {
     accessLevel = "volunteer";
   }
 
   return {
     uid: user.uid,
-    email: email,
-    displayName: data.full_name || user.displayName || email,
+    email,
+    displayName: data?.full_name || user.displayName || email.split("@")[0],
     discipleDoc: data,
-    accessLevel
+    ledDepartments,
+    accessLevel,
+    isAdmin: accessLevel === "super_admin"
   };
 }
 
