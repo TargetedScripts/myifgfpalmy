@@ -7,12 +7,13 @@ import {
   addDoc,
   updateDoc,
   setDoc,
+  deleteDoc,
   query,
   orderBy,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// --- 1. DEPARTMENTS ---
+// --- 1. DEPARTMENTS (ADD / EDIT / DELETE) ---
 export async function getDepartments() {
   const q = query(collection(db, "departments"), orderBy("sort_order", "asc"));
   const snap = await getDocs(q);
@@ -21,13 +22,25 @@ export async function getDepartments() {
 
 export async function saveDepartment(id, data) {
   if (id) {
-    await updateDoc(doc(db, "departments", id), { ...data, updated_at: serverTimestamp() });
+    await setDoc(doc(db, "departments", id), {
+      ...data,
+      updated_at: serverTimestamp()
+    }, { merge: true });
   } else {
-    await addDoc(collection(db, "departments"), { ...data, created_at: serverTimestamp() });
+    await addDoc(collection(db, "departments"), {
+      ...data,
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp()
+    });
   }
 }
 
-// --- 2. ROLES REFERENCE ---
+export async function deleteDepartment(id) {
+  if (!id) return;
+  await deleteDoc(doc(db, "departments", id));
+}
+
+// --- 2. ROLES REFERENCE (ADD / EDIT / DELETE) ---
 export async function getRolesReference() {
   const q = query(collection(db, "roles_reference"), orderBy("role_name", "asc"));
   const snap = await getDocs(q);
@@ -45,11 +58,35 @@ export async function getRoles() {
 }
 
 export async function saveRoleReference(id, data) {
+  const payload = {
+    ...data,
+    role_name: data.role_name || data.name || "",
+    department_id: data.department_id || data.dept_id || "",
+    is_active: data.is_active !== false && data.active !== false,
+    updated_at: serverTimestamp()
+  };
+
   if (id) {
-    await updateDoc(doc(db, "roles_reference", id), { ...data, updated_at: serverTimestamp() });
+    await setDoc(doc(db, "roles_reference", id), payload, { merge: true });
   } else {
-    await addDoc(collection(db, "roles_reference"), { ...data, created_at: serverTimestamp() });
+    await addDoc(collection(db, "roles_reference"), {
+      ...payload,
+      created_at: serverTimestamp()
+    });
   }
+}
+
+export async function saveRole(id, data) {
+  return await saveRoleReference(id, data);
+}
+
+export async function deleteRoleReference(id) {
+  if (!id) return;
+  await deleteDoc(doc(db, "roles_reference", id));
+}
+
+export async function deleteRole(id) {
+  return await deleteRoleReference(id);
 }
 
 export async function toggleRoleActive(id, currentState) {
