@@ -184,6 +184,56 @@ export async function deleteEditorsInsight(id) {
   await deleteDoc(doc(db, "editors_insights", id));
 }
 
+// --- 0B. SUNDAY SERVICES CINEMA GALLERY CRUD (sunday_services) ---
+const cleanDashUrl = (val = "") => {
+  const t = String(val || "").trim();
+  return !t || t === "-" ? "" : t;
+};
+
+export async function getSundayServices() {
+  const q = query(collection(db, "sunday_services"), orderBy("service_date", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function saveSundayService(id, data) {
+  const serviceDate = (data.service_date || id || "").trim();
+  const docId = (id || serviceDate) || undefined;
+  const payload = {
+    service_date: serviceDate,
+    title: (data.title || "Sunday Service").trim(),
+    speaker: (data.speaker || "").trim(),
+    poster_url: cleanDashUrl(data.poster_url),
+    youtube_url: cleanDashUrl(data.youtube_url),
+    post_url: cleanDashUrl(data.post_url),
+    published: data.published !== undefined ? Boolean(data.published) : true,
+    updated_at: serverTimestamp()
+  };
+
+  if (docId) {
+    await setDoc(doc(db, "sunday_services", docId), payload, { merge: true });
+  } else {
+    payload.created_at = serverTimestamp();
+    await addDoc(collection(db, "sunday_services"), payload);
+  }
+}
+
+export async function deleteSundayService(id) {
+  if (!id) return;
+  await deleteDoc(doc(db, "sunday_services", id));
+}
+
+export async function seedSundayServicesFromList(items = []) {
+  let count = 0;
+  for (const item of items) {
+    const docId = (item.service_date || "").trim();
+    if (!docId) continue;
+    await saveSundayService(docId, item);
+    count += 1;
+  }
+  return count;
+}
+
 // --- 1. MONTHLY THEMES ---
 export async function getMonthlyThemes() {
   const q = query(collection(db, "monthly_themes"), orderBy("month_key", "asc"));
