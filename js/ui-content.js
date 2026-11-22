@@ -42,8 +42,8 @@ let contentState = {
 };
 
 const ID_MONTHS = [
-  "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
-  "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"
+  "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+  "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"
 ];
 
 function esc(str = "") {
@@ -107,15 +107,15 @@ function ensureWeeklyPosterFields() {
   extraRow.className = "grid grid-cols-1 sm:grid-cols-3 gap-2";
   extraRow.innerHTML = `
     <div>
-      <label class="font-semibold text-slate-600">Preacher / Pembicara</label>
-      <input type="text" id="wk-speaker" placeholder="Nama pembicara / preacher" class="w-full px-3 py-2 border rounded-lg" />
+      <label class="font-semibold text-slate-600">Preacher</label>
+      <input type="text" id="wk-speaker" placeholder="Preacher name" class="w-full px-3 py-2 border rounded-lg" />
     </div>
     <div>
-      <label class="font-semibold text-slate-600">Sunday Poster Image URL</label>
+      <label class="font-semibold text-slate-600">Poster Image URL</label>
       <input type="url" id="wk-poster" placeholder="https://.../poster.jpg" class="w-full px-3 py-2 border rounded-lg" />
     </div>
     <div>
-      <label class="font-semibold text-slate-600">YouTube Sermon / Live URL</label>
+      <label class="font-semibold text-slate-600">YouTube URL</label>
       <input type="url" id="wk-youtube" placeholder="https://youtube.com/watch?v=..." class="w-full px-3 py-2 border rounded-lg" />
     </div>
   `;
@@ -127,82 +127,69 @@ function ensureWeeklyPosterFields() {
 
 function ensureCurriculumTabUI() {
   const subtabBar = document.querySelector(".content-subtab")?.parentElement;
-  const mediaPanel = document.getElementById("subpanel-media");
-  if (!subtabBar || !mediaPanel || document.getElementById("subpanel-curriculum")) return;
+  const subtabContainer = subtabBar?.parentElement;
+  if (!subtabBar || !subtabContainer || document.getElementById("subpanel-curriculum")) return;
 
   const tabBtn = document.createElement("button");
   tabBtn.type = "button";
   tabBtn.className = "content-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold";
   tabBtn.dataset.subtab = "curriculum";
-  tabBtn.textContent = "📘 Kurikulum";
+  tabBtn.textContent = "📘 Curriculum";
   subtabBar.insertBefore(tabBtn, subtabBar.firstChild);
 
   const panel = document.createElement("div");
   panel.id = "subpanel-curriculum";
-  panel.className = "content-subpanel space-y-4 text-xs";
+  panel.className = "content-subpanel space-y-4 text-xs mb-4";
   panel.innerHTML = `
     <div class="bg-slate-900 text-white p-4 rounded-xl border border-slate-800 shadow-sm space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-amber-400 text-slate-950 rounded">Tema Tahunan</span>
-          <h3 id="curr-yearly-title" class="font-bold text-base mt-1">ALIGN IN PURPOSE — Kitab Keluaran</h3>
-          <p class="text-[11px] text-slate-300">Kurikulum teknis (tema tahunan, bulanan, mingguan, winning point, ayat Alkitab, fokus & alokasi preacher).</p>
+          <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-amber-400 text-slate-950 rounded">Annual Theme</span>
+          <h3 id="curr-yearly-title" class="font-bold text-base mt-1">ALIGN IN PURPOSE — Exodus</h3>
+          <p class="text-[11px] text-slate-300">Technical curriculum (annual, monthly & weekly themes, winning points, scriptures, focus & preacher allocation).</p>
         </div>
         <div class="flex items-center gap-2">
-          <input type="text" id="curr-yearly-input" value="ALIGN IN PURPOSE — Kitab Keluaran" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white w-64" />
+          <input type="text" id="curr-yearly-input" value="ALIGN IN PURPOSE — Exodus" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white w-64" />
           <button type="button" id="btn-curr-save-yearly" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs">
-            Simpan Tema Tahunan
+            Save Annual Theme
           </button>
         </div>
       </div>
 
       <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
         <div class="flex flex-wrap items-center gap-2">
-          <label class="text-[11px] text-slate-300 font-semibold">Pilih Bulan:</label>
+          <label class="text-[11px] text-slate-300 font-semibold">Select Month:</label>
           <select id="curr-month-filter" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"></select>
           <button type="button" id="btn-curr-new-month" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-xs">
-            + Bulan Baru
+            + New Month
           </button>
           <button type="button" id="btn-curr-delete-month" class="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs">
-            🗑️ Hapus Bulan Ini
+            🗑️ Delete Month
           </button>
         </div>
         <div id="curr-preacher-allocation" class="flex flex-wrap items-center gap-1.5 text-[11px]"></div>
       </div>
     </div>
 
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+    <div class="space-y-2.5">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h4 class="font-bold text-sm text-slate-900">⚡ Smart Paste Paket Bulanan (Tema Bulanan + Semua Minggu)</h4>
-          <p class="text-[11px] text-slate-500">Tempel teks bulanan lengkap beserta MINGGU 1–5; sistem otomatis mengekstrak tema bulanan dan seluruh minggu beserta winning point, ayat & fokusnya.</p>
-        </div>
-        <button type="button" id="btn-curr-clear-paste" class="text-[11px] text-slate-500 hover:underline">Bersihkan</button>
-      </div>
-
-      <textarea id="curr-bundle-paste" rows="5" placeholder="Tempel teks lengkap 1 bulan beserta MINGGU 1 ... MINGGU 5 di sini..." class="w-full px-3 py-2 border border-slate-300 rounded-lg font-sans leading-relaxed"></textarea>
-
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="flex flex-wrap items-center gap-2">
-          <button type="button" id="btn-curr-parse-bundle" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg">
-            🔍 Parse Paket Bulanan
-          </button>
-          <button type="button" id="btn-curr-save-bundle" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg">
-            💾 Simpan Bulan & Semua Minggu
+        <h4 class="font-bold text-sm text-slate-900">📌 Weekly Curriculum, Winning Points & Preacher Allocation</h4>
+        <div class="flex items-center gap-2">
+          <span id="curr-weeks-badge" class="text-xs text-slate-500"></span>
+          <button type="button" id="btn-curr-add-week" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs">
+            + Add Week
           </button>
         </div>
-        <span id="curr-bundle-status" class="text-[11px] font-semibold text-slate-600"></span>
       </div>
-
-      <div id="curr-bundle-preview" class="hidden p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2"></div>
+      <div id="curr-month-weeks-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-2 border-t border-slate-200">
       <form id="curr-month-form" class="lg:col-span-5 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 h-fit">
         <div class="flex items-center justify-between gap-2">
-          <h4 id="curr-month-form-title" class="font-bold text-sm text-slate-900">🗓️ Tema Bulanan</h4>
+          <h4 id="curr-month-form-title" class="font-bold text-sm text-slate-900">🗓️ Monthly Theme</h4>
           <button type="button" id="btn-curr-gen-compass" class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold rounded-lg text-[11px]">
-            ✨ Kirim ke Monthly Compass
+            ✨ Send to Monthly Compass
           </button>
         </div>
 
@@ -212,50 +199,63 @@ function ensureCurriculumTabUI() {
             <input type="month" id="curr-m-key" value="2027-01" required class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
           </div>
           <div>
-            <label class="font-semibold text-slate-600">Kitab / Ayat</label>
-            <input type="text" id="curr-m-scripture" placeholder="e.g., Keluaran 1–2" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+            <label class="font-semibold text-slate-600">Scripture / Passage</label>
+            <input type="text" id="curr-m-scripture" placeholder="e.g., Exodus 1–2 / Keluaran 1–2" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
           </div>
         </div>
 
         <div>
-          <label class="font-semibold text-slate-600">Judul Tema Bulanan *</label>
+          <label class="font-semibold text-slate-600">Monthly Theme Title *</label>
           <input type="text" id="curr-m-title" required placeholder="e.g., Begin to See" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 font-semibold" />
         </div>
 
         <div>
-          <label class="font-semibold text-slate-600">Fokus Bulanan / Narasi *</label>
-          <textarea id="curr-m-narrative" rows="3" placeholder="Fokus utama bulan ini..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
+          <label class="font-semibold text-slate-600">Monthly Focus / Narrative *</label>
+          <textarea id="curr-m-narrative" rows="3" placeholder="Monthly curriculum focus..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
         </div>
 
         <div>
-          <label class="font-semibold text-slate-600">Catatan / Refleksi Bulanan</label>
-          <textarea id="curr-m-reflection" rows="2" placeholder="Catatan teknis / refleksi bulanan..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
+          <label class="font-semibold text-slate-600">Technical Notes / Reflection</label>
+          <textarea id="curr-m-reflection" rows="2" placeholder="Technical notes or monthly reflection..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
         </div>
 
         <div class="flex items-center justify-between gap-2 pt-1">
           <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
-            💾 Simpan Tema Bulanan
+            💾 Save Monthly Theme
           </button>
           <span id="curr-month-status" class="text-[11px] font-semibold text-emerald-700"></span>
         </div>
       </form>
 
-      <div class="lg:col-span-7 space-y-2.5">
+      <div class="lg:col-span-7 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 h-fit">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <h4 class="font-bold text-sm text-slate-900">📌 Tema Mingguan, Winning Point & Alokasi Preacher</h4>
-          <div class="flex items-center gap-2">
-            <span id="curr-weeks-badge" class="text-xs text-slate-500"></span>
-            <button type="button" id="btn-curr-add-week" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs">
-              + Tambah Minggu
+          <div>
+            <h4 class="font-bold text-sm text-slate-900">⚡ Smart Paste Monthly Bundle (Monthly Theme + All Weeks)</h4>
+            <p class="text-[11px] text-slate-500">Paste full monthly text with WEEK 1–5 / MINGGU 1–5; automatically extracts monthly theme and weekly items (winning points, verses, focus).</p>
+          </div>
+          <button type="button" id="btn-curr-clear-paste" class="text-[11px] text-slate-500 hover:underline">Clear</button>
+        </div>
+
+        <textarea id="curr-bundle-paste" rows="6" placeholder="Paste full monthly curriculum bundle including Week 1 ... Week 5 here..." class="w-full px-3 py-2 border border-slate-300 rounded-lg font-sans leading-relaxed"></textarea>
+
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="btn-curr-parse-bundle" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg">
+              🔍 Parse Monthly Bundle
+            </button>
+            <button type="button" id="btn-curr-save-bundle" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg">
+              💾 Save Month & All Weeks
             </button>
           </div>
+          <span id="curr-bundle-status" class="text-[11px] font-semibold text-slate-600"></span>
         </div>
-        <div id="curr-month-weeks-list" class="space-y-2.5"></div>
+
+        <div id="curr-bundle-preview" class="hidden p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2"></div>
       </div>
     </div>
   `;
 
-  mediaPanel.parentElement.insertBefore(panel, mediaPanel.parentElement.firstChild);
+  subtabContainer.parentElement.insertBefore(panel, subtabContainer);
 }
 
 function ensureSermonArchivesTabUI() {
@@ -267,17 +267,36 @@ function ensureSermonArchivesTabUI() {
   tabBtn.type = "button";
   tabBtn.className = "content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold";
   tabBtn.dataset.subtab = "sermons";
-  tabBtn.textContent = "🎙️ Arsip Sermon";
+  tabBtn.textContent = "🎙️ Sermon Archives";
   subtabBar.insertBefore(tabBtn, document.getElementById("subpanel-editors") ? undefined : mediaPanel);
 
   const panel = document.createElement("div");
   panel.id = "subpanel-sermons";
   panel.className = "content-subpanel hidden grid grid-cols-1 lg:grid-cols-12 gap-4 text-xs";
   panel.innerHTML = `
+    <div class="lg:col-span-7 space-y-2.5">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-bold text-sm text-slate-900">🗂️ Sermon Archives</h3>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="sa-type-filter" class="px-2.5 py-1 border rounded-lg text-xs bg-white">
+            <option value="ALL">All Tags</option>
+            <option value="Sunday Service">Sunday Service</option>
+            <option value="Worship Night">Worship Night</option>
+            <option value="Prayer & Fasting">Prayer & Fasting</option>
+            <option value="Special Service">Special Service</option>
+            <option value="iCare / Fellowship">iCare / Fellowship</option>
+          </select>
+          <input type="text" id="sa-search-query" placeholder="Search date, title, preacher..." class="px-2.5 py-1 border rounded-lg text-xs bg-white" />
+          <span id="sa-count-badge" class="text-xs text-slate-500"></span>
+        </div>
+      </div>
+      <div id="list-sermon-archives" class="space-y-2.5"></div>
+    </div>
+
     <div class="lg:col-span-5 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 h-fit">
       <div class="flex items-center justify-between gap-2">
-        <h3 id="sa-form-title" class="font-bold text-sm text-slate-900">🎙️ Rekam / Edit Arsip Sermon</h3>
-        <button type="button" id="btn-reset-sermon-archive" class="text-[11px] text-slate-500 hover:underline">Baru</button>
+        <h3 id="sa-form-title" class="font-bold text-sm text-slate-900">🎙️ Add / Edit Sermon Archive</h3>
+        <button type="button" id="btn-reset-sermon-archive" class="text-[11px] text-slate-500 hover:underline">New</button>
       </div>
 
       <form id="form-sermon-archive" class="space-y-2.5">
@@ -285,11 +304,11 @@ function ensureSermonArchivesTabUI() {
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
-            <label class="font-semibold text-slate-600">Tanggal *</label>
+            <label class="font-semibold text-slate-600">Date *</label>
             <input type="date" id="sa-date" required class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
           </div>
           <div>
-            <label class="font-semibold text-slate-600">Tag / Jenis Ibadah *</label>
+            <label class="font-semibold text-slate-600">Service Tag *</label>
             <select id="sa-type" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 bg-white">
               <option value="Sunday Service">Sunday Service</option>
               <option value="Worship Night">Worship Night</option>
@@ -301,67 +320,48 @@ function ensureSermonArchivesTabUI() {
         </div>
 
         <div>
-          <label class="font-semibold text-slate-600">Judul Sermon *</label>
-          <input type="text" id="sa-title" required placeholder="Judul sermon" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 font-semibold" />
+          <label class="font-semibold text-slate-600">Sermon Title *</label>
+          <input type="text" id="sa-title" required placeholder="Sermon title" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 font-semibold" />
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
-            <label class="font-semibold text-slate-600">Pembicara / Preacher *</label>
-            <input type="text" id="sa-speaker" required placeholder="Nama pembicara" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+            <label class="font-semibold text-slate-600">Preacher / Speaker *</label>
+            <input type="text" id="sa-speaker" required placeholder="Preacher name" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
           </div>
           <div>
-            <label class="font-semibold text-slate-600">Jam (opsional)</label>
+            <label class="font-semibold text-slate-600">Time (optional)</label>
             <input type="time" id="sa-time" value="10:30" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
           </div>
         </div>
 
         <div>
-          <label class="font-semibold text-slate-600">Link YouTube (opsional)</label>
+          <label class="font-semibold text-slate-600">YouTube URL (optional)</label>
           <input type="url" id="sa-youtube" placeholder="https://www.youtube.com/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
         </div>
 
         <div>
-          <label class="font-semibold text-slate-600">Poster Image URL (opsional)</label>
+          <label class="font-semibold text-slate-600">Poster Image URL (optional)</label>
           <input type="url" id="sa-poster" placeholder="https://.../poster.jpg" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
         </div>
 
         <div>
-          <label class="font-semibold text-slate-600">Link Post (opsional)</label>
+          <label class="font-semibold text-slate-600">Post URL (optional)</label>
           <input type="url" id="sa-post" placeholder="https://ifgfpalmy.org/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
         </div>
 
         <div>
-          <label class="font-semibold text-slate-600">Catatan (opsional)</label>
-          <textarea id="sa-notes" rows="2" placeholder="Catatan singkat..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
+          <label class="font-semibold text-slate-600">Notes (optional)</label>
+          <textarea id="sa-notes" rows="2" placeholder="Optional notes..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
         </div>
 
         <div class="flex items-center justify-between gap-2 pt-1">
           <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
-            💾 Simpan Arsip Sermon
+            💾 Save Sermon Archive
           </button>
           <span id="sa-status-msg" class="text-[11px] font-semibold text-emerald-700"></span>
         </div>
       </form>
-    </div>
-
-    <div class="lg:col-span-7 space-y-2.5">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-sm text-slate-900">🗂️ Arsip Sermon</h3>
-        <div class="flex flex-wrap items-center gap-2">
-          <select id="sa-type-filter" class="px-2.5 py-1 border rounded-lg text-xs bg-white">
-            <option value="ALL">Semua Tag</option>
-            <option value="Sunday Service">Sunday Service</option>
-            <option value="Worship Night">Worship Night</option>
-            <option value="Prayer & Fasting">Prayer & Fasting</option>
-            <option value="Special Service">Special Service</option>
-            <option value="iCare / Fellowship">iCare / Fellowship</option>
-          </select>
-          <input type="text" id="sa-search-query" placeholder="Cari tanggal, judul, pembicara..." class="px-2.5 py-1 border rounded-lg text-xs bg-white" />
-          <span id="sa-count-badge" class="text-xs text-slate-500"></span>
-        </div>
-      </div>
-      <div id="list-sermon-archives" class="space-y-2.5"></div>
     </div>
   `;
 
@@ -374,82 +374,79 @@ function ensureMonthlyCompassTabUI() {
 
   monthlyPanel.className = "content-subpanel hidden space-y-4";
   monthlyPanel.innerHTML = `
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
-      <form id="form-monthly-theme" class="lg:col-span-5 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 text-xs h-fit">
-        <div class="flex items-center justify-between gap-2">
-          <h3 id="mt-form-title" class="font-bold text-sm text-slate-900">🧭 The Monthly Compass</h3>
-          <div class="flex items-center gap-2">
-            <button type="button" id="btn-gen-compass-from-curr" class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold rounded-lg text-[11px]">
-              ✨ Ambil dari Kurikulum
-            </button>
-            <button type="button" id="btn-reset-monthly-theme" class="text-[11px] text-slate-500 hover:underline">Reset</button>
-          </div>
-        </div>
-        <p class="text-[11px] text-slate-500">Diambil dari Tab Kurikulum atau di-edit / di-insert langsung ke database untuk kebutuhan pembicara & pembaca internet.</p>
+    <div class="space-y-2.5">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-sm text-slate-900">📚 The Monthly Compass</h3>
+        <span id="mt-count-badge" class="text-xs text-slate-500"></span>
+      </div>
+      <div id="list-monthly-themes" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div>
-            <label class="font-semibold text-slate-600">Month Key *</label>
-            <input type="month" id="mt-key" value="2027-01" required class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-          </div>
-          <div>
-            <label class="font-semibold text-slate-600">Fase / Periode</label>
-            <input type="text" id="mt-phase" placeholder="Opsional" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-          </div>
+    <form id="form-monthly-theme" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 text-xs">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 id="mt-form-title" class="font-bold text-sm text-slate-900">🧭 Add / Edit Monthly Compass</h3>
+        <div class="flex items-center gap-2">
+          <button type="button" id="btn-gen-compass-from-curr" class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold rounded-lg text-[11px]">
+            ✨ Pull from Curriculum
+          </button>
+          <button type="button" id="btn-reset-monthly-theme" class="text-[11px] text-slate-500 hover:underline">Reset</button>
         </div>
+      </div>
+      <p class="text-[11px] text-slate-500">Pulled from Curriculum or edited/inserted for preachers & web readers.</p>
 
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
         <div>
-          <label class="font-semibold text-slate-600">Judul Tema *</label>
+          <label class="font-semibold text-slate-600">Month Key *</label>
+          <input type="month" id="mt-key" value="2027-01" required class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+        <div>
+          <label class="font-semibold text-slate-600">Phase</label>
+          <input type="text" id="mt-phase" placeholder="Optional" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+        <div>
+          <label class="font-semibold text-slate-600">Scripture</label>
+          <input type="text" id="mt-scripture" placeholder="e.g., Exodus 1–2" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+        <div>
+          <label class="font-semibold text-slate-600">Pillar</label>
+          <input type="text" id="mt-pillar" placeholder="Optional" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+          <label class="font-semibold text-slate-600">Theme Title *</label>
           <input type="text" id="mt-title" required placeholder="e.g., Begin to See" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 font-semibold" />
         </div>
-
         <div>
-          <label class="font-semibold text-slate-600">Subjudul / Ringkasan</label>
-          <input type="text" id="mt-subtitle" placeholder="Ringkasan singkat bulanan" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          <label class="font-semibold text-slate-600">Subtitle</label>
+          <input type="text" id="mt-subtitle" placeholder="Short summary" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
         </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div>
-            <label class="font-semibold text-slate-600">Kitab / Ayat</label>
-            <input type="text" id="mt-scripture" placeholder="e.g., Keluaran 1–2" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-          </div>
-          <div>
-            <label class="font-semibold text-slate-600">Pilar</label>
-            <input type="text" id="mt-pillar" placeholder="Opsional" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-          </div>
-        </div>
-
-        <div>
-          <label class="font-semibold text-slate-600">Narasi Monthly Compass</label>
-          <textarea id="mt-narrative" rows="4" placeholder="Isi panduan bulanan untuk pembicara & user internet..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
-        </div>
-
-        <div>
-          <label class="font-semibold text-slate-600">Refleksi Bulan Ini</label>
-          <textarea id="mt-reflection" rows="3" placeholder="Refleksi bulanan..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
-        </div>
-
-        <div>
-          <label class="font-semibold text-slate-600">Penutup</label>
-          <input type="text" id="mt-closing" value="Kiranya Tuhan Yesus memberkati." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-        </div>
-
-        <div class="flex items-center justify-between gap-2 pt-1">
-          <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
-            💾 Simpan Monthly Compass
-          </button>
-          <span id="mt-status-msg" class="text-[11px] font-semibold text-emerald-700"></span>
-        </div>
-      </form>
-
-      <div class="lg:col-span-7 space-y-2.5">
-        <div class="flex items-center justify-between">
-          <h3 class="font-bold text-sm text-slate-900">📚 Daftar The Monthly Compass</h3>
-          <span id="mt-count-badge" class="text-xs text-slate-500"></span>
-        </div>
-        <div id="list-monthly-themes" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
       </div>
-    </div>
+
+      <div>
+        <label class="font-semibold text-slate-600">Monthly Compass Narrative</label>
+        <textarea id="mt-narrative" rows="4" placeholder="Monthly guide for preachers & internet readers..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+          <label class="font-semibold text-slate-600">Monthly Reflection</label>
+          <textarea id="mt-reflection" rows="2" placeholder="Monthly reflection..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
+        </div>
+        <div>
+          <label class="font-semibold text-slate-600">Closing</label>
+          <input type="text" id="mt-closing" value="God bless you." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-2 pt-1">
+        <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
+          💾 Save Monthly Compass
+        </button>
+        <span id="mt-status-msg" class="text-[11px] font-semibold text-emerald-700"></span>
+      </div>
+    </form>
   `;
 }
 
@@ -462,25 +459,33 @@ function ensureEditorsInsightTabUI() {
   tabBtn.type = "button";
   tabBtn.className = "content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold";
   tabBtn.dataset.subtab = "editors";
-  tabBtn.textContent = "✍️ The Editor's Insight";
+  tabBtn.textContent = "✍️ Editor's Insight";
   subtabBar.insertBefore(tabBtn, mediaPanel);
 
   const panel = document.createElement("div");
   panel.id = "subpanel-editors";
-  panel.className = "content-subpanel hidden grid grid-cols-1 lg:grid-cols-12 gap-4";
+  panel.className = "content-subpanel hidden space-y-4";
   panel.innerHTML = `
-    <div class="lg:col-span-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs">
+    <div class="space-y-2.5">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-sm text-slate-900">📚 Published Editor's Insights</h3>
+        <span id="ei-count-badge" class="text-xs text-slate-500"></span>
+      </div>
+      <div id="list-editors-insights" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </div>
+
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-sm text-slate-900">✍️ The Editor's Insight (Weekly)</h3>
-        <div class="flex items-center gap-2">
-          <select id="ei-source-week" class="px-2 py-1 border rounded-lg text-[11px] bg-slate-50 max-w-[200px]"></select>
+        <h3 class="font-bold text-sm text-slate-900">✍️ Add / Edit Editor's Insight (Weekly)</h3>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="ei-source-week" class="px-2 py-1 border rounded-lg text-[11px] bg-slate-50 max-w-[240px]"></select>
           <button type="button" id="btn-gen-editor-from-week" class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold rounded-lg text-[11px]">
-            ✨ Ambil dari Kurikulum Minggu
+            ✨ Pull from Weekly Curriculum
           </button>
           <button type="button" id="btn-reset-editor-insight" class="text-[11px] text-slate-500 hover:underline">Reset</button>
         </div>
       </div>
-      <p class="text-[11px] text-slate-500">Di-add / di-insert / di-edit melalui screen ini untuk pembicara & pembaca internet; jika belum ada data khusus, klik <strong>Ambil dari Kurikulum Minggu</strong>.</p>
+      <p class="text-[11px] text-slate-500">Add, insert, or edit weekly insights for preachers & web readers; pulls from Weekly Curriculum if no custom entry exists yet.</p>
 
       <input type="hidden" id="ei-edit-id" value="" />
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -494,17 +499,17 @@ function ensureEditorsInsightTabUI() {
         </div>
         <div>
           <label class="font-semibold text-slate-600">Date Label</label>
-          <input type="text" id="ei-date-label" value="3 – 9 JANUARI 2027" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 uppercase" />
+          <input type="text" id="ei-date-label" value="3 – 9 JANUARY 2027" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 uppercase" />
         </div>
         <div>
           <label class="font-semibold text-slate-600">Header Date</label>
-          <input type="text" id="ei-header-date" value="3 JANUARI 2027" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 uppercase" />
+          <input type="text" id="ei-header-date" value="3 JANUARY 2027" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 uppercase" />
         </div>
       </div>
 
       <div>
-        <label class="font-semibold text-slate-600">Materi / Teks Renungan Mingguan *</label>
-        <textarea id="ei-raw-text" rows="11" placeholder="Tulis/tempel renungan mingguan atau klik Ambil dari Kurikulum Minggu..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5 font-sans leading-relaxed"></textarea>
+        <label class="font-semibold text-slate-600">Weekly Insight Content *</label>
+        <textarea id="ei-raw-text" rows="10" placeholder="Write/paste weekly insight or click Pull from Weekly Curriculum..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5 font-sans leading-relaxed"></textarea>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
@@ -519,14 +524,6 @@ function ensureEditorsInsightTabUI() {
 
       <div id="ei-parsed-preview" class="hidden p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-[11px]"></div>
     </div>
-
-    <div class="lg:col-span-6 space-y-2.5">
-      <div class="flex items-center justify-between">
-        <h3 class="font-bold text-sm text-slate-900">📚 Published Editor's Insights</h3>
-        <span id="ei-count-badge" class="text-xs text-slate-500"></span>
-      </div>
-      <div id="list-editors-insights" class="space-y-2.5"></div>
-    </div>
   `;
 
   mediaPanel.parentElement.appendChild(panel);
@@ -540,11 +537,11 @@ function ensureDailyReflectionGeneratorUI() {
   helperBar.className = "p-2.5 bg-amber-50/80 border border-amber-200 rounded-lg space-y-2 text-xs mb-2";
   helperBar.innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <span class="font-bold text-amber-950">✨ Ambil dari Kurikulum</span>
+      <span class="font-bold text-amber-950">✨ Pull from Curriculum</span>
       <select id="dev-source-week" class="px-2 py-1 border rounded-lg text-[11px] bg-white max-w-[230px]"></select>
     </div>
     <button type="button" id="btn-gen-reflection-from-week" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-[11px]">
-      ⚡ Susun Daily Reflection dari Tema Kurikulum
+      ⚡ Draft Daily Reflection from Curriculum
     </button>
   `;
   devForm.insertBefore(helperBar, devForm.firstChild);
@@ -564,51 +561,61 @@ function ensureSundayServicesStudioUI() {
 
   const panel = document.createElement("div");
   panel.id = "subpanel-sunday";
-  panel.className = "content-subpanel hidden grid grid-cols-1 lg:grid-cols-12 gap-4";
+  panel.className = "content-subpanel hidden space-y-4";
   panel.innerHTML = `
-    <div class="lg:col-span-5 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs">
+    <div class="space-y-2.5">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-bold text-sm text-slate-900">🎞️ Published Sunday Services (Cinema Gallery)</h3>
+        <div class="flex items-center gap-2">
+          <input type="text" id="ss-filter-query" placeholder="Search date, title, preacher..." class="px-2.5 py-1 border rounded-lg text-xs bg-white" />
+          <span id="ss-count-badge" class="text-xs text-slate-500"></span>
+        </div>
+      </div>
+      <div id="list-sunday-services" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </div>
+
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs">
       <div class="flex items-center justify-between gap-2">
         <h3 class="font-bold text-sm text-slate-900">🎬 Sunday Service Poster & Cinema Data</h3>
         <button type="button" id="btn-reset-sunday-service" class="text-[11px] text-slate-500 hover:underline">New Entry</button>
       </div>
-      <p class="text-[11px] text-slate-500">Kelola koleksi <code class="font-mono">sunday_services</code> untuk galeri model bioskop di <code class="font-mono">ifgfpalmy.org</code>.</p>
+      <p class="text-[11px] text-slate-500">Manage <code class="font-mono">sunday_services</code> collection for cinema gallery on <code class="font-mono">ifgfpalmy.org</code>.</p>
 
       <form id="form-sunday-service" class="space-y-2.5">
         <input type="hidden" id="ss-edit-id" value="" />
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div>
-            <label class="font-semibold text-slate-600">Tanggal Ibadah *</label>
+            <label class="font-semibold text-slate-600">Service Date *</label>
             <input type="date" id="ss-date" required class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
           </div>
           <div>
-            <label class="font-semibold text-slate-600">Pembicara *</label>
+            <label class="font-semibold text-slate-600">Preacher *</label>
             <input type="text" id="ss-speaker" required placeholder="e.g., Tikva Mooy" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Service / Series Title *</label>
+            <input type="text" id="ss-title" required placeholder="e.g., From Prison To Palace" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
           </div>
         </div>
 
-        <div>
-          <label class="font-semibold text-slate-600">Judul Ibadah / Seri *</label>
-          <input type="text" id="ss-title" required placeholder="e.g., From Prison To Palace" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-        </div>
-
-        <div>
-          <label class="font-semibold text-slate-600">Poster Image URL *</label>
-          <input type="url" id="ss-poster" required placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-        </div>
-
-        <div>
-          <label class="font-semibold text-slate-600">YouTube URL (opsional)</label>
-          <input type="url" id="ss-youtube" placeholder="https://www.youtube.com/live/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-        </div>
-
-        <div>
-          <label class="font-semibold text-slate-600">Post / Artikel URL (opsional)</label>
-          <input type="url" id="ss-post" placeholder="https://ifgfpalmy.org/2026/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div>
+            <label class="font-semibold text-slate-600">Poster Image URL *</label>
+            <input type="url" id="ss-poster" required placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">YouTube URL (optional)</label>
+            <input type="url" id="ss-youtube" placeholder="https://www.youtube.com/live/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Post URL (optional)</label>
+            <input type="url" id="ss-post" placeholder="https://ifgfpalmy.org/2026/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          </div>
         </div>
 
         <label class="flex items-center gap-2 pt-1 cursor-pointer">
           <input type="checkbox" id="ss-published" checked class="rounded border-slate-300" />
-          <span class="font-semibold text-slate-700">Published di Galeri Publik</span>
+          <span class="font-semibold text-slate-700">Published in Public Gallery</span>
         </label>
 
         <div class="flex flex-wrap items-center gap-2 pt-1">
@@ -618,17 +625,6 @@ function ensureSundayServicesStudioUI() {
           <span id="ss-status-msg" class="text-[11px] font-medium text-slate-600"></span>
         </div>
       </form>
-    </div>
-
-    <div class="lg:col-span-7 space-y-2.5">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-sm text-slate-900">🎞️ Published Sunday Services (Cinema Gallery)</h3>
-        <div class="flex items-center gap-2">
-          <input type="text" id="ss-filter-query" placeholder="Cari tanggal, judul, pembicara..." class="px-2.5 py-1 border rounded-lg text-xs bg-white" />
-          <span id="ss-count-badge" class="text-xs text-slate-500"></span>
-        </div>
-      </div>
-      <div id="list-sunday-services" class="space-y-2.5"></div>
     </div>
   `;
 
@@ -709,17 +705,17 @@ async function refreshContentData() {
     getMediaGalleries(),
     getEditorsInsights().catch(err => {
       console.error("Failed to load editors_insights:", err);
-      setEditorStatus("Gagal memuat editors_insights: " + (err.message || err), true);
+      setEditorStatus("Failed to load editors_insights: " + (err.message || err), true);
       return [];
     }),
     getSundayServices().catch(err => {
       console.error("Failed to load sunday_services:", err);
-      setSundayServiceStatus("Gagal memuat sunday_services: " + (err.message || err), true);
+      setSundayServiceStatus("Failed to load sunday_services: " + (err.message || err), true);
       return [];
     }),
     getSermonArchives().catch(err => {
       console.error("Failed to load sermon_archives:", err);
-      setSermonArchiveStatus("Gagal memuat sermon_archives: " + (err.message || err), true);
+      setSermonArchiveStatus("Failed to load sermon_archives: " + (err.message || err), true);
       return [];
     })
   ]);
@@ -744,7 +740,7 @@ async function refreshContentData() {
 }
 
 function getYearlyThemeFromState() {
-  return contentState.months.find(m => m.yearly_theme)?.yearly_theme || "ALIGN IN PURPOSE — Kitab Keluaran";
+  return contentState.months.find(m => m.yearly_theme)?.yearly_theme || "ALIGN IN PURPOSE — Exodus";
 }
 
 function populateCurriculumMonthFilter() {
@@ -752,7 +748,7 @@ function populateCurriculumMonthFilter() {
   if (!select) return;
   const current = select.value || contentState.months[0]?.month_key || "2027-01";
   if (!contentState.months.length) {
-    select.innerHTML = `<option value="2027-01">2027-01 (Belum ada)</option>`;
+    select.innerHTML = `<option value="2027-01">2027-01 (Empty)</option>`;
     return;
   }
   select.innerHTML = contentState.months
@@ -768,7 +764,7 @@ function populateWeekSourceDropdowns() {
     ? contentState.weeks
         .map(w => `<option value="${esc(w.service_date)}">${esc(w.service_date)} • ${esc(w.week_label || "")} — ${esc(w.title || "")}</option>`)
         .join("")
-    : `<option value="">Belum ada tema mingguan</option>`;
+    : `<option value="">No weekly curriculum items</option>`;
 
   ["ei-source-week", "dev-source-week"].forEach(id => {
     const sel = document.getElementById(id);
@@ -789,8 +785,8 @@ function loadMonthFormFromState(monthKey) {
   document.getElementById("curr-m-narrative").value = mObj?.narrative || "";
   document.getElementById("curr-m-reflection").value = mObj?.reflection || "";
   document.getElementById("curr-month-form-title").textContent = mObj
-    ? `🗓️ Edit Tema Bulanan (${mObj.month_key})`
-    : `🗓️ Tema Bulanan Baru (${monthKey || "2027-01"})`;
+    ? `🗓️ Edit Monthly Theme (${mObj.month_key})`
+    : `🗓️ New Monthly Theme (${monthKey || "2027-01"})`;
 }
 
 function renderCurriculumView() {
@@ -812,23 +808,23 @@ function renderCurriculumView() {
 
   const allocBox = document.getElementById("curr-preacher-allocation");
   if (allocBox) {
-    allocBox.innerHTML = `<span class="text-slate-400 font-semibold">Alokasi Preacher:</span>` +
+    allocBox.innerHTML = `<span class="text-slate-400 font-semibold">Preacher Allocation:</span>` +
       (monthWeeks.length
         ? monthWeeks.map(w => `
             <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-amber-300">
-              ${esc(w.week_label || w.service_date)}: <strong>${esc(w.speaker || "Belum ditetapkan")}</strong>
+              ${esc(w.week_label || w.service_date)}: <strong>${esc(w.speaker || "Unassigned")}</strong>
             </span>
           `).join("")
-        : `<span class="text-slate-400">Belum ada minggu</span>`);
+        : `<span class="text-slate-400">No weeks</span>`);
   }
 
   const weeksList = document.getElementById("curr-month-weeks-list");
   const badge = document.getElementById("curr-weeks-badge");
   if (!weeksList) return;
-  if (badge) badge.textContent = `${monthWeeks.length} minggu di ${monthKey}`;
+  if (badge) badge.textContent = `${monthWeeks.length} weeks in ${monthKey}`;
 
   if (!monthWeeks.length) {
-    weeksList.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500">Belum ada data mingguan untuk bulan <strong>${esc(monthKey)}</strong>. Tempel paket bulanan di atas atau klik <strong>+ Tambah Minggu</strong>.</div>`;
+    weeksList.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500 col-span-full">No weekly curriculum items for <strong>${esc(monthKey)}</strong>. Use Smart Paste below or click <strong>+ Add Week</strong>.</div>`;
     return;
   }
 
@@ -839,20 +835,20 @@ function renderCurriculumView() {
           <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded">${esc(w.service_date)}</span>
           <span class="font-bold text-amber-700">${esc(w.week_label || "")}</span>
           <span class="px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded text-[10px] font-bold">
-            🎙️ Preacher: ${esc(w.speaker || "Belum ditetapkan")}
+            🎙️ Preacher: ${esc(w.speaker || "Unassigned")}
           </span>
           ${w.mission_application ? `<span class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">${esc(w.mission_application)}</span>` : ""}
         </div>
         <div class="flex items-center gap-2">
           <button type="button" onclick="window.openWeeklyModal('${esc(w.service_date)}')" class="text-xs font-semibold text-blue-600 hover:underline">Edit / Preacher</button>
-          <button type="button" onclick="window.removeWeeklyInsightItem('${esc(w.service_date)}')" class="text-xs font-semibold text-red-600 hover:underline">Hapus</button>
+          <button type="button" onclick="window.removeWeeklyInsightItem('${esc(w.service_date)}')" class="text-xs font-semibold text-red-600 hover:underline">Delete</button>
         </div>
       </div>
 
       <h5 class="font-bold text-sm text-slate-900">${esc(w.title || "")}</h5>
-      ${w.key_verse ? `<p class="text-[11px] text-slate-700">🔑 Ayat Emas: <strong>${esc(w.key_verse)}</strong></p>` : ""}
-      ${w.scripture_reading ? `<p class="text-[11px] text-slate-600">📖 Bacaan Alkitab: <strong>${esc(w.scripture_reading)}</strong></p>` : ""}
-      ${w.christ_connection ? `<p class="text-[11px] text-slate-700">🔗 Fokus / Koneksi Tema Bulanan: ${esc(w.christ_connection)}</p>` : ""}
+      ${w.key_verse ? `<p class="text-[11px] text-slate-700">🔑 Key Verse: <strong>${esc(w.key_verse)}</strong></p>` : ""}
+      ${w.scripture_reading ? `<p class="text-[11px] text-slate-600">📖 Scripture Reading: <strong>${esc(w.scripture_reading)}</strong></p>` : ""}
+      ${w.christ_connection ? `<p class="text-[11px] text-slate-700">🔗 Focus / Theme Link: ${esc(w.christ_connection)}</p>` : ""}
       ${w.sermon_summary ? `<div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-[11px] text-slate-700 whitespace-pre-line"><strong>Winning Point:</strong>\n${esc(w.sermon_summary)}</div>` : ""}
     </div>
   `).join("");
@@ -873,11 +869,11 @@ function renderBundlePreview(bundle) {
   box.classList.remove("hidden");
   box.innerHTML = `
     <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-lg space-y-1">
-      <div class="font-bold text-amber-950">🗓️ Tema Bulanan: ${esc(m.month_key)} — ${esc(m.title)} (${esc(m.scripture || "-")})</div>
+      <div class="font-bold text-amber-950">🗓️ Monthly Theme: ${esc(m.month_key)} — ${esc(m.title)} (${esc(m.scripture || "-")})</div>
       ${m.narrative ? `<p class="text-[11px] text-slate-700">${esc(m.narrative)}</p>` : ""}
     </div>
     <div class="space-y-1.5">
-      <div class="font-bold text-slate-800">📌 Minggu Terdeteksi (${wks.length}):</div>
+      <div class="font-bold text-slate-800">📌 Detected Weeks (${wks.length}):</div>
       ${wks.map(w => `
         <div class="p-2 bg-white border border-slate-200 rounded-lg text-[11px]">
           <span class="font-mono font-bold text-slate-900">${esc(w.service_date || "NO-DATE")}</span> •
@@ -895,10 +891,10 @@ function renderMonthlyCompassList() {
   const badge = document.getElementById("mt-count-badge");
   if (!container) return;
 
-  if (badge) badge.textContent = `${contentState.months.length} bulan`;
+  if (badge) badge.textContent = `${contentState.months.length} months`;
 
   if (contentState.months.length === 0) {
-    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500 col-span-full">Belum ada data Monthly Compass. Klik "Ambil dari Kurikulum" atau isi form di sebelah kiri.</div>`;
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500 col-span-full">No Monthly Compass entries yet. Click "Pull from Curriculum" or fill the form below.</div>`;
     return;
   }
 
@@ -939,12 +935,12 @@ function renderSermonArchivesList() {
 
   if (badge) {
     badge.textContent = queryText || typeFilter !== "ALL"
-      ? `${filtered.length} / ${contentState.sermonArchives.length} arsip`
-      : `${contentState.sermonArchives.length} arsip`;
+      ? `${filtered.length} / ${contentState.sermonArchives.length} archives`
+      : `${contentState.sermonArchives.length} archives`;
   }
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500">Belum ada arsip sermon. Tambahkan melalui formulir di sebelah kiri.</div>`;
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500">No sermon archives found. Add one using the form on the right.</div>`;
     return;
   }
 
@@ -979,7 +975,7 @@ function renderSermonArchivesList() {
 }
 
 function resetSermonArchiveForm() {
-  document.getElementById("sa-form-title").textContent = "🎙️ Rekam / Edit Arsip Sermon";
+  document.getElementById("sa-form-title").textContent = "🎙️ Add / Edit Sermon Archive";
   document.getElementById("sa-edit-id").value = "";
   document.getElementById("sa-date").value = "";
   document.getElementById("sa-type").value = "Sunday Service";
@@ -1048,8 +1044,8 @@ function renderParsedPreview(parsed) {
   box.classList.remove("hidden");
   box.innerHTML = `
     <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
-      <span class="font-bold text-emerald-700">✅ Hasil Pemisahan Otomatis (${esc(parsed.start_date || "No Date")} • ${esc(parsed.edition_no || "-")})</span>
-      <span class="text-slate-500">${parsed.paragraphs.length} paragraf • ${parsed.takeaways.length} takeaways</span>
+      <span class="font-bold text-emerald-700">✅ Parsed Preview (${esc(parsed.start_date || "No Date")} • ${esc(parsed.edition_no || "-")})</span>
+      <span class="text-slate-500">${parsed.paragraphs.length} paragraphs • ${parsed.takeaways.length} takeaways</span>
     </div>
     <div><strong>Title:</strong> ${esc(parsed.title || "-")}</div>
     <div><strong>Scripture:</strong> ${esc(parsed.scripture || "-")}</div>
@@ -1057,7 +1053,7 @@ function renderParsedPreview(parsed) {
       <strong>Sticky Hook:</strong> "${esc(parsed.sticky_hook || "-")}"
     </div>
     <div class="space-y-1">
-      <strong>Paragraphs (bersih):</strong>
+      <strong>Paragraphs:</strong>
       ${parsed.paragraphs.map((p, idx) => `<p class="p-1.5 bg-white rounded border border-slate-200"><strong>P${idx + 1}:</strong> ${esc(p)}</p>`).join("")}
     </div>
     <div class="space-y-1">
@@ -1075,7 +1071,7 @@ function renderEditorsInsightsList() {
   if (badge) badge.textContent = `${contentState.editorsInsights.length} editions`;
 
   if (contentState.editorsInsights.length === 0) {
-    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500">Belum ada edisi The Editor's Insight. Klik "Ambil dari Kurikulum Minggu" atau tulis/tempel teks di formulir kiri lalu klik Save.</div>`;
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500 col-span-full">No Editor's Insight editions yet. Click "Pull from Weekly Curriculum" or fill the form below.</div>`;
     return;
   }
 
@@ -1094,7 +1090,7 @@ function renderEditorsInsightsList() {
       </div>
       <p class="text-[11px] italic text-slate-600">${esc(item.scripture || "")}</p>
       ${item.sticky_hook ? `<p class="p-2 bg-amber-50 border-l-2 border-amber-500 font-semibold text-slate-800">"${esc(item.sticky_hook)}"</p>` : ""}
-      <p class="text-[11px] text-slate-500">${(item.paragraphs || []).length} paragraf • ${(item.takeaways || []).length} takeaways</p>
+      <p class="text-[11px] text-slate-500">${(item.paragraphs || []).length} paragraphs • ${(item.takeaways || []).length} takeaways</p>
     </div>
   `).join("");
 }
@@ -1120,7 +1116,7 @@ function renderSundayServicesList() {
   }
 
   if (list.length === 0) {
-    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500">Belum ada data di <code class="font-mono">sunday_services</code>. Tambahkan data baru melalui formulir di sebelah kiri.</div>`;
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500 col-span-full">No entries in <code class="font-mono">sunday_services</code> yet. Add one using the form below.</div>`;
     return;
   }
 
@@ -1187,13 +1183,13 @@ function applyCompassDraftToForm(monthKey) {
   document.getElementById("mt-narrative").value = draft.narrative;
   document.getElementById("mt-reflection").value = draft.reflection;
   document.getElementById("mt-closing").value = draft.closing;
-  setMonthlyStatus(`Draf Monthly Compass diambil dari kurikulum ${draft.month_key}.`);
+  setMonthlyStatus(`Monthly Compass draft pulled from curriculum ${draft.month_key}.`);
 }
 
 function applyEditorDraftToForm(weekDate) {
   const wObj = contentState.weeks.find(w => w.service_date === weekDate);
   if (!wObj) {
-    setEditorStatus("Pilih tema mingguan terlebih dahulu.", true);
+    setEditorStatus("Please select a weekly curriculum item first.", true);
     return;
   }
   const mObj = contentState.months.find(m => m.month_key === wObj.month_key) || {};
@@ -1215,12 +1211,12 @@ function applyEditorDraftToForm(weekDate) {
     draft.scripture,
     "Shalom,",
     ...paras,
-    "Tuhan Yesus Memberkati."
+    "God Bless You."
   ].filter(Boolean).join("\n\n");
 
   document.getElementById("ei-raw-text").value = rawText;
   runEditorInsightParse();
-  setEditorStatus(`Draf Editor's Insight disusun dari kurikulum minggu ${wObj.service_date}.`);
+  setEditorStatus(`Editor's Insight draft generated from week ${wObj.service_date}.`);
 }
 
 function applyReflectionDraftToForm(weekDate) {
@@ -1261,7 +1257,7 @@ function runBundleParse() {
   const rawText = document.getElementById("curr-bundle-paste")?.value || "";
   const fallbackMonth = document.getElementById("curr-month-filter")?.value || "2027-01";
   if (!rawText.trim()) {
-    setCurrBundleStatus("Tempel teks paket bulanan terlebih dahulu.", true);
+    setCurrBundleStatus("Please paste monthly bundle text first.", true);
     return null;
   }
   const bundle = parseMonthlyBundleRawText(rawText, {
@@ -1279,7 +1275,7 @@ function runBundleParse() {
     if (bundle.monthData.narrative) document.getElementById("curr-m-narrative").value = bundle.monthData.narrative;
   }
 
-  setCurrBundleStatus(`Terdeteksi bulan ${bundle.monthData.month_key} (${bundle.monthData.title || "-"}) dan ${(bundle.weeks || []).length} minggu.`);
+  setCurrBundleStatus(`Parsed ${bundle.monthData.month_key} (${bundle.monthData.title || "-"}) and ${(bundle.weeks || []).length} weeks.`);
   return bundle;
 }
 
@@ -1298,16 +1294,16 @@ function bindContentEvents() {
         await saveMonthlyTheme(m.month_key || m.id, { ...m, yearly_theme: newYearly });
       }
       await refreshContentData();
-      setCurrMonthStatus(`Tema Tahunan diperbarui: ${newYearly}`);
+      setCurrMonthStatus(`Annual theme updated: ${newYearly}`);
     } catch (err) {
-      setCurrMonthStatus("Gagal menyimpan tema tahunan: " + (err?.message || err), true);
+      setCurrMonthStatus("Failed to save annual theme: " + (err?.message || err), true);
     }
   });
 
   document.getElementById("curr-month-filter")?.addEventListener("change", renderCurriculumView);
 
   document.getElementById("btn-curr-new-month")?.addEventListener("click", () => {
-    document.getElementById("curr-month-form-title").textContent = "🗓️ Tema Bulanan Baru";
+    document.getElementById("curr-month-form-title").textContent = "🗓️ New Monthly Theme";
     document.getElementById("curr-m-key").value = "2027-02";
     document.getElementById("curr-m-title").value = "";
     document.getElementById("curr-m-scripture").value = "";
@@ -1320,7 +1316,7 @@ function bindContentEvents() {
     const monthKey = document.getElementById("curr-m-key")?.value || document.getElementById("curr-month-filter")?.value;
     if (!monthKey) return;
     const relatedWeeks = contentState.weeks.filter(w => (w.month_key || (w.service_date || "").slice(0, 7)) === monthKey);
-    if (!confirm(`Hapus tema bulanan ${monthKey} beserta ${relatedWeeks.length} minggu di dalamnya?`)) return;
+    if (!confirm(`Delete monthly theme ${monthKey} and ${relatedWeeks.length} linked weeks?`)) return;
 
     try {
       await deleteMonthlyTheme(monthKey);
@@ -1329,9 +1325,9 @@ function bindContentEvents() {
       }
       await refreshContentData();
       await initPublicPortal();
-      setCurrMonthStatus(`Bulan ${monthKey} dan ${relatedWeeks.length} minggu dihapus.`);
+      setCurrMonthStatus(`Deleted ${monthKey} and ${relatedWeeks.length} weeks.`);
     } catch (err) {
-      setCurrMonthStatus("Gagal menghapus bulan: " + (err?.message || err), true);
+      setCurrMonthStatus("Failed to delete month: " + (err?.message || err), true);
     }
   });
 
@@ -1357,9 +1353,9 @@ function bindContentEvents() {
       document.getElementById("curr-month-filter").value = monthKey;
       renderCurriculumView();
       await initPublicPortal();
-      setCurrMonthStatus(`Tersimpan (${monthKey} — ${payload.title})`);
+      setCurrMonthStatus(`Saved (${monthKey} — ${payload.title})`);
     } catch (err) {
-      setCurrMonthStatus("Gagal menyimpan: " + (err?.message || err), true);
+      setCurrMonthStatus("Failed to save: " + (err?.message || err), true);
     }
   });
 
@@ -1381,7 +1377,7 @@ function bindContentEvents() {
     const monthPayload = {
       month_key: monthKey,
       yearly_theme: getYearlyThemeFromState(),
-      title: document.getElementById("curr-m-title").value.trim() || bundle.monthData?.title || `Tema ${monthKey}`,
+      title: document.getElementById("curr-m-title").value.trim() || bundle.monthData?.title || `Theme ${monthKey}`,
       scripture: document.getElementById("curr-m-scripture").value.trim() || bundle.monthData?.scripture || "",
       narrative: document.getElementById("curr-m-narrative").value.trim() || bundle.monthData?.narrative || "",
       reflection: document.getElementById("curr-m-reflection").value.trim() || bundle.monthData?.reflection || "",
@@ -1389,7 +1385,7 @@ function bindContentEvents() {
     };
 
     const validWeeks = (bundle.weeks || []).filter(w => w.service_date);
-    setCurrBundleStatus(`Menyimpan ${monthKey} dan ${validWeeks.length} minggu ke Firestore...`);
+    setCurrBundleStatus(`Saving ${monthKey} and ${validWeeks.length} weeks to Firestore...`);
 
     try {
       await saveMonthlyTheme(monthKey, monthPayload);
@@ -1403,9 +1399,9 @@ function bindContentEvents() {
       document.getElementById("curr-month-filter").value = monthKey;
       renderCurriculumView();
       await initPublicPortal();
-      setCurrBundleStatus(`Berhasil menyimpan ${monthKey} dan ${validWeeks.length} minggu (${validWeeks.map(x => x.service_date).join(", ")}).`);
+      setCurrBundleStatus(`Saved ${monthKey} and ${validWeeks.length} weeks (${validWeeks.map(x => x.service_date).join(", ")}).`);
     } catch (err) {
-      setCurrBundleStatus("Gagal menyimpan paket: " + (err?.message || err), true);
+      setCurrBundleStatus("Failed to save bundle: " + (err?.message || err), true);
     }
   });
 
@@ -1436,7 +1432,7 @@ function bindContentEvents() {
     document.getElementById("mt-pillar").value = "";
     document.getElementById("mt-narrative").value = "";
     document.getElementById("mt-reflection").value = "";
-    document.getElementById("mt-closing").value = "Kiranya Tuhan Yesus memberkati.";
+    document.getElementById("mt-closing").value = "God bless you.";
     setMonthlyStatus("");
   });
 
@@ -1462,13 +1458,13 @@ function bindContentEvents() {
     };
 
     try {
-      setMonthlyStatus("Menyimpan...");
+      setMonthlyStatus("Saving...");
       await saveMonthlyTheme(monthKey, payload);
       await refreshContentData();
       await initPublicPortal();
-      setMonthlyStatus(`Tersimpan (${monthKey} — ${payload.title})`);
+      setMonthlyStatus(`Saved (${monthKey} — ${payload.title})`);
     } catch (err) {
-      setMonthlyStatus("Gagal menyimpan: " + (err?.message || err), true);
+      setMonthlyStatus("Failed to save: " + (err?.message || err), true);
     }
   });
 
@@ -1503,13 +1499,13 @@ function bindContentEvents() {
     };
 
     try {
-      setSermonArchiveStatus("Menyimpan arsip sermon...");
+      setSermonArchiveStatus("Saving sermon archive...");
       await saveSermonArchive(editId || null, payload);
       resetSermonArchiveForm();
       await refreshContentData();
-      setSermonArchiveStatus(`Arsip tersimpan (${payload.service_date} • ${payload.title})`);
+      setSermonArchiveStatus(`Saved (${payload.service_date} • ${payload.title})`);
     } catch (err) {
-      setSermonArchiveStatus("Gagal menyimpan arsip: " + (err?.message || err), true);
+      setSermonArchiveStatus("Failed to save archive: " + (err?.message || err), true);
     }
   });
 
@@ -1537,16 +1533,16 @@ function bindContentEvents() {
     };
 
     try {
-      setSundayServiceStatus("Menyimpan...");
+      setSundayServiceStatus("Saving...");
       await saveSundayService(editId || serviceDate, payload);
       resetSundayServiceForm();
       await refreshContentData();
-      setSundayServiceStatus(`Tersimpan (${serviceDate} — ${payload.title})`);
+      setSundayServiceStatus(`Saved (${serviceDate} — ${payload.title})`);
     } catch (err) {
       console.error("Error saving sunday service:", err);
       const msg = err?.message || String(err);
-      setSundayServiceStatus("Gagal menyimpan: " + msg, true);
-      alert("Gagal menyimpan Sunday Service: " + msg);
+      setSundayServiceStatus("Failed to save: " + msg, true);
+      alert("Failed to save Sunday Service: " + msg);
     }
   });
 
@@ -1560,10 +1556,10 @@ function bindContentEvents() {
   document.getElementById("btn-parse-editor-insight")?.addEventListener("click", () => {
     const parsed = runEditorInsightParse();
     if (!parsed) {
-      setEditorStatus("Tempel teks materi lengkap terlebih dahulu.", true);
-      alert("Tempel teks materi lengkap terlebih dahulu.");
+      setEditorStatus("Please paste weekly insight text first.", true);
+      alert("Please paste weekly insight text first.");
     } else {
-      setEditorStatus("Preview berhasil dibuat. Klik Save to Firestore untuk menyimpan.");
+      setEditorStatus("Preview generated. Click Save to Firestore to persist.");
     }
   });
 
@@ -1571,27 +1567,27 @@ function bindContentEvents() {
     const btn = e.currentTarget;
     const parsed = runEditorInsightParse();
     if (!parsed || !parsed.start_date || !parsed.title) {
-      setEditorStatus("Pastikan Start Date terisi dan teks materi sudah ditempel.", true);
-      alert("Pastikan Start Date terisi dan teks materi sudah ditempel.");
+      setEditorStatus("Please ensure Start Date and content are provided.", true);
+      alert("Please ensure Start Date and content are provided.");
       return;
     }
 
     btn.disabled = true;
     const prevText = btn.textContent;
     btn.textContent = "Saving...";
-    setEditorStatus("Menyimpan ke Firestore...");
+    setEditorStatus("Saving to Firestore...");
 
     try {
       const editId = document.getElementById("ei-edit-id")?.value.trim() || parsed.start_date;
       await saveEditorsInsight(editId, parsed);
       await refreshContentData();
-      setEditorStatus(`Tersimpan (${parsed.start_date} • ${parsed.edition_no || ""})`);
-      alert(`Berhasil menyimpan Editor's Insight (${parsed.start_date} — ${parsed.title}) ke Firestore!`);
+      setEditorStatus(`Saved (${parsed.start_date} • ${parsed.edition_no || ""})`);
+      alert(`Saved Editor's Insight (${parsed.start_date} — ${parsed.title}) to Firestore!`);
     } catch (err) {
       console.error("Error saving editors_insights:", err);
       const errMsg = err?.message || String(err);
-      setEditorStatus("Gagal menyimpan: " + errMsg, true);
-      alert("Gagal menyimpan ke Firestore: " + errMsg);
+      setEditorStatus("Failed to save: " + errMsg, true);
+      alert("Failed to save to Firestore: " + errMsg);
     } finally {
       btn.disabled = false;
       btn.textContent = prevText;
@@ -1666,7 +1662,7 @@ function bindContentEvents() {
 window.editSermonArchiveItem = (id) => {
   const item = contentState.sermonArchives.find(x => x.id === id);
   if (!item) return;
-  document.getElementById("sa-form-title").textContent = "✏️ Edit Arsip Sermon";
+  document.getElementById("sa-form-title").textContent = "✏️ Edit Sermon Archive";
   document.getElementById("sa-edit-id").value = item.id;
   document.getElementById("sa-date").value = item.service_date || "";
   document.getElementById("sa-type").value = item.service_type || "Sunday Service";
@@ -1681,13 +1677,13 @@ window.editSermonArchiveItem = (id) => {
 };
 
 window.removeSermonArchiveItem = async (id) => {
-  if (!confirm("Hapus arsip sermon ini?")) return;
+  if (!confirm("Delete this sermon archive?")) return;
   try {
     await deleteSermonArchive(id);
     await refreshContentData();
-    setSermonArchiveStatus("Arsip dihapus.");
+    setSermonArchiveStatus("Archive deleted.");
   } catch (err) {
-    alert("Gagal menghapus arsip: " + (err?.message || err));
+    alert("Failed to delete archive: " + (err?.message || err));
   }
 };
 
@@ -1703,12 +1699,12 @@ window.editMonthlyThemeItem = (monthKey) => {
   document.getElementById("mt-pillar").value = m.pillar || "";
   document.getElementById("mt-narrative").value = m.narrative || "";
   document.getElementById("mt-reflection").value = m.reflection || "";
-  document.getElementById("mt-closing").value = m.closing || "Kiranya Tuhan Yesus memberkati.";
+  document.getElementById("mt-closing").value = m.closing || "God bless you.";
   setMonthlyStatus(`Editing ${m.month_key}`);
 };
 
 window.removeMonthlyThemeItem = async (monthKey) => {
-  if (!confirm(`Hapus data Monthly Compass ${monthKey}?`)) return;
+  if (!confirm(`Delete Monthly Compass entry ${monthKey}?`)) return;
   await deleteMonthlyTheme(monthKey);
   await refreshContentData();
   await initPublicPortal();
@@ -1719,7 +1715,7 @@ window.openNewWeeklyModal = (defaultDate = "2027-01-03") => {
   dateInput.removeAttribute("readonly");
   dateInput.classList.remove("bg-slate-100");
   dateInput.value = defaultDate;
-  document.getElementById("wk-label").value = "Minggu 1";
+  document.getElementById("wk-label").value = "Week 1";
   document.getElementById("wk-title").value = "";
   document.getElementById("wk-verse").value = "";
   document.getElementById("wk-reading").value = "";
@@ -1734,7 +1730,7 @@ window.openNewWeeklyModal = (defaultDate = "2027-01-03") => {
   document.getElementById("wk-icare").value = "";
   document.getElementById("wk-status").value = "Published";
   const heading = document.getElementById("modal-weekly-title");
-  if (heading) heading.textContent = "Tambah Minggu & Preacher";
+  if (heading) heading.textContent = "Add Week & Preacher";
   document.getElementById("modal-weekly").classList.remove("hidden");
 };
 
@@ -1760,12 +1756,12 @@ window.openWeeklyModal = (serviceDate) => {
   document.getElementById("wk-icare").value = w.icare_questions || "";
   document.getElementById("wk-status").value = w.status || "Scheduled";
   const heading = document.getElementById("modal-weekly-title");
-  if (heading) heading.textContent = "Edit Minggu & Preacher";
+  if (heading) heading.textContent = "Edit Week & Preacher";
   document.getElementById("modal-weekly").classList.remove("hidden");
 };
 
 window.removeWeeklyInsightItem = async (serviceDate) => {
-  if (!confirm(`Hapus data mingguan tanggal ${serviceDate}?`)) return;
+  if (!confirm(`Delete weekly entry on ${serviceDate}?`)) return;
   await deleteWeeklyInsight(serviceDate);
   await refreshContentData();
   await initPublicPortal();
@@ -1786,13 +1782,13 @@ window.editSundayServiceItem = (id) => {
 };
 
 window.removeSundayServiceItem = async (id) => {
-  if (!confirm("Hapus data Sunday Service ini dari Firestore?")) return;
+  if (!confirm("Delete this Sunday Service entry from Firestore?")) return;
   try {
     await deleteSundayService(id);
     await refreshContentData();
-    setSundayServiceStatus("Data dihapus.");
+    setSundayServiceStatus("Entry deleted.");
   } catch (err) {
-    alert("Gagal menghapus: " + (err?.message || err));
+    alert("Failed to delete: " + (err?.message || err));
   }
 };
 
@@ -1815,7 +1811,7 @@ window.editEditorInsightItem = (id) => {
     item.scripture || "",
     "Shalom,",
     ...paras,
-    "Tuhan Yesus Memberkati."
+    "God Bless You."
   ].filter(Boolean).join("\n\n");
 
   document.getElementById("ei-raw-text").value = reconstructed;
@@ -1823,13 +1819,13 @@ window.editEditorInsightItem = (id) => {
 };
 
 window.removeEditorInsightItem = async (id) => {
-  if (!confirm("Hapus edisi The Editor's Insight ini?")) return;
+  if (!confirm("Delete this Editor's Insight edition?")) return;
   try {
     await deleteEditorsInsight(id);
     await refreshContentData();
-    setEditorStatus("Edisi dihapus.");
+    setEditorStatus("Edition deleted.");
   } catch (err) {
-    alert("Gagal menghapus: " + (err?.message || err));
+    alert("Failed to delete: " + (err?.message || err));
   }
 };
 
