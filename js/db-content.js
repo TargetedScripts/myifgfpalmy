@@ -15,6 +15,205 @@ import { seedNov20toDec31Devotions } from "./seed-devotions-nov2026.js";
 
 export { seedNov20toDec31Devotions };
 
+const ID_MONTH_MAP = {
+  januari: "01", january: "01",
+  februari: "02", february: "02",
+  maret: "03", march: "03",
+  april: "04",
+  mei: "05", may: "05",
+  juni: "06", june: "06",
+  juli: "07", july: "07",
+  agustus: "08", august: "08",
+  september: "09",
+  oktober: "10", october: "10",
+  november: "11",
+  desember: "12", december: "12"
+};
+
+function cleanMd(str = "") {
+  return String(str || "")
+    .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
+    .replace(/^#+\s*/, "")
+    .replace(/^[“"]|[”"]$/g, "")
+    .trim();
+}
+
+function parseIndoDateToIso(dateStr = "", fallbackMonthKey = "") {
+  const isoMatch = String(dateStr).match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  if (isoMatch) return isoMatch[1];
+
+  const m = String(dateStr).match(
+    /\b(\d{1,2})\s+(januari|january|februari|february|maret|march|april|mei|may|juni|june|juli|july|agustus|august|september|oktober|october|november|desember|december)\s+(\d{4})\b/i
+  );
+  if (m) {
+    const day = String(Number(m[1])).padStart(2, "0");
+    const month = ID_MONTH_MAP[m[2].toLowerCase()] || "01";
+    const year = m[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  if (fallbackMonthKey && /^\d{4}-\d{2}$/.test(fallbackMonthKey)) {
+    const dayMatch = String(dateStr).match(/\b(\d{1,2})\b/);
+    const day = dayMatch ? String(Number(dayMatch[1])).padStart(2, "0") : "01";
+    return `${fallbackMonthKey}-${day}`;
+  }
+  return "";
+}
+
+function extractLabelValue(text = "", labels = []) {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(
+      `(?:^|\\n)\\s*(?:\\*\\*)?${escaped}(?:\\*\\*)?\\s*:?\\s*(.+?)(?=\\n\\s*(?:\\*\\*)?[A-Za-zÀ-ÿ /()_-]+(?:\\*\\*)?\\s*:|\\n---|$)`,
+      "is"
+    );
+    const match = text.match(re);
+    if (match && match[1]) {
+      return cleanMd(match[1].replace(/\n+/g, " "));
+    }
+  }
+  return "";
+}
+
+function extractWinningPoint(text = "") {
+  const m = text.match(
+    /(?:^|\n)\s*(?:\*\*)?(?:winning\s*point|ringkasan\s*khotbah|sermon\s*summary|poin\s*utama)(?:\*\*)?\s*:?\s*([\s\S]+?)(?=\n\s*(?:\*\*)?(?:pertanyaan\s*icare|icare|catatan|speaker|pembicara|youtube|poster)(?:\*\*)?\s*:|\n---|$)/i
+  );
+  if (!m || !m[1]) return "";
+  return m[1]
+    .split(/\n\s*\n/)
+    .map(p => p.replace(/\*\*/g, "").replace(/\*/g, "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function parseSingleWeeklyBlock(blockText = "", defaultMonthKey = "", defaultSpeaker = "") {
+  const raw = String(blockText || "").trim();
+  if (!raw) return null;
+
+  const headerMatch = raw.match(
+    /(?:^|\n)\s*(?:#+\s*)?(?:\*\*)?(MINGGU\s*\d+[^:\n]*|IBADAH\s+[^\n:]+|KHUSUS[^\n:]*)\s*:?\s*([^\n]*)/i
+  );
+  const weekLabelRaw = headerMatch ? cleanMd(headerMatch[1]) : "";
+  const datePartRaw = headerMatch ? cleanMd(headerMatch[2] || raw) : raw;
+
+  const explicitDate = extractLabelValue(raw, ["Tanggal", "Service Date", "Date"]);
+  const serviceDate =
+    parseIndoDateToIso(explicitDate, defaultMonthKey) ||
+    parseIndoDateToIso(datePartRaw, defaultMonthKey) ||
+    parseIndoDateToIso(raw, defaultMonthKey);
+
+  const monthKey = serviceDate
+    ? serviceDate.slice(0, 7)
+    : (defaultMonthKey || "2027-01");
+
+  const weekNumMatch = weekLabelRaw.match(/(\d+)/);
+  const weekLabel = weekNumMatch ? `Minggu ${Number(weekNumMatch[1])}` : (weekLabelRaw || "Minggu 1");
+
+  const title = extractLabelValue(raw, ["Tema", "Judul", "Weekly Theme Title", "Title"]);
+  const keyVerse = extractLabelValue(raw, ["Ayat Emas", "Ayat Kunci", "Key Verse", "Ayat"]);
+  const scriptureReading = extractLabelValue(raw, ["Bacaan Alkitab", "Bacaan", "Scripture Reading"]);
+  const connection = extractLabelValue(raw, ["Koneksi ke Tema Bulanan", "Koneksi Tema", "Christ Connection"]);
+  const flowPos = extractLabelValue(raw, ["Posisi dalam Alur", "Posisi"]);
+  const monthlyFocus = extractLabelValue(raw, ["Fokus Bulanan", "Weekly Focus", "Fokus"]);
+  const speaker = extractLabelValue(raw, ["Pembicara", "Speaker", "Pengkhotbah"]) || defaultSpeaker;
+  const diasporaLens = extractLabelValue(raw, ["Lensa Diaspora", "Diaspora Lens", "Diaspora"]);
+  const posterUrl = extractLabelValue(raw, ["Poster URL", "Poster"]);
+  const youtubeUrl = extractLabelValue(raw, ["YouTube URL", "YouTube"]);
+  const icareQuestions = extractLabelValue(raw, ["Pertanyaan iCare", "iCare Questions", "iCare"]);
+  const winningPoint = extractWinningPoint(raw);
+
+  const weeklyFocus = connection || monthlyFocus || flowPos || "";
+  const sermonSummary = winningPoint || [flowPos, connection].filter(Boolean).join(" — ");
+
+  if (!title && !keyVerse && !serviceDate) return null;
+
+  return {
+    service_date: serviceDate,
+    month_key: monthKey,
+    week_label: weekLabel,
+    title: title || `Ibadah ${weekLabel}`,
+    key_verse: keyVerse,
+    scripture_reading: scriptureReading,
+    speaker: speaker || "",
+    poster_url: cleanDashUrl(posterUrl),
+    youtube_url: cleanDashUrl(youtubeUrl),
+    weekly_focus: weeklyFocus,
+    christ_connection: connection,
+    mission_application: flowPos,
+    diaspora_lens: diasporaLens,
+    sermon_summary: sermonSummary,
+    icare_questions: icareQuestions,
+    status: "Published"
+  };
+}
+
+export function parseWeeklyInsightsRawText(rawText = "", fallbackMeta = {}) {
+  const cleanedInput = String(rawText || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/^Berikut adalah rincian lengkap perencanaan ibadah minggu[^\n]*\n*/i, "")
+    .replace(/\n###\s*Ringkasan Verifikasi[\s\S]*$/i, "")
+    .replace(/\n💡\s*Apakah Anda ingin[\s\S]*$/i, "")
+    .trim();
+
+  if (!cleanedInput) return [];
+
+  const splitRegex =
+    /(?=(?:^|\n)\s*(?:#+\s*)?(?:\*\*)?(?:MINGGU\s*\d+|IBADAH\s+(?:NATAL|TUTUP\s+TAHUN)|KHUSUS\s*\([^)]+\)))/gi;
+  const parts = cleanedInput
+    .split(splitRegex)
+    .map(p => p.replace(/^---\s*$/gm, "").trim())
+    .filter(Boolean);
+
+  const parsedList = parts
+    .map(part => parseSingleWeeklyBlock(part, fallbackMeta.month_key || "", fallbackMeta.speaker || ""))
+    .filter(Boolean);
+
+  if (parsedList.length > 0) return parsedList;
+
+  const single = parseSingleWeeklyBlock(
+    cleanedInput,
+    fallbackMeta.month_key || "",
+    fallbackMeta.speaker || ""
+  );
+  return single ? [single] : [];
+}
+
+export function parseMonthlyThemeRawText(rawText = "", fallbackMeta = {}) {
+  const raw = String(rawText || "").replace(/\r\n/g, "\n").trim();
+  const monthKey =
+    extractLabelValue(raw, ["Month Key", "Bulan", "Periode"]).match(/\d{4}-\d{2}/)?.[0] ||
+    fallbackMeta.month_key ||
+    "2027-01";
+
+  const phase = extractLabelValue(raw, ["Fase", "Phase"]) || fallbackMeta.phase || "FASE 1: SEE";
+  const title = extractLabelValue(raw, ["Tema Bulanan", "Judul Tema", "Title", "Tema"]) || fallbackMeta.title || "";
+  const subtitle = extractLabelValue(raw, ["Subjudul", "Subtitle", "Tagline"]) || fallbackMeta.subtitle || "";
+  const scripture = extractLabelValue(raw, ["Kitab / Ayat", "Ayat", "Scripture"]) || fallbackMeta.scripture || "";
+  const pillar = extractLabelValue(raw, ["Pilar", "Pillar"]) || fallbackMeta.pillar || "";
+  const yearlyTheme = extractLabelValue(raw, ["Tema Tahunan", "Yearly Theme"]) || "ALIGN IN PURPOSE — Kitab Keluaran";
+
+  const introMatch = raw.match(/(?:^|\n)\s*(?:Narasi|Intro|Pengantar)\s*:?\s*([\s\S]+?)(?=\n\s*(?:Refleksi|Penutup)\s*:|$)/i);
+  const reflectionMatch = raw.match(/(?:^|\n)\s*(?:Refleksi(?:\s+Bulan\s+Ini)?)\s*:?\s*([\s\S]+?)(?=\n\s*(?:Penutup)\s*:|$)/i);
+  const closingMatch = raw.match(/(?:^|\n)\s*(?:Penutup)\s*:?\s*([\s\S]+)$/i);
+
+  return {
+    month_key: monthKey,
+    phase,
+    title,
+    subtitle,
+    scripture,
+    pillar,
+    yearly_theme: yearlyTheme,
+    narrative: introMatch ? cleanMd(introMatch[1]) : (fallbackMeta.narrative || ""),
+    reflection: reflectionMatch ? cleanMd(reflectionMatch[1]) : (fallbackMeta.reflection || ""),
+    closing: closingMatch ? cleanMd(closingMatch[1]) : (fallbackMeta.closing || "Kiranya Tuhan Yesus memberkati."),
+    banner_url: fallbackMeta.banner_url || "",
+    status: "Published"
+  };
+}
+
 // --- 0. THE EDITOR'S INSIGHT PARSER & CRUD (editors_insights) ---
 function cleanMarkdown(str = "") {
   return str
@@ -242,13 +441,23 @@ export async function getMonthlyThemes() {
 }
 
 export async function saveMonthlyTheme(id, data) {
-  const payload = { ...data, updated_at: serverTimestamp() };
-  if (id) {
-    await setDoc(doc(db, "monthly_themes", id), payload, { merge: true });
+  const docId = (id || data.month_key || "").trim();
+  const payload = {
+    ...data,
+    month_key: (data.month_key || docId || "").trim(),
+    updated_at: serverTimestamp()
+  };
+  if (docId) {
+    await setDoc(doc(db, "monthly_themes", docId), payload, { merge: true });
   } else {
     payload.created_at = serverTimestamp();
     await addDoc(collection(db, "monthly_themes"), payload);
   }
+}
+
+export async function deleteMonthlyTheme(id) {
+  if (!id) return;
+  await deleteDoc(doc(db, "monthly_themes", id));
 }
 
 // --- 2. WEEKLY INSIGHTS ---
@@ -259,13 +468,24 @@ export async function getWeeklyInsights() {
 }
 
 export async function saveWeeklyInsight(id, data) {
-  const payload = { ...data, updated_at: serverTimestamp() };
-  if (id) {
-    await setDoc(doc(db, "weekly_insights", id), payload, { merge: true });
+  const docId = (id || data.service_date || "").trim();
+  const payload = {
+    ...data,
+    service_date: (data.service_date || docId || "").trim(),
+    month_key: (data.month_key || (data.service_date || docId || "").slice(0, 7)).trim(),
+    updated_at: serverTimestamp()
+  };
+  if (docId) {
+    await setDoc(doc(db, "weekly_insights", docId), payload, { merge: true });
   } else {
     payload.created_at = serverTimestamp();
     await addDoc(collection(db, "weekly_insights"), payload);
   }
+}
+
+export async function deleteWeeklyInsight(id) {
+  if (!id) return;
+  await deleteDoc(doc(db, "weekly_insights", id));
 }
 
 // --- 3. DAILY REFLECTIONS (with daily_devotions fallback) ---
