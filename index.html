@@ -79,7 +79,7 @@
         <div class="flex flex-wrap gap-1.5">
           <button class="tab-btn active px-3.5 py-2 rounded-lg text-xs font-semibold transition" data-tab="public">🏛️ Church Portal</button>
           <button id="nav-my-portal" class="tab-btn hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="myportal">🙋 My Portal</button>
-          <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roster">📅 Sunday Roster</button>
+          <button id="nav-roster" class="tab-btn roster-lead-tab admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roster">📅 Sunday Roster</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="care">🌱 Care & Growth</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="disciples">Disciples (360°)</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="content">📖 Content Studio</button>
@@ -116,7 +116,7 @@
           </div>
           <div class="space-y-5">
             <div class="space-y-3">
-              <h3 class="font-bold text-sm uppercase tracking-wider text-slate-700">✨ Daily Devotions</h3>
+              <h3 class="font-bold text-sm uppercase tracking-wider text-slate-700">✨ Daily Reflections</h3>
               <div id="public-devotions-list" class="space-y-3"></div>
             </div>
             <div class="space-y-3">
@@ -389,7 +389,7 @@
         <div class="flex flex-wrap gap-2">
           <button class="content-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="weekly">Weekly Insights</button>
           <button class="content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="monthly">Monthly Themes</button>
-          <button class="content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="devotions">Daily Devotions</button>
+          <button class="content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="devotions">Daily Reflections</button>
           <button class="content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="media">Media Gallery</button>
         </div>
 
@@ -406,13 +406,13 @@
 
         <div id="subpanel-devotions" class="content-subpanel hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
           <form id="form-devotion" class="bg-white p-4 rounded-xl border border-slate-200 space-y-3 text-xs h-fit">
-            <h3 class="font-bold text-sm text-slate-900">Publish Daily Devotion</h3>
+            <h3 class="font-bold text-sm text-slate-900">Publish Daily Reflection</h3>
             <input type="date" id="dev-date" required class="w-full px-3 py-2 border rounded-lg" />
-            <input type="text" id="dev-title" required placeholder="Devotion Title" class="w-full px-3 py-2 border rounded-lg" />
+            <input type="text" id="dev-title" required placeholder="Reflection Title" class="w-full px-3 py-2 border rounded-lg" />
             <input type="text" id="dev-verse" required placeholder="Scripture (e.g., Keluaran 3:14)" class="w-full px-3 py-2 border rounded-lg" />
             <textarea id="dev-body" rows="4" required placeholder="Reflection content..." class="w-full px-3 py-2 border rounded-lg"></textarea>
             <textarea id="dev-prayer" rows="2" placeholder="Closing prayer..." class="w-full px-3 py-2 border rounded-lg"></textarea>
-            <button type="submit" class="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg">Save Devotion</button>
+            <button type="submit" class="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg">Save Reflection</button>
           </form>
           <div id="list-devotions" class="lg:col-span-2 space-y-2.5"></div>
         </div>
@@ -758,14 +758,24 @@
           await initMemberSelfService(profile);
 
           const isAdminOrCoord = profile.accessLevel === "super_admin" || profile.accessLevel === "coordinator";
+          const isDeptLead =
+            profile.accessLevel === "department_lead" ||
+            (Array.isArray(profile.ledDepartments) && profile.ledDepartments.length > 0);
+
+          document.querySelectorAll(".admin-only-tab").forEach(el => {
+            el.classList.toggle("hidden", !isAdminOrCoord);
+          });
+          document.querySelectorAll(".roster-lead-tab").forEach(el => {
+            el.classList.toggle("hidden", !(isAdminOrCoord || isDeptLead));
+          });
+
           if (isAdminOrCoord) {
-            document.querySelectorAll(".admin-only-tab").forEach(el => el.classList.remove("hidden"));
             await initMasterApp(profile);
             await initContentStudio();
-            await initRosterEngine();
+            await initRosterEngine(profile);
             await initCareModule();
-          } else {
-            document.querySelectorAll(".admin-only-tab").forEach(el => el.classList.add("hidden"));
+          } else if (isDeptLead) {
+            await initRosterEngine(profile);
           }
         },
         () => {
@@ -777,6 +787,7 @@
           document.getElementById("header-user-info").classList.add("hidden");
           document.getElementById("nav-my-portal").classList.add("hidden");
           document.querySelectorAll(".admin-only-tab").forEach(el => el.classList.add("hidden"));
+          document.querySelectorAll(".roster-lead-tab").forEach(el => el.classList.add("hidden"));
         }
       );
     } catch (err) {
