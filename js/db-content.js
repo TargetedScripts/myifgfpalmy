@@ -15,6 +15,175 @@ import { seedNov20toDec31Devotions } from "./seed-devotions-nov2026.js";
 
 export { seedNov20toDec31Devotions };
 
+// --- 0. THE EDITOR'S INSIGHT PARSER & CRUD (editors_insights) ---
+function cleanMarkdown(str = "") {
+  return str
+    .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
+    .replace(/^[#>\-\s]+/, "")
+    .trim();
+}
+
+function splitSentences(text = "") {
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+(?=[A-Z0-9“"'])/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function buildAutoTakeaways(paragraphs = [], stickyHook = "") {
+  const takeaways = [];
+
+  if (paragraphs[0]) {
+    const sents = splitSentences(paragraphs[0]);
+    const shortDesc = sents.slice(1).join(" ") || sents[0];
+    takeaways.push({
+      title: "1. Ruang Tunggu Bukan Penjara yang Sia-Sia",
+      desc: shortDesc.length > 180 ? shortDesc.slice(0, 177).trim() + "..." : shortDesc
+    });
+  }
+
+  if (stickyHook) {
+    takeaways.push({
+      title: "2. Workshop Tuhan untuk Destinasi Kita",
+      desc: stickyHook
+    });
+  }
+
+  if (paragraphs[1]) {
+    const sents = splitSentences(paragraphs[1]);
+    const graceFocus =
+      sents.find(s => /anugerah|penebusan|kristus|salib/i.test(s)) || sents[0];
+    takeaways.push({
+      title: `${takeaways.length + 1}. Anugerah Kristus di Tengah Penantian`,
+      desc: graceFocus
+    });
+  }
+
+  if (paragraphs[2]) {
+    const sents = splitSentences(paragraphs[2]);
+    takeaways.push({
+      title: `${takeaways.length + 1}. Menjadi Pembawa Damai & Terang di Palmy`,
+      desc: sents.join(" ")
+    });
+  }
+
+  return takeaways.slice(0, 4);
+}
+
+export function parseEditorInsightRawText(rawText = "", meta = {}) {
+  const blocks = rawText
+    .replace(/\r\n/g, "\n")
+    .split(/\n\s*\n/)
+    .map(b => b.trim())
+    .filter(Boolean);
+
+  let title = "";
+  let scripture = "";
+  let stickyHook = "";
+  const bodyBlocks = [];
+
+  blocks.forEach((block, idx) => {
+    const cleanLine = cleanMarkdown(block);
+
+    if (!title && idx === 0 && /\*\*.*\*\*/.test(block) && block.length < 120) {
+      title = cleanLine;
+      return;
+    }
+
+    if (
+      !scripture &&
+      (/[—–-]\s*[1-3]?\s*[A-Za-zÀ-ÿ]+\s+\d+:\d+/.test(cleanLine) ||
+        /^[“"].*[”"].*[—–-]/.test(cleanLine))
+    ) {
+      scripture = cleanLine;
+      return;
+    }
+
+    if (/^shalom[,.!]?$/i.test(cleanLine) || /^tuhan yesus memberkati[.!]?$/i.test(cleanLine)) {
+      return;
+    }
+
+    bodyBlocks.push(block);
+  });
+
+  if (!title && bodyBlocks.length > 0) {
+    title = cleanMarkdown(bodyBlocks.shift());
+  }
+
+  const paragraphs = bodyBlocks
+    .map(block => {
+      const boldMatches = [...block.matchAll(/\*\*([^*]+)\*\*/g)].map(m => m[1].trim());
+      const englishHook = boldMatches.find(
+        txt =>
+          /[a-zA-Z]{3,}/.test(txt) &&
+          !/\b(yang|dan|di|ke|dari|untuk|dengan|pada|allah|tuhan|yusuf|firaun)\b/i.test(txt)
+      );
+
+      let cleanedBlock = block;
+      if (englishHook) {
+        stickyHook = englishHook;
+        cleanedBlock = cleanedBlock
+          .replace(/\*\*[^*]+\*\*/g, match => (cleanMarkdown(match) === englishHook ? " " : match))
+          .replace(/\s{2,}/g, " ")
+          .trim();
+      }
+
+      return cleanMarkdown(cleanedBlock)
+        .replace(/^shalom,\s*/i, "")
+        .replace(/\s*tuhan yesus memberkati\.?$/i, "")
+        .trim();
+    })
+    .filter(Boolean);
+
+  const takeaways = buildAutoTakeaways(paragraphs, stickyHook);
+
+  return {
+    start_date: (meta.start_date || "").trim(),
+    edition_no: (meta.edition_no || "").trim().toUpperCase(),
+    date_label: (meta.date_label || "").trim().toUpperCase(),
+    header_date: (meta.header_date || "").trim().toUpperCase(),
+    title,
+    scripture,
+    sticky_hook: stickyHook,
+    paragraphs,
+    takeaways
+  };
+}
+
+export async function getEditorsInsights() {
+  const q = query(collection(db, "editors_insights"), orderBy("start_date", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function saveEditorsInsight(id, data) {
+  const docId = id || data.start_date || undefined;
+  const payload = {
+    ...data,
+    start_date: (data.start_date || "").trim(),
+    edition_no: (data.edition_no || "").trim().toUpperCase(),
+    date_label: (data.date_label || "").trim().toUpperCase(),
+    header_date: (data.header_date || "").trim().toUpperCase(),
+    status: data.status || "Published",
+    updated_at: serverTimestamp()
+  };
+
+  if (docId) {
+    await setDoc(doc(db, "editors_insights", docId), payload, { merge: true });
+  } else {
+    payload.created_at = serverTimestamp();
+    await addDoc(collection(db, "editors_insights"), payload);
+  }
+}
+
+export async function deleteEditorsInsight(id) {
+  if (!id) return;
+  await deleteDoc(doc(db, "editors_insights", id));
+}
+
 // --- 1. MONTHLY THEMES ---
 export async function getMonthlyThemes() {
   const q = query(collection(db, "monthly_themes"), orderBy("month_key", "asc"));
