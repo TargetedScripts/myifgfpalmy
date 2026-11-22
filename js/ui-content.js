@@ -14,8 +14,7 @@ import {
   parseEditorInsightRawText,
   getSundayServices,
   saveSundayService,
-  deleteSundayService,
-  uploadSundayPosterFile
+  deleteSundayService
 } from "./db-content.js";
 import { initPublicPortal } from "./ui-portal.js";
 
@@ -183,7 +182,7 @@ function ensureSundayServicesStudioUI() {
         <h3 class="font-bold text-sm text-slate-900">🎬 Sunday Service Poster & Cinema Data</h3>
         <button type="button" id="btn-reset-sunday-service" class="text-[11px] text-slate-500 hover:underline">New Entry</button>
       </div>
-      <p class="text-[11px] text-slate-500">Kelola koleksi <code class="font-mono">sunday_services</code> untuk galeri model bioskop di <code class="font-mono">ifgfpalmy.org</code>. Anda bisa menempel URL poster maupun mengunggah file gambar langsung.</p>
+      <p class="text-[11px] text-slate-500">Kelola koleksi <code class="font-mono">sunday_services</code> untuk galeri model bioskop di <code class="font-mono">ifgfpalmy.org</code>.</p>
 
       <form id="form-sunday-service" class="space-y-2.5">
         <input type="hidden" id="ss-edit-id" value="" />
@@ -205,12 +204,7 @@ function ensureSundayServicesStudioUI() {
 
         <div>
           <label class="font-semibold text-slate-600">Poster Image URL *</label>
-          <input type="url" id="ss-poster" placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-        </div>
-
-        <div>
-          <label class="font-semibold text-slate-600">Atau Upload File Poster (Opsional)</label>
-          <input type="file" id="ss-poster-file" accept="image/*" class="w-full text-[11px] text-slate-600 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 mt-0.5" />
+          <input type="url" id="ss-poster" required placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
         </div>
 
         <div>
@@ -553,8 +547,6 @@ function resetSundayServiceForm() {
   document.getElementById("ss-speaker").value = "";
   document.getElementById("ss-title").value = "";
   document.getElementById("ss-poster").value = "";
-  const fileEl = document.getElementById("ss-poster-file");
-  if (fileEl) fileEl.value = "";
   document.getElementById("ss-youtube").value = "";
   document.getElementById("ss-post").value = "";
   document.getElementById("ss-published").checked = true;
@@ -605,37 +597,20 @@ function bindContentEvents() {
 
   document.getElementById("form-sunday-service")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const btn = document.getElementById("btn-save-sunday-service");
     const editId = document.getElementById("ss-edit-id").value.trim();
     const serviceDate = document.getElementById("ss-date").value.trim();
-    const fileInput = document.getElementById("ss-poster-file");
-    const selectedFile = fileInput?.files?.[0] || null;
+    const payload = {
+      service_date: serviceDate,
+      title: document.getElementById("ss-title").value.trim(),
+      speaker: document.getElementById("ss-speaker").value.trim(),
+      poster_url: document.getElementById("ss-poster").value.trim(),
+      youtube_url: document.getElementById("ss-youtube").value.trim(),
+      post_url: document.getElementById("ss-post").value.trim(),
+      published: document.getElementById("ss-published").checked
+    };
 
-    let posterUrl = document.getElementById("ss-poster").value.trim();
-    if (!posterUrl && !selectedFile) {
-      setSundayServiceStatus("Isi Poster Image URL atau pilih file poster untuk diupload.", true);
-      return;
-    }
-
-    if (btn) btn.disabled = true;
     try {
-      if (selectedFile) {
-        setSundayServiceStatus("Mengupload file poster ke Firebase Storage...");
-        posterUrl = await uploadSundayPosterFile(selectedFile, serviceDate);
-        document.getElementById("ss-poster").value = posterUrl;
-      }
-
-      const payload = {
-        service_date: serviceDate,
-        title: document.getElementById("ss-title").value.trim(),
-        speaker: document.getElementById("ss-speaker").value.trim(),
-        poster_url: posterUrl,
-        youtube_url: document.getElementById("ss-youtube").value.trim(),
-        post_url: document.getElementById("ss-post").value.trim(),
-        published: document.getElementById("ss-published").checked
-      };
-
-      setSundayServiceStatus("Menyimpan ke Firestore...");
+      setSundayServiceStatus("Menyimpan...");
       await saveSundayService(editId || serviceDate, payload);
       resetSundayServiceForm();
       await refreshContentData();
@@ -645,8 +620,6 @@ function bindContentEvents() {
       const msg = err?.message || String(err);
       setSundayServiceStatus("Gagal menyimpan: " + msg, true);
       alert("Gagal menyimpan Sunday Service: " + msg);
-    } finally {
-      if (btn) btn.disabled = false;
     }
   });
 
@@ -768,8 +741,6 @@ window.editSundayServiceItem = (id) => {
   document.getElementById("ss-speaker").value = item.speaker || "";
   document.getElementById("ss-title").value = item.title || "";
   document.getElementById("ss-poster").value = item.poster_url || "";
-  const fileEl = document.getElementById("ss-poster-file");
-  if (fileEl) fileEl.value = "";
   document.getElementById("ss-youtube").value = item.youtube_url || "";
   document.getElementById("ss-post").value = item.post_url || "";
   document.getElementById("ss-published").checked = item.published !== false;
