@@ -1,8 +1,13 @@
 // js/ui-content.js
 import {
   getMonthlyThemes,
+  saveMonthlyTheme,
+  deleteMonthlyTheme,
+  parseMonthlyThemeRawText,
   getWeeklyInsights,
   saveWeeklyInsight,
+  deleteWeeklyInsight,
+  parseWeeklyInsightsRawText,
   getDailyReflections,
   saveDailyReflection,
   getMediaGalleries,
@@ -25,13 +30,22 @@ let contentState = {
   media: [],
   editorsInsights: [],
   sundayServices: [],
-  parsedDraft: null
+  parsedDraft: null,
+  parsedWeeklyDrafts: []
 };
 
 const ID_MONTHS = [
   "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
   "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"
 ];
+
+function esc(str = "") {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 function computeEditorDateLabels(startDateStr) {
   if (!startDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) {
@@ -86,6 +100,163 @@ function ensureWeeklyPosterFields() {
     </div>
   `;
   focusField.parentElement.insertBefore(extraRow, focusField);
+
+  const modalHeading = form.parentElement?.querySelector("h3");
+  if (modalHeading) modalHeading.id = "modal-weekly-title";
+}
+
+function ensureWeeklyStudioUI() {
+  const weeklyPanel = document.getElementById("subpanel-weekly");
+  if (!weeklyPanel || document.getElementById("wk-smart-paste")) return;
+
+  const filterBar = weeklyPanel.firstElementChild;
+  if (filterBar) {
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.id = "wk-search-query";
+    searchInput.placeholder = "Cari tanggal, judul, ayat, pembicara...";
+    searchInput.className = "px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 w-full sm:w-72";
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.id = "btn-new-weekly-insight";
+    addBtn.className = "px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold whitespace-nowrap";
+    addBtn.textContent = "+ Add Weekly Theme";
+
+    const rightBox = document.createElement("div");
+    rightBox.className = "flex flex-wrap items-center gap-2";
+    rightBox.appendChild(searchInput);
+    rightBox.appendChild(addBtn);
+    filterBar.appendChild(rightBox);
+  }
+
+  const pasteBox = document.createElement("div");
+  pasteBox.className = "bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs";
+  pasteBox.innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h3 class="font-bold text-sm text-slate-900">⚡ Smart Paste — Tema Mingguan & Pembicara (1 Minggu atau 1 Bulan Penuh)</h3>
+        <p class="text-[11px] text-slate-500">Tempel teks tema mingguan (seperti format MINGGU 1–5 Januari 2027), sistem otomatis memisahkan tanggal, judul, ayat emas, bacaan, koneksi tema, winning point, dan pembicara.</p>
+      </div>
+      <button type="button" id="btn-clear-wk-paste" class="text-[11px] text-slate-500 hover:underline">Bersihkan</button>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div>
+        <label class="font-semibold text-slate-600">Default Bulan (jika tanggal hanya angka)</label>
+        <input type="month" id="wk-paste-month" value="2027-01" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">Default Pembicara (opsional)</label>
+        <input type="text" id="wk-paste-speaker" placeholder="e.g., Ps. Simon Luhur / Sendiron Enumbi" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="button" id="btn-parse-weekly-paste" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg">
+          🔍 Parse Teks
+        </button>
+        <button type="button" id="btn-save-weekly-paste" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg">
+          💾 Simpan Semua ke Firestore
+        </button>
+      </div>
+    </div>
+
+    <textarea id="wk-smart-paste" rows="6" placeholder="Tempel rincian MINGGU 1 ... MINGGU 5 di sini..." class="w-full px-3 py-2 border border-slate-300 rounded-lg font-sans leading-relaxed"></textarea>
+    <div id="wk-paste-status" class="text-[11px] font-semibold text-slate-600"></div>
+    <div id="wk-paste-preview" class="hidden space-y-2 pt-1"></div>
+  `;
+
+  if (filterBar && filterBar.nextSibling) {
+    weeklyPanel.insertBefore(pasteBox, filterBar.nextSibling);
+  } else {
+    weeklyPanel.appendChild(pasteBox);
+  }
+}
+
+function ensureMonthlyStudioUI() {
+  const monthlyPanel = document.getElementById("subpanel-monthly");
+  if (!monthlyPanel || document.getElementById("form-monthly-theme")) return;
+
+  monthlyPanel.className = "content-subpanel hidden space-y-4";
+  monthlyPanel.innerHTML = `
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <form id="form-monthly-theme" class="lg:col-span-5 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 text-xs h-fit">
+        <div class="flex items-center justify-between">
+          <h3 id="mt-form-title" class="font-bold text-sm text-slate-900">🗓️ Add / Edit Monthly Compass Theme</h3>
+          <button type="button" id="btn-reset-monthly-theme" class="text-[11px] text-slate-500 hover:underline">Reset</button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label class="font-semibold text-slate-600">Month Key *</label>
+            <input type="month" id="mt-key" value="2027-01" required class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Fase</label>
+            <input type="text" id="mt-phase" placeholder="FASE 1: SEE (Jan–Apr 2027)" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          </div>
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-600">Judul Tema Bulanan *</label>
+          <input type="text" id="mt-title" required placeholder="e.g., BEGIN TO SEE" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 font-semibold" />
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-600">Subjudul / Tagline</label>
+          <input type="text" id="mt-subtitle" placeholder="e.g., Membuka mata rohani untuk melihat tujuan Tuhan" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label class="font-semibold text-slate-600">Kitab / Ayat</label>
+            <input type="text" id="mt-scripture" placeholder="e.g., Keluaran 1–2" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Pilar</label>
+            <input type="text" id="mt-pillar" placeholder="e.g., Vision" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+          </div>
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-600">Narasi Pembuka Compass</label>
+          <textarea id="mt-narrative" rows="3" placeholder="Narasi pengantar tema bulan ini..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-600">Refleksi Bulan Ini</label>
+          <textarea id="mt-reflection" rows="3" placeholder="Kutipan / refleksi bulanan..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-600">Penutup</label>
+          <input type="text" id="mt-closing" value="Kiranya Tuhan Yesus memberkati." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
+        </div>
+
+        <div class="pt-1 space-y-2 border-t border-slate-100">
+          <label class="font-semibold text-slate-600 block">Smart Paste Teks Tema Bulanan (Opsional)</label>
+          <textarea id="mt-raw-paste" rows="3" placeholder="Bulan: 2027-01&#10;Fase: FASE 1: SEE&#10;Tema: Begin to See&#10;Ayat: Keluaran 1–2&#10;Pilar: Vision&#10;Narasi: ...&#10;Refleksi: ..." class="w-full px-2.5 py-1.5 border border-dashed border-slate-300 rounded-lg text-[11px]"></textarea>
+          <button type="button" id="btn-parse-monthly-paste" class="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold rounded-lg text-[11px]">
+            ⚡ Isi Field dari Teks
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-1">
+          <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
+            💾 Save Monthly Theme
+          </button>
+          <span id="mt-status-msg" class="text-[11px] font-semibold text-emerald-700"></span>
+        </div>
+      </form>
+
+      <div class="lg:col-span-7 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <h3 class="font-bold text-sm text-slate-900">📚 Monthly Compass Themes</h3>
+          <span id="mt-count-badge" class="text-xs text-slate-500"></span>
+        </div>
+        <div id="list-monthly-themes" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+      </div>
+    </div>
+  `;
 }
 
 function ensureEditorsInsightStudioUI() {
@@ -264,8 +435,28 @@ function setSundayServiceStatus(msg, isError = false) {
     : "text-[11px] font-semibold text-emerald-700";
 }
 
+function setMonthlyStatus(msg, isError = false) {
+  const el = document.getElementById("mt-status-msg");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = isError
+    ? "text-[11px] font-semibold text-red-600"
+    : "text-[11px] font-semibold text-emerald-700";
+}
+
+function setWeeklyPasteStatus(msg, isError = false) {
+  const el = document.getElementById("wk-paste-status");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = isError
+    ? "text-[11px] font-semibold text-red-600"
+    : "text-[11px] font-semibold text-emerald-700";
+}
+
 export async function initContentStudio() {
   ensureWeeklyPosterFields();
+  ensureWeeklyStudioUI();
+  ensureMonthlyStudioUI();
   ensureEditorsInsightStudioUI();
   ensureSundayServicesStudioUI();
   bindContentEvents();
@@ -313,14 +504,17 @@ function populateMonthFilter() {
   select.innerHTML =
     `<option value="ALL">All Scheduled Weeks (${contentState.weeks.length})</option>` +
     contentState.months
-      .map(m => `<option value="${m.month_key}">${m.month_key} — ${m.title}</option>`)
+      .map(m => `<option value="${esc(m.month_key)}">${esc(m.month_key)} — ${esc(m.title)}</option>`)
       .join("");
   select.value = current;
 }
 
 function renderMonthlyThemes() {
   const container = document.getElementById("list-monthly-themes");
+  const badge = document.getElementById("mt-count-badge");
   if (!container) return;
+
+  if (badge) badge.textContent = `${contentState.months.length} months`;
 
   if (contentState.months.length === 0) {
     container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500 col-span-full">No monthly themes found.</div>`;
@@ -328,15 +522,20 @@ function renderMonthlyThemes() {
   }
 
   container.innerHTML = contentState.months.map(m => `
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-900 text-white">${m.month_key}</span>
-        <span class="text-[11px] font-semibold text-amber-700">${m.phase}</span>
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2 text-xs">
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-bold px-2.5 py-0.5 rounded-full bg-slate-900 text-white">${esc(m.month_key)}</span>
+        <span class="text-[11px] font-semibold text-amber-700">${esc(m.phase || "")}</span>
       </div>
-      <h3 class="font-bold text-slate-900 text-base">${m.title}</h3>
-      ${m.subtitle ? `<p class="text-[11px] text-slate-600">${m.subtitle}</p>` : ""}
-      <p class="text-xs text-slate-600">📖 <strong>${m.scripture}</strong></p>
-      <p class="text-xs text-slate-500">Pillar: <span class="font-medium text-slate-800">${m.pillar}</span></p>
+      <h3 class="font-bold text-slate-900 text-base">${esc(m.title || "")}</h3>
+      ${m.subtitle ? `<p class="text-[11px] text-slate-600">${esc(m.subtitle)}</p>` : ""}
+      <p class="text-xs text-slate-600">📖 <strong>${esc(m.scripture || "-")}</strong></p>
+      <p class="text-xs text-slate-500">Pillar: <span class="font-medium text-slate-800">${esc(m.pillar || "-")}</span></p>
+      ${m.narrative ? `<p class="text-[11px] text-slate-600 line-clamp-2 bg-slate-50 p-2 rounded">${esc(m.narrative)}</p>` : ""}
+      <div class="flex justify-end gap-3 pt-1 border-t border-slate-100">
+        <button type="button" onclick="window.editMonthlyThemeItem('${esc(m.month_key || m.id)}')" class="text-blue-600 hover:underline font-semibold">Edit</button>
+        <button type="button" onclick="window.removeMonthlyThemeItem('${esc(m.month_key || m.id)}')" class="text-red-600 hover:underline font-semibold">Delete</button>
+      </div>
     </div>
   `).join("");
 }
@@ -346,13 +545,19 @@ function renderWeeklyInsights() {
   if (!container) return;
 
   const filterMonth = document.getElementById("filter-content-month")?.value || "ALL";
-  const filtered =
-    filterMonth === "ALL"
-      ? contentState.weeks
-      : contentState.weeks.filter(w => w.month_key === filterMonth);
+  const queryText = (document.getElementById("wk-search-query")?.value || "").trim().toLowerCase();
+
+  const filtered = contentState.weeks.filter(w => {
+    const matchMonth = filterMonth === "ALL" || w.month_key === filterMonth;
+    if (!matchMonth) return false;
+    if (!queryText) return true;
+    return [w.service_date, w.week_label, w.title, w.key_verse, w.scripture_reading, w.speaker, w.weekly_focus]
+      .filter(Boolean)
+      .some(v => String(v).toLowerCase().includes(queryText));
+  });
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-slate-500">No weekly insights found for this filter.</div>`;
+    container.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500">No weekly insights found for this filter.</div>`;
     return;
   }
 
@@ -360,22 +565,70 @@ function renderWeeklyInsights() {
     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex flex-wrap items-center gap-2">
-          <span class="text-xs font-mono font-bold px-2 py-0.5 bg-slate-100 text-slate-800 rounded">${w.service_date}</span>
-          <span class="text-xs font-semibold text-amber-700">${w.week_label}</span>
-          ${w.speaker ? `<span class="text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-semibold">🎙️ ${w.speaker}</span>` : ""}
+          <span class="text-xs font-mono font-bold px-2 py-0.5 bg-slate-100 text-slate-800 rounded">${esc(w.service_date)}</span>
+          <span class="text-xs font-semibold text-amber-700">${esc(w.week_label || "")}</span>
+          ${w.speaker
+            ? `<span class="text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-semibold">🎙️ ${esc(w.speaker)}</span>`
+            : `<span class="text-[11px] px-2 py-0.5 bg-slate-100 text-slate-400 rounded font-medium">🎙️ Belum ada pembicara</span>`
+          }
           ${w.poster_url ? `<span class="text-[11px] px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded font-semibold">🖼️ Poster</span>` : ""}
           ${w.youtube_url ? `<span class="text-[11px] px-2 py-0.5 bg-red-50 text-red-700 rounded font-semibold">▶️ YouTube</span>` : ""}
         </div>
-        <button onclick="window.openWeeklyModal('${w.service_date}')" class="text-xs font-semibold text-blue-600 hover:underline">
-          Edit Sermon, Poster & YouTube
-        </button>
+        <div class="flex items-center gap-3">
+          <button type="button" onclick="window.openWeeklyModal('${esc(w.service_date)}')" class="text-xs font-semibold text-blue-600 hover:underline">
+            Edit Sermon, Poster & YouTube
+          </button>
+          <button type="button" onclick="window.removeWeeklyInsightItem('${esc(w.service_date)}')" class="text-xs font-semibold text-red-600 hover:underline">
+            Delete
+          </button>
+        </div>
       </div>
-      <h4 class="font-bold text-slate-900">${w.title}</h4>
-      <p class="text-xs text-slate-600">🔑 <strong>${w.key_verse}</strong> • Bacaan: ${w.scripture_reading}</p>
-      <p class="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-lg">${w.weekly_focus}</p>
-      ${w.diaspora_lens ? `<p class="text-[11px] text-blue-800">🌏 <strong>Diaspora Lens:</strong> ${w.diaspora_lens}</p>` : ""}
+      <h4 class="font-bold text-slate-900">${esc(w.title || "")}</h4>
+      <p class="text-xs text-slate-600">🔑 <strong>${esc(w.key_verse || "-")}</strong> • Bacaan: ${esc(w.scripture_reading || "-")}</p>
+      ${w.weekly_focus ? `<p class="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-lg">${esc(w.weekly_focus)}</p>` : ""}
+      ${w.sermon_summary ? `<p class="text-[11px] text-slate-600 whitespace-pre-line">📝 <strong>Winning Point / Ringkasan:</strong> ${esc(w.sermon_summary)}</p>` : ""}
+      ${w.diaspora_lens ? `<p class="text-[11px] text-blue-800">🌏 <strong>Diaspora Lens:</strong> ${esc(w.diaspora_lens)}</p>` : ""}
     </div>
   `).join("");
+}
+
+function renderWeeklyPastePreview(items = []) {
+  const box = document.getElementById("wk-paste-preview");
+  if (!box) return;
+  if (!items.length) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+
+  box.classList.remove("hidden");
+  box.innerHTML = items.map(it => `
+    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-[11px]">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded">${esc(it.service_date || "NO-DATE")}</span>
+        <span class="font-bold text-slate-700">${esc(it.week_label)}</span>
+        <span class="font-bold text-slate-900">${esc(it.title)}</span>
+        ${it.speaker ? `<span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-semibold">🎙️ ${esc(it.speaker)}</span>` : ""}
+      </div>
+      <p class="text-slate-600">🔑 <strong>${esc(it.key_verse)}</strong> • Bacaan: <strong>${esc(it.scripture_reading)}</strong></p>
+      ${it.weekly_focus ? `<p class="text-slate-700">🎯 ${esc(it.weekly_focus)}</p>` : ""}
+      ${it.sermon_summary ? `<p class="text-slate-600 line-clamp-2">📝 ${esc(it.sermon_summary)}</p>` : ""}
+    </div>
+  `).join("");
+}
+
+function resetMonthlyThemeForm() {
+  document.getElementById("mt-form-title").textContent = "🗓️ Add / Edit Monthly Compass Theme";
+  document.getElementById("mt-key").value = "2027-01";
+  document.getElementById("mt-phase").value = "";
+  document.getElementById("mt-title").value = "";
+  document.getElementById("mt-subtitle").value = "";
+  document.getElementById("mt-scripture").value = "";
+  document.getElementById("mt-pillar").value = "";
+  document.getElementById("mt-narrative").value = "";
+  document.getElementById("mt-reflection").value = "";
+  document.getElementById("mt-closing").value = "Kiranya Tuhan Yesus memberkati.";
+  document.getElementById("mt-raw-paste").value = "";
 }
 
 function renderReflections() {
@@ -393,13 +646,13 @@ function renderReflections() {
       <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-1.5">
         <div class="flex justify-between items-start">
           <div>
-            <span class="text-xs font-mono text-slate-500">${dateLabel} • ${d.scripture}</span>
-            <h4 class="font-bold text-slate-900">${d.title}</h4>
+            <span class="text-xs font-mono text-slate-500">${esc(dateLabel)} • ${esc(d.scripture || "")}</span>
+            <h4 class="font-bold text-slate-900">${esc(d.title || "")}</h4>
           </div>
-          <button onclick="window.removeReflection('${d.id}')" class="text-xs text-red-600 hover:underline">Delete</button>
+          <button onclick="window.removeReflection('${esc(d.id)}')" class="text-xs text-red-600 hover:underline">Delete</button>
         </div>
-        <p class="text-xs text-slate-700 whitespace-pre-line">${d.reflection}</p>
-        ${d.prayer ? `<p class="text-xs italic text-slate-600 pt-1 border-t border-slate-100">🙏 ${d.prayer}</p>` : ""}
+        <p class="text-xs text-slate-700 whitespace-pre-line">${esc(d.reflection || "")}</p>
+        ${d.prayer ? `<p class="text-xs italic text-slate-600 pt-1 border-t border-slate-100">🙏 ${esc(d.prayer)}</p>` : ""}
       </div>
     `;
   }).join("");
@@ -417,12 +670,12 @@ function renderMedia() {
   container.innerHTML = contentState.media.map(m => `
     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-3">
       <div>
-        <span class="text-[11px] px-2 py-0.5 bg-purple-50 text-purple-700 rounded font-semibold">${m.category}</span>
-        <span class="text-xs text-slate-500 ml-1">${m.event_date}</span>
-        <h4 class="font-bold text-slate-900 mt-1">${m.title}</h4>
-        <a href="${m.media_url}" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline break-all">${m.media_url}</a>
+        <span class="text-[11px] px-2 py-0.5 bg-purple-50 text-purple-700 rounded font-semibold">${esc(m.category || "")}</span>
+        <span class="text-xs text-slate-500 ml-1">${esc(m.event_date || "")}</span>
+        <h4 class="font-bold text-slate-900 mt-1">${esc(m.title || "")}</h4>
+        <a href="${esc(m.media_url || "#")}" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline break-all">${esc(m.media_url || "")}</a>
       </div>
-      <button onclick="window.removeMedia('${m.id}')" class="text-xs text-red-600 hover:underline shrink-0">Delete</button>
+      <button onclick="window.removeMedia('${esc(m.id)}')" class="text-xs text-red-600 hover:underline shrink-0">Delete</button>
     </div>
   `).join("");
 }
@@ -434,21 +687,21 @@ function renderParsedPreview(parsed) {
   box.classList.remove("hidden");
   box.innerHTML = `
     <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
-      <span class="font-bold text-emerald-700">✅ Hasil Pemisahan Otomatis (${parsed.start_date || "No Date"} • ${parsed.edition_no || "-"})</span>
+      <span class="font-bold text-emerald-700">✅ Hasil Pemisahan Otomatis (${esc(parsed.start_date || "No Date")} • ${esc(parsed.edition_no || "-")})</span>
       <span class="text-slate-500">${parsed.paragraphs.length} paragraf • ${parsed.takeaways.length} takeaways</span>
     </div>
-    <div><strong>Title:</strong> ${parsed.title || "-"}</div>
-    <div><strong>Scripture:</strong> ${parsed.scripture || "-"}</div>
+    <div><strong>Title:</strong> ${esc(parsed.title || "-")}</div>
+    <div><strong>Scripture:</strong> ${esc(parsed.scripture || "-")}</div>
     <div class="p-2 bg-amber-50 border border-amber-200 rounded text-amber-950">
-      <strong>Sticky Hook:</strong> "${parsed.sticky_hook || "-"}"
+      <strong>Sticky Hook:</strong> "${esc(parsed.sticky_hook || "-")}"
     </div>
     <div class="space-y-1">
       <strong>Paragraphs (bersih):</strong>
-      ${parsed.paragraphs.map((p, idx) => `<p class="p-1.5 bg-white rounded border border-slate-200"><strong>P${idx + 1}:</strong> ${p}</p>`).join("")}
+      ${parsed.paragraphs.map((p, idx) => `<p class="p-1.5 bg-white rounded border border-slate-200"><strong>P${idx + 1}:</strong> ${esc(p)}</p>`).join("")}
     </div>
     <div class="space-y-1">
       <strong>Takeaways:</strong>
-      ${parsed.takeaways.map(t => `<p class="p-1.5 bg-white rounded border border-slate-200"><strong>${t.title}:</strong> ${t.desc}</p>`).join("")}
+      ${parsed.takeaways.map(t => `<p class="p-1.5 bg-white rounded border border-slate-200"><strong>${esc(t.title)}:</strong> ${esc(t.desc)}</p>`).join("")}
     </div>
   `;
 }
@@ -469,17 +722,17 @@ function renderEditorsInsightsList() {
     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2 text-xs">
       <div class="flex items-start justify-between gap-2">
         <div>
-          <span class="px-2 py-0.5 bg-slate-900 text-amber-400 font-bold rounded text-[10px]">${item.edition_no || "EDITION"}</span>
-          <span class="font-mono text-slate-500 ml-1.5">${item.start_date} • ${item.date_label || ""}</span>
-          <h4 class="font-bold text-sm text-slate-900 mt-1">${item.title}</h4>
+          <span class="px-2 py-0.5 bg-slate-900 text-amber-400 font-bold rounded text-[10px]">${esc(item.edition_no || "EDITION")}</span>
+          <span class="font-mono text-slate-500 ml-1.5">${esc(item.start_date || "")} • ${esc(item.date_label || "")}</span>
+          <h4 class="font-bold text-sm text-slate-900 mt-1">${esc(item.title || "")}</h4>
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          <button type="button" onclick="window.editEditorInsightItem('${item.id}')" class="text-blue-600 hover:underline font-semibold">Edit</button>
-          <button type="button" onclick="window.removeEditorInsightItem('${item.id}')" class="text-red-600 hover:underline font-semibold">Delete</button>
+          <button type="button" onclick="window.editEditorInsightItem('${esc(item.id)}')" class="text-blue-600 hover:underline font-semibold">Edit</button>
+          <button type="button" onclick="window.removeEditorInsightItem('${esc(item.id)}')" class="text-red-600 hover:underline font-semibold">Delete</button>
         </div>
       </div>
-      <p class="text-[11px] italic text-slate-600">${item.scripture || ""}</p>
-      ${item.sticky_hook ? `<p class="p-2 bg-amber-50 border-l-2 border-amber-500 font-semibold text-slate-800">"${item.sticky_hook}"</p>` : ""}
+      <p class="text-[11px] italic text-slate-600">${esc(item.scripture || "")}</p>
+      ${item.sticky_hook ? `<p class="p-2 bg-amber-50 border-l-2 border-amber-500 font-semibold text-slate-800">"${esc(item.sticky_hook)}"</p>` : ""}
       <p class="text-[11px] text-slate-500">${(item.paragraphs || []).length} paragraf • ${(item.takeaways || []).length} takeaways</p>
     </div>
   `).join("");
@@ -514,28 +767,28 @@ function renderSundayServicesList() {
     <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between gap-3 text-xs">
       <div class="flex items-start gap-3 min-w-0">
         ${item.poster_url
-          ? `<img src="${item.poster_url}" alt="${item.title}" class="w-14 h-20 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-100" />`
+          ? `<img src="${esc(item.poster_url)}" alt="${esc(item.title || "")}" class="w-14 h-20 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-100" />`
           : `<div class="w-14 h-20 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 shrink-0">No Poster</div>`
         }
         <div class="min-w-0 space-y-1">
           <div class="flex flex-wrap items-center gap-1.5">
-            <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">${item.service_date || item.id}</span>
-            ${item.speaker ? `<span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-semibold text-[10px]">🎙️ ${item.speaker}</span>` : ""}
+            <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">${esc(item.service_date || item.id)}</span>
+            ${item.speaker ? `<span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-semibold text-[10px]">🎙️ ${esc(item.speaker)}</span>` : ""}
             <span class="px-2 py-0.5 ${item.published !== false ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"} rounded font-semibold text-[10px]">
               ${item.published !== false ? "Published" : "Draft"}
             </span>
           </div>
-          <h4 class="font-bold text-sm text-slate-900 truncate">${item.title || "Sunday Service"}</h4>
+          <h4 class="font-bold text-sm text-slate-900 truncate">${esc(item.title || "Sunday Service")}</h4>
           <div class="flex flex-wrap gap-2 text-[11px]">
-            ${item.poster_url ? `<a href="${item.poster_url}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">Poster</a>` : ""}
-            ${item.youtube_url ? `<a href="${item.youtube_url}" target="_blank" rel="noopener" class="text-red-600 hover:underline">YouTube</a>` : `<span class="text-slate-400">No YouTube</span>`}
-            ${item.post_url ? `<a href="${item.post_url}" target="_blank" rel="noopener" class="text-emerald-700 hover:underline">Post</a>` : `<span class="text-slate-400">No Post</span>`}
+            ${item.poster_url ? `<a href="${esc(item.poster_url)}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">Poster</a>` : ""}
+            ${item.youtube_url ? `<a href="${esc(item.youtube_url)}" target="_blank" rel="noopener" class="text-red-600 hover:underline">YouTube</a>` : `<span class="text-slate-400">No YouTube</span>`}
+            ${item.post_url ? `<a href="${esc(item.post_url)}" target="_blank" rel="noopener" class="text-emerald-700 hover:underline">Post</a>` : `<span class="text-slate-400">No Post</span>`}
           </div>
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
-        <button type="button" onclick="window.editSundayServiceItem('${item.id}')" class="text-blue-600 hover:underline font-semibold">Edit</button>
-        <button type="button" onclick="window.removeSundayServiceItem('${item.id}')" class="text-red-600 hover:underline font-semibold">Delete</button>
+        <button type="button" onclick="window.editSundayServiceItem('${esc(item.id)}')" class="text-blue-600 hover:underline font-semibold">Edit</button>
+        <button type="button" onclick="window.removeSundayServiceItem('${esc(item.id)}')" class="text-red-600 hover:underline font-semibold">Delete</button>
       </div>
     </div>
   `).join("");
@@ -572,6 +825,25 @@ function runEditorInsightParse() {
   return parsed;
 }
 
+function runWeeklyPasteParse() {
+  const rawText = document.getElementById("wk-smart-paste")?.value || "";
+  const monthKey = document.getElementById("wk-paste-month")?.value || "";
+  const speaker = document.getElementById("wk-paste-speaker")?.value.trim() || "";
+  if (!rawText.trim()) {
+    setWeeklyPasteStatus("Tempel teks tema mingguan terlebih dahulu.", true);
+    return [];
+  }
+  const items = parseWeeklyInsightsRawText(rawText, { month_key: monthKey, speaker });
+  contentState.parsedWeeklyDrafts = items;
+  renderWeeklyPastePreview(items);
+  if (items.length === 0) {
+    setWeeklyPasteStatus("Tidak ada blok minggu yang terdeteksi. Pastikan ada tanggal atau label MINGGU 1 / Tema:.", true);
+  } else {
+    setWeeklyPasteStatus(`Berhasil memilah ${items.length} data mingguan. Periksa preview lalu klik Simpan Semua ke Firestore.`);
+  }
+  return items;
+}
+
 function bindContentEvents() {
   document.querySelectorAll(".content-subtab").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -588,7 +860,105 @@ function bindContentEvents() {
   });
 
   document.getElementById("filter-content-month")?.addEventListener("change", renderWeeklyInsights);
+  document.getElementById("wk-search-query")?.addEventListener("input", renderWeeklyInsights);
   document.getElementById("ss-filter-query")?.addEventListener("input", renderSundayServicesList);
+
+  document.getElementById("btn-new-weekly-insight")?.addEventListener("click", () => {
+    window.openNewWeeklyModal();
+  });
+
+  document.getElementById("btn-parse-weekly-paste")?.addEventListener("click", () => {
+    runWeeklyPasteParse();
+  });
+
+  document.getElementById("btn-save-weekly-paste")?.addEventListener("click", async () => {
+    const items = contentState.parsedWeeklyDrafts.length
+      ? contentState.parsedWeeklyDrafts
+      : runWeeklyPasteParse();
+
+    const validItems = items.filter(it => it.service_date);
+    if (!validItems.length) {
+      setWeeklyPasteStatus("Pastikan setiap item memiliki tanggal valid (YYYY-MM-DD atau format tanggal Indonesia).", true);
+      return;
+    }
+
+    setWeeklyPasteStatus(`Menyimpan ${validItems.length} data mingguan ke Firestore...`);
+    try {
+      for (const it of validItems) {
+        await saveWeeklyInsight(it.service_date, it);
+      }
+      await refreshContentData();
+      await initPublicPortal();
+      setWeeklyPasteStatus(`Berhasil menyimpan ${validItems.length} tema mingguan (${validItems.map(i => i.service_date).join(", ")}).`);
+    } catch (err) {
+      setWeeklyPasteStatus("Gagal menyimpan: " + (err?.message || err), true);
+    }
+  });
+
+  document.getElementById("btn-clear-wk-paste")?.addEventListener("click", () => {
+    document.getElementById("wk-smart-paste").value = "";
+    contentState.parsedWeeklyDrafts = [];
+    renderWeeklyPastePreview([]);
+    setWeeklyPasteStatus("");
+  });
+
+  document.getElementById("btn-parse-monthly-paste")?.addEventListener("click", () => {
+    const raw = document.getElementById("mt-raw-paste")?.value || "";
+    if (!raw.trim()) {
+      setMonthlyStatus("Tempel teks tema bulanan terlebih dahulu.", true);
+      return;
+    }
+    const parsed = parseMonthlyThemeRawText(raw, {
+      month_key: document.getElementById("mt-key")?.value || "2027-01"
+    });
+    if (parsed.month_key) document.getElementById("mt-key").value = parsed.month_key;
+    if (parsed.phase) document.getElementById("mt-phase").value = parsed.phase;
+    if (parsed.title) document.getElementById("mt-title").value = parsed.title;
+    if (parsed.subtitle) document.getElementById("mt-subtitle").value = parsed.subtitle;
+    if (parsed.scripture) document.getElementById("mt-scripture").value = parsed.scripture;
+    if (parsed.pillar) document.getElementById("mt-pillar").value = parsed.pillar;
+    if (parsed.narrative) document.getElementById("mt-narrative").value = parsed.narrative;
+    if (parsed.reflection) document.getElementById("mt-reflection").value = parsed.reflection;
+    if (parsed.closing) document.getElementById("mt-closing").value = parsed.closing;
+    setMonthlyStatus("Field tema bulanan terisi dari teks. Klik Save Monthly Theme untuk menyimpan.");
+  });
+
+  document.getElementById("btn-reset-monthly-theme")?.addEventListener("click", () => {
+    resetMonthlyThemeForm();
+    setMonthlyStatus("");
+  });
+
+  document.getElementById("form-monthly-theme")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const monthKey = document.getElementById("mt-key").value.trim();
+    if (!monthKey) return;
+
+    const existing = contentState.months.find(m => m.month_key === monthKey || m.id === monthKey);
+    const payload = {
+      month_key: monthKey,
+      phase: document.getElementById("mt-phase").value.trim(),
+      title: document.getElementById("mt-title").value.trim(),
+      subtitle: document.getElementById("mt-subtitle").value.trim(),
+      scripture: document.getElementById("mt-scripture").value.trim(),
+      pillar: document.getElementById("mt-pillar").value.trim(),
+      narrative: document.getElementById("mt-narrative").value.trim(),
+      reflection: document.getElementById("mt-reflection").value.trim(),
+      closing: document.getElementById("mt-closing").value.trim(),
+      yearly_theme: existing?.yearly_theme || "ALIGN IN PURPOSE — Kitab Keluaran",
+      banner_url: existing?.banner_url || "",
+      status: "Published"
+    };
+
+    try {
+      setMonthlyStatus("Menyimpan...");
+      await saveMonthlyTheme(monthKey, payload);
+      await refreshContentData();
+      await initPublicPortal();
+      setMonthlyStatus(`Tersimpan (${monthKey} — ${payload.title})`);
+    } catch (err) {
+      setMonthlyStatus("Gagal menyimpan: " + (err?.message || err), true);
+    }
+  });
 
   document.getElementById("btn-reset-sunday-service")?.addEventListener("click", () => {
     resetSundayServiceForm();
@@ -681,8 +1051,11 @@ function bindContentEvents() {
 
   document.getElementById("form-weekly")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const dateKey = document.getElementById("wk-date").value;
+    const dateKey = document.getElementById("wk-date").value.trim();
+    if (!dateKey) return;
     await saveWeeklyInsight(dateKey, {
+      service_date: dateKey,
+      month_key: dateKey.slice(0, 7),
       week_label: document.getElementById("wk-label").value.trim(),
       title: document.getElementById("wk-title").value.trim(),
       key_verse: document.getElementById("wk-verse").value.trim(),
@@ -732,6 +1105,86 @@ function bindContentEvents() {
     await initPublicPortal();
   });
 }
+
+window.editMonthlyThemeItem = (monthKey) => {
+  const m = contentState.months.find(x => x.month_key === monthKey || x.id === monthKey);
+  if (!m) return;
+  document.getElementById("mt-form-title").textContent = `🗓️ Edit Monthly Theme (${m.month_key})`;
+  document.getElementById("mt-key").value = m.month_key || m.id || "";
+  document.getElementById("mt-phase").value = m.phase || "";
+  document.getElementById("mt-title").value = m.title || "";
+  document.getElementById("mt-subtitle").value = m.subtitle || "";
+  document.getElementById("mt-scripture").value = m.scripture || "";
+  document.getElementById("mt-pillar").value = m.pillar || "";
+  document.getElementById("mt-narrative").value = m.narrative || "";
+  document.getElementById("mt-reflection").value = m.reflection || "";
+  document.getElementById("mt-closing").value = m.closing || "Kiranya Tuhan Yesus memberkati.";
+  setMonthlyStatus(`Editing ${m.month_key}`);
+};
+
+window.removeMonthlyThemeItem = async (monthKey) => {
+  if (!confirm(`Hapus tema bulanan ${monthKey}?`)) return;
+  await deleteMonthlyTheme(monthKey);
+  await refreshContentData();
+  await initPublicPortal();
+};
+
+window.openNewWeeklyModal = () => {
+  const dateInput = document.getElementById("wk-date");
+  dateInput.removeAttribute("readonly");
+  dateInput.classList.remove("bg-slate-100");
+  dateInput.value = "2027-01-03";
+  document.getElementById("wk-label").value = "Minggu 1";
+  document.getElementById("wk-title").value = "";
+  document.getElementById("wk-verse").value = "";
+  document.getElementById("wk-reading").value = "";
+  if (document.getElementById("wk-speaker")) document.getElementById("wk-speaker").value = "";
+  if (document.getElementById("wk-poster")) document.getElementById("wk-poster").value = "";
+  if (document.getElementById("wk-youtube")) document.getElementById("wk-youtube").value = "";
+  document.getElementById("wk-focus").value = "";
+  document.getElementById("wk-christ").value = "";
+  document.getElementById("wk-mission").value = "";
+  document.getElementById("wk-diaspora").value = "";
+  document.getElementById("wk-summary").value = "";
+  document.getElementById("wk-icare").value = "";
+  document.getElementById("wk-status").value = "Published";
+  const heading = document.getElementById("modal-weekly-title");
+  if (heading) heading.textContent = "Add Weekly Insight & Sermon Content";
+  document.getElementById("modal-weekly").classList.remove("hidden");
+};
+
+window.openWeeklyModal = (serviceDate) => {
+  const w = contentState.weeks.find(x => x.service_date === serviceDate);
+  if (!w) return;
+  const dateInput = document.getElementById("wk-date");
+  dateInput.setAttribute("readonly", "readonly");
+  dateInput.classList.add("bg-slate-100");
+  dateInput.value = w.service_date;
+  document.getElementById("wk-label").value = w.week_label || "";
+  document.getElementById("wk-title").value = w.title || "";
+  document.getElementById("wk-verse").value = w.key_verse || "";
+  document.getElementById("wk-reading").value = w.scripture_reading || "";
+  if (document.getElementById("wk-speaker")) document.getElementById("wk-speaker").value = w.speaker || "";
+  if (document.getElementById("wk-poster")) document.getElementById("wk-poster").value = w.poster_url || "";
+  if (document.getElementById("wk-youtube")) document.getElementById("wk-youtube").value = w.youtube_url || "";
+  document.getElementById("wk-focus").value = w.weekly_focus || "";
+  document.getElementById("wk-christ").value = w.christ_connection || "";
+  document.getElementById("wk-mission").value = w.mission_application || "";
+  document.getElementById("wk-diaspora").value = w.diaspora_lens || "";
+  document.getElementById("wk-summary").value = w.sermon_summary || "";
+  document.getElementById("wk-icare").value = w.icare_questions || "";
+  document.getElementById("wk-status").value = w.status || "Scheduled";
+  const heading = document.getElementById("modal-weekly-title");
+  if (heading) heading.textContent = "Edit Sermon, Poster & YouTube";
+  document.getElementById("modal-weekly").classList.remove("hidden");
+};
+
+window.removeWeeklyInsightItem = async (serviceDate) => {
+  if (!confirm(`Hapus tema mingguan tanggal ${serviceDate}?`)) return;
+  await deleteWeeklyInsight(serviceDate);
+  await refreshContentData();
+  await initPublicPortal();
+};
 
 window.editSundayServiceItem = (id) => {
   const item = contentState.sundayServices.find(x => x.id === id);
@@ -793,27 +1246,6 @@ window.removeEditorInsightItem = async (id) => {
   } catch (err) {
     alert("Gagal menghapus: " + (err.message || err));
   }
-};
-
-window.openWeeklyModal = (serviceDate) => {
-  const w = contentState.weeks.find(x => x.service_date === serviceDate);
-  if (!w) return;
-  document.getElementById("wk-date").value = w.service_date;
-  document.getElementById("wk-label").value = w.week_label || "";
-  document.getElementById("wk-title").value = w.title || "";
-  document.getElementById("wk-verse").value = w.key_verse || "";
-  document.getElementById("wk-reading").value = w.scripture_reading || "";
-  if (document.getElementById("wk-speaker")) document.getElementById("wk-speaker").value = w.speaker || "";
-  if (document.getElementById("wk-poster")) document.getElementById("wk-poster").value = w.poster_url || "";
-  if (document.getElementById("wk-youtube")) document.getElementById("wk-youtube").value = w.youtube_url || "";
-  document.getElementById("wk-focus").value = w.weekly_focus || "";
-  document.getElementById("wk-christ").value = w.christ_connection || "";
-  document.getElementById("wk-mission").value = w.mission_application || "";
-  document.getElementById("wk-diaspora").value = w.diaspora_lens || "";
-  document.getElementById("wk-summary").value = w.sermon_summary || "";
-  document.getElementById("wk-icare").value = w.icare_questions || "";
-  document.getElementById("wk-status").value = w.status || "Scheduled";
-  document.getElementById("modal-weekly").classList.remove("hidden");
 };
 
 window.removeReflection = async (id) => {
