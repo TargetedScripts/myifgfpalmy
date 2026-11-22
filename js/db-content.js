@@ -214,6 +214,92 @@ export function parseMonthlyThemeRawText(rawText = "", fallbackMeta = {}) {
   };
 }
 
+// --- GENERATOR DARI KURIKULUM UNTUK MONTHLY COMPASS, EDITOR'S INSIGHT & DAILY REFLECTION ---
+export function buildCompassDraftFromCurriculum(monthObj = {}, weeksInMonth = []) {
+  const yearlyTheme = monthObj.yearly_theme || "ALIGN IN PURPOSE — Kitab Keluaran";
+  const monthKey = monthObj.month_key || "2027-01";
+  const phase = monthObj.phase || "FASE 1: SEE";
+  const title = monthObj.title || "Begin to See";
+  const scripture = monthObj.scripture || "Keluaran 1–2";
+  const pillar = monthObj.pillar || "Vision";
+  const weekHighlights = weeksInMonth
+    .map(w => `• ${w.week_label || w.service_date} (${w.title || ""}): ${w.weekly_focus || w.christ_connection || ""}`)
+    .join("\n");
+
+  const narrative =
+    monthObj.narrative ||
+    `Dalam rangkaian kurikulum tahunan ${yearlyTheme} (${phase}), bulan ${monthKey} menuntun kita melalui tema "${title}" (${scripture}) dengan pilar ${pillar}.\n\n${weekHighlights}`;
+
+  const reflection =
+    monthObj.reflection ||
+    `Bagaimana mata iman kita diarahkan oleh "${title}" (${scripture}) melalui pilar ${pillar} dalam kehidupan sehari-hari dan pelayanan kita?`;
+
+  return {
+    month_key: monthKey,
+    phase,
+    title,
+    subtitle: monthObj.subtitle || `Panduan Bulanan • ${pillar}`,
+    scripture,
+    pillar,
+    yearly_theme: yearlyTheme,
+    narrative,
+    reflection,
+    closing: monthObj.closing || "Kiranya Tuhan Yesus memberkati."
+  };
+}
+
+export function buildEditorInsightDraftFromCurriculum(weekObj = {}, monthObj = {}) {
+  const yearlyTheme = monthObj.yearly_theme || "ALIGN IN PURPOSE — Kitab Keluaran";
+  const monthTitle = monthObj.title || "Begin to See";
+  const pillar = monthObj.pillar || "Vision";
+  const title = weekObj.title || "Renungan Mingguan";
+  const keyVerse = weekObj.key_verse || monthObj.scripture || "Keluaran 1:12";
+  const reading = weekObj.scripture_reading || keyVerse;
+  const focus = weekObj.weekly_focus || `Menyelaraskan hati dengan tema bulanan ${monthTitle} (${pillar}).`;
+  const christ = weekObj.christ_connection || `Kristus menggenapi maksud Tuhan dalam rangkaian ${yearlyTheme}.`;
+  const diaspora = weekObj.diaspora_lens || `Hidup beriman dan berdampak dalam konteks kehidupan di Palmerston North, Selandia Baru.`;
+
+  const rawText = [
+    `**${title}**`,
+    `${keyVerse} (Bacaan: ${reading})`,
+    "Shalom,",
+    `Dalam rangkaian ${yearlyTheme} dan tema bulanan "${monthTitle}" (pilar ${pillar}), ${focus} **Anchored in Purpose**`,
+    `${christ} ${weekObj.mission_application ? `Panggilan misi kita: ${weekObj.mission_application}.` : ""}`,
+    `${diaspora}`,
+    "Tuhan Yesus Memberkati."
+  ].join("\n\n");
+
+  return parseEditorInsightRawText(rawText, {
+    start_date: weekObj.service_date || "2027-01-03",
+    edition_no: weekObj.week_label ? `WEEKLY • ${weekObj.week_label.toUpperCase()}` : "WEEKLY INSIGHT",
+    date_label: weekObj.service_date || "",
+    header_date: weekObj.service_date || ""
+  });
+}
+
+export function buildDailyReflectionDraftFromCurriculum(weekObj = {}, monthObj = {}, reflectionDate = "") {
+  const targetDate = reflectionDate || weekObj.service_date || "2027-01-03";
+  const monthTitle = monthObj.title || "Begin to See";
+  const pillar = monthObj.pillar || "Vision";
+  const verse = weekObj.key_verse || monthObj.scripture || "Keluaran 1:12";
+  const title = `${weekObj.title || "Refleksi Harian"} — ${monthTitle}`;
+
+  const parts = [
+    weekObj.weekly_focus ? `Fokus Tema (${pillar}): ${weekObj.weekly_focus}` : "",
+    weekObj.christ_connection ? `Koneksi Kristus: ${weekObj.christ_connection}` : "",
+    weekObj.diaspora_lens ? `Lensa Diaspora: ${weekObj.diaspora_lens}` : "",
+    weekObj.icare_questions ? `Pertanyaan Refleksi / iCare:\n${weekObj.icare_questions}` : ""
+  ].filter(Boolean);
+
+  return {
+    reflection_date: targetDate,
+    title,
+    scripture: verse,
+    reflection: parts.join("\n\n") || `Merenungkan ${verse} dalam terang tema bulanan ${monthTitle}.`,
+    prayer: `Tuhan Yesus, tolong kami hidup sesuai kebenaran ${verse} dan pilar ${pillar} sepanjang hari ini. Amin.`
+  };
+}
+
 // --- 0. THE EDITOR'S INSIGHT PARSER & CRUD (editors_insights) ---
 function cleanMarkdown(str = "") {
   return str
@@ -239,14 +325,14 @@ function buildAutoTakeaways(paragraphs = [], stickyHook = "") {
     const sents = splitSentences(paragraphs[0]);
     const shortDesc = sents.slice(1).join(" ") || sents[0];
     takeaways.push({
-      title: "1. Ruang Tunggu Bukan Penjara yang Sia-Sia",
+      title: "1. Fokus Utama Firman",
       desc: shortDesc.length > 180 ? shortDesc.slice(0, 177).trim() + "..." : shortDesc
     });
   }
 
   if (stickyHook) {
     takeaways.push({
-      title: "2. Workshop Tuhan untuk Destinasi Kita",
+      title: "2. Pokok Pegangan (Key Anchor)",
       desc: stickyHook
     });
   }
@@ -254,9 +340,9 @@ function buildAutoTakeaways(paragraphs = [], stickyHook = "") {
   if (paragraphs[1]) {
     const sents = splitSentences(paragraphs[1]);
     const graceFocus =
-      sents.find(s => /anugerah|penebusan|kristus|salib/i.test(s)) || sents[0];
+      sents.find(s => /anugerah|penebusan|kristus|salib|misi/i.test(s)) || sents[0];
     takeaways.push({
-      title: `${takeaways.length + 1}. Anugerah Kristus di Tengah Penantian`,
+      title: `${takeaways.length + 1}. Kristus & Penerapan`,
       desc: graceFocus
     });
   }
@@ -264,7 +350,7 @@ function buildAutoTakeaways(paragraphs = [], stickyHook = "") {
   if (paragraphs[2]) {
     const sents = splitSentences(paragraphs[2]);
     takeaways.push({
-      title: `${takeaways.length + 1}. Menjadi Pembawa Damai & Terang di Palmy`,
+      title: `${takeaways.length + 1}. Langkah Nyata & Komunitas`,
       desc: sents.join(" ")
     });
   }
@@ -295,7 +381,8 @@ export function parseEditorInsightRawText(rawText = "", meta = {}) {
     if (
       !scripture &&
       (/[—–-]\s*[1-3]?\s*[A-Za-zÀ-ÿ]+\s+\d+:\d+/.test(cleanLine) ||
-        /^[“"].*[”"].*[—–-]/.test(cleanLine))
+        /^[“"].*[”"].*[—–-]/.test(cleanLine) ||
+        /^[1-3]?\s*[A-Za-zÀ-ÿ]+\s+\d+:\d+/.test(cleanLine))
     ) {
       scripture = cleanLine;
       return;
@@ -488,6 +575,43 @@ export async function deleteWeeklyInsight(id) {
   await deleteDoc(doc(db, "weekly_insights", id));
 }
 
+// --- 2B. SERMON & SPECIAL SERVICE ARCHIVES (sermon_archives) ---
+export async function getSermonArchives() {
+  const q = query(collection(db, "sermon_archives"), orderBy("service_date", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function saveSermonArchive(id, data) {
+  const serviceDate = (data.service_date || "").trim();
+  const docId = (id || "").trim() || undefined;
+  const payload = {
+    service_date: serviceDate,
+    service_time: (data.service_time || "").trim(),
+    service_type: (data.service_type || "Sunday Service").trim(),
+    title: (data.title || "").trim(),
+    speaker: (data.speaker || "").trim(),
+    youtube_url: cleanDashUrl(data.youtube_url),
+    post_url: cleanDashUrl(data.post_url),
+    poster_url: cleanDashUrl(data.poster_url),
+    linked_week_date: (data.linked_week_date || "").trim(),
+    notes: (data.notes || "").trim(),
+    updated_at: serverTimestamp()
+  };
+
+  if (docId) {
+    await setDoc(doc(db, "sermon_archives", docId), payload, { merge: true });
+  } else {
+    payload.created_at = serverTimestamp();
+    await addDoc(collection(db, "sermon_archives"), payload);
+  }
+}
+
+export async function deleteSermonArchive(id) {
+  if (!id) return;
+  await deleteDoc(doc(db, "sermon_archives", id));
+}
+
 // --- 3. DAILY REFLECTIONS (with daily_devotions fallback) ---
 export async function getDailyReflections() {
   const [refSnap, devSnap] = await Promise.all([
@@ -546,7 +670,6 @@ export async function saveDailyReflection(id, data) {
   }
 }
 
-// Backward-compatible aliases
 export const getDailyDevotions = getDailyReflections;
 export const saveDailyDevotion = saveDailyReflection;
 
