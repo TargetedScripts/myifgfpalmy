@@ -147,7 +147,7 @@ function parseSingleWeeklyBlock(blockText = "", defaultMonthKey = "", defaultSpe
     : (defaultMonthKey || "2027-01");
 
   const weekNumMatch = weekLabelRaw.match(/(\d+)/);
-  const weekLabel = weekNumMatch ? `Minggu ${Number(weekNumMatch[1])}` : (weekLabelRaw || "Minggu 1");
+  const weekLabel = weekNumMatch ? `Week ${Number(weekNumMatch[1])}` : (weekLabelRaw || "Week 1");
 
   const title = extractLabelValue(raw, ["Tema", "Judul", "Weekly Theme Title", "Title"]);
   const keyVerse = extractLabelValue(raw, ["Ayat Emas", "Ayat Kunci", "Key Verse", "Ayat"]);
@@ -171,7 +171,7 @@ function parseSingleWeeklyBlock(blockText = "", defaultMonthKey = "", defaultSpe
     service_date: serviceDate,
     month_key: monthKey,
     week_label: weekLabel,
-    title: title || `Ibadah ${weekLabel}`,
+    title: title || `Service ${weekLabel}`,
     key_verse: keyVerse,
     scripture_reading: scriptureReading,
     speaker: speaker || "",
@@ -235,14 +235,14 @@ export function parseMonthlyBundleRawText(rawText = "", fallbackMeta = {}) {
   const monthData = {
     month_key: headerInfo.month_key,
     phase: fallbackMeta.phase || "",
-    title: fallbackMeta.title || headerInfo.title || `Tema ${headerInfo.month_key}`,
+    title: fallbackMeta.title || headerInfo.title || `Theme ${headerInfo.month_key}`,
     subtitle: fallbackMeta.subtitle || (headerInfo.narrative ? headerInfo.narrative.split(".")[0] : ""),
     scripture: fallbackMeta.scripture || headerInfo.scripture || firstWeekVerse,
     pillar: fallbackMeta.pillar || "",
-    yearly_theme: fallbackMeta.yearly_theme || "ALIGN IN PURPOSE — Kitab Keluaran",
+    yearly_theme: fallbackMeta.yearly_theme || "ALIGN IN PURPOSE — Exodus",
     narrative: fallbackMeta.narrative || headerInfo.narrative || "",
     reflection: fallbackMeta.reflection || "",
-    closing: fallbackMeta.closing || "Kiranya Tuhan Yesus memberkati.",
+    closing: fallbackMeta.closing || "God bless you.",
     banner_url: fallbackMeta.banner_url || "",
     status: "Published"
   };
@@ -255,13 +255,13 @@ export function parseMonthlyThemeRawText(rawText = "", fallbackMeta = {}) {
   return monthData;
 }
 
-// --- GENERATOR DARI KURIKULUM UNTUK MONTHLY COMPASS, EDITOR'S INSIGHT & DAILY REFLECTION ---
+// --- CURRICULUM TO COMPASS, EDITOR & DAILY REFLECTION DRAFTS ---
 export function buildCompassDraftFromCurriculum(monthObj = {}, weeksInMonth = []) {
-  const yearlyTheme = monthObj.yearly_theme || "ALIGN IN PURPOSE — Kitab Keluaran";
+  const yearlyTheme = monthObj.yearly_theme || "ALIGN IN PURPOSE — Exodus";
   const monthKey = monthObj.month_key || "2027-01";
   const phase = monthObj.phase || "";
   const title = monthObj.title || "Begin to See";
-  const scripture = monthObj.scripture || "Keluaran 1–2";
+  const scripture = monthObj.scripture || "Exodus 1–2";
   const pillar = monthObj.pillar || "";
   const weekHighlights = weeksInMonth
     .map(w => {
@@ -272,46 +272,46 @@ export function buildCompassDraftFromCurriculum(monthObj = {}, weeksInMonth = []
 
   const narrative =
     monthObj.narrative ||
-    `Dalam rangkaian kurikulum tahunan ${yearlyTheme}${phase ? ` (${phase})` : ""}, bulan ${monthKey} menuntun kita melalui tema "${title}" (${scripture})${pillar ? ` dengan pilar ${pillar}` : ""}.\n\n${weekHighlights}`;
+    `Within the annual curriculum ${yearlyTheme}${phase ? ` (${phase})` : ""}, ${monthKey} leads us through "${title}" (${scripture})${pillar ? ` with pillar ${pillar}` : ""}.\n\n${weekHighlights}`;
 
   const reflection =
     monthObj.reflection ||
-    `Bagaimana mata iman kita diarahkan oleh "${title}" (${scripture}) dalam kehidupan sehari-hari dan pelayanan kita?`;
+    `How is our spiritual vision shaped by "${title}" (${scripture}) in daily life and ministry?`;
 
   return {
     month_key: monthKey,
     phase,
     title,
-    subtitle: monthObj.subtitle || (pillar ? `Panduan Bulanan • ${pillar}` : "Panduan Bulanan"),
+    subtitle: monthObj.subtitle || (pillar ? `Monthly Guide • ${pillar}` : "Monthly Guide"),
     scripture,
     pillar,
     yearly_theme: yearlyTheme,
     narrative,
     reflection,
-    closing: monthObj.closing || "Kiranya Tuhan Yesus memberkati."
+    closing: monthObj.closing || "God bless you."
   };
 }
 
 export function buildEditorInsightDraftFromCurriculum(weekObj = {}, monthObj = {}) {
-  const yearlyTheme = monthObj.yearly_theme || "ALIGN IN PURPOSE — Kitab Keluaran";
+  const yearlyTheme = monthObj.yearly_theme || "ALIGN IN PURPOSE — Exodus";
   const monthTitle = monthObj.title || "Begin to See";
   const pillar = monthObj.pillar || "";
-  const title = weekObj.title || "Renungan Mingguan";
-  const keyVerse = weekObj.key_verse || monthObj.scripture || "Keluaran 1:12";
+  const title = weekObj.title || "Weekly Insight";
+  const keyVerse = weekObj.key_verse || monthObj.scripture || "Exodus 1:12";
   const reading = weekObj.scripture_reading || keyVerse;
-  const preacherLine = weekObj.speaker ? `Pembicara / Preacher: ${weekObj.speaker}. ` : "";
-  const focus = weekObj.weekly_focus || `Menyelaraskan hati dengan tema bulanan ${monthTitle}.`;
-  const christ = weekObj.christ_connection || `Kristus menggenapi maksud Tuhan dalam rangkaian ${yearlyTheme}.`;
-  const diaspora = weekObj.diaspora_lens || `Hidup beriman dan berdampak dalam konteks kehidupan di Palmerston North, Selandia Baru.`;
+  const preacherLine = weekObj.speaker ? `Preacher: ${weekObj.speaker}. ` : "";
+  const focus = weekObj.weekly_focus || `Aligning our hearts with the monthly theme ${monthTitle}.`;
+  const christ = weekObj.christ_connection || `Christ fulfills God's purpose across ${yearlyTheme}.`;
+  const diaspora = weekObj.diaspora_lens || `Living faithfully with impact in Palmerston North, New Zealand.`;
 
   const rawText = [
     `**${title}**`,
-    `${keyVerse} (Bacaan: ${reading})`,
+    `${keyVerse} (Reading: ${reading})`,
     "Shalom,",
-    `${preacherLine}Dalam rangkaian ${yearlyTheme} dan tema bulanan "${monthTitle}"${pillar ? ` (${pillar})` : ""}, ${focus} **Anchored in Purpose**`,
-    `${christ} ${weekObj.mission_application ? `Panggilan misi kita: ${weekObj.mission_application}.` : ""}`,
+    `${preacherLine}In the ${yearlyTheme} series and monthly theme "${monthTitle}"${pillar ? ` (${pillar})` : ""}, ${focus} **Anchored in Purpose**`,
+    `${christ} ${weekObj.mission_application ? `Mission call: ${weekObj.mission_application}.` : ""}`,
     `${diaspora}`,
-    "Tuhan Yesus Memberkati."
+    "God Bless You."
   ].join("\n\n");
 
   return parseEditorInsightRawText(rawText, {
@@ -326,22 +326,22 @@ export function buildDailyReflectionDraftFromCurriculum(weekObj = {}, monthObj =
   const targetDate = reflectionDate || weekObj.service_date || "2027-01-03";
   const monthTitle = monthObj.title || "Begin to See";
   const pillar = monthObj.pillar || "";
-  const verse = weekObj.key_verse || monthObj.scripture || "Keluaran 1:12";
-  const title = `${weekObj.title || "Refleksi Harian"} — ${monthTitle}`;
+  const verse = weekObj.key_verse || monthObj.scripture || "Exodus 1:12";
+  const title = `${weekObj.title || "Daily Reflection"} — ${monthTitle}`;
 
   const parts = [
-    weekObj.weekly_focus ? `Fokus Tema${pillar ? ` (${pillar})` : ""}: ${weekObj.weekly_focus}` : "",
-    weekObj.christ_connection ? `Koneksi Kristus: ${weekObj.christ_connection}` : "",
-    weekObj.diaspora_lens ? `Lensa Diaspora: ${weekObj.diaspora_lens}` : "",
-    weekObj.icare_questions ? `Pertanyaan Refleksi / iCare:\n${weekObj.icare_questions}` : ""
+    weekObj.weekly_focus ? `Theme Focus${pillar ? ` (${pillar})` : ""}: ${weekObj.weekly_focus}` : "",
+    weekObj.christ_connection ? `Christ Connection: ${weekObj.christ_connection}` : "",
+    weekObj.diaspora_lens ? `Diaspora Lens: ${weekObj.diaspora_lens}` : "",
+    weekObj.icare_questions ? `iCare / Reflection Questions:\n${weekObj.icare_questions}` : ""
   ].filter(Boolean);
 
   return {
     reflection_date: targetDate,
     title,
     scripture: verse,
-    reflection: parts.join("\n\n") || `Merenungkan ${verse} dalam terang tema bulanan ${monthTitle}.`,
-    prayer: `Tuhan Yesus, tolong kami hidup sesuai kebenaran ${verse}${pillar ? ` dan pilar ${pillar}` : ""} sepanjang hari ini. Amin.`
+    reflection: parts.join("\n\n") || `Reflecting on ${verse} in light of "${monthTitle}".`,
+    prayer: `Lord Jesus, help us walk in the truth of ${verse}${pillar ? ` and ${pillar}` : ""} today. Amen.`
   };
 }
 
@@ -370,14 +370,14 @@ function buildAutoTakeaways(paragraphs = [], stickyHook = "") {
     const sents = splitSentences(paragraphs[0]);
     const shortDesc = sents.slice(1).join(" ") || sents[0];
     takeaways.push({
-      title: "1. Fokus Utama Firman",
+      title: "1. Core Message Focus",
       desc: shortDesc.length > 180 ? shortDesc.slice(0, 177).trim() + "..." : shortDesc
     });
   }
 
   if (stickyHook) {
     takeaways.push({
-      title: "2. Pokok Pegangan (Key Anchor)",
+      title: "2. Key Anchor",
       desc: stickyHook
     });
   }
@@ -385,9 +385,9 @@ function buildAutoTakeaways(paragraphs = [], stickyHook = "") {
   if (paragraphs[1]) {
     const sents = splitSentences(paragraphs[1]);
     const graceFocus =
-      sents.find(s => /anugerah|penebusan|kristus|salib|misi/i.test(s)) || sents[0];
+      sents.find(s => /grace|redemption|christ|cross|mission|anugerah|penebusan|kristus|misi/i.test(s)) || sents[0];
     takeaways.push({
-      title: `${takeaways.length + 1}. Kristus & Penerapan`,
+      title: `${takeaways.length + 1}. Christ & Application`,
       desc: graceFocus
     });
   }
@@ -395,7 +395,7 @@ function buildAutoTakeaways(paragraphs = [], stickyHook = "") {
   if (paragraphs[2]) {
     const sents = splitSentences(paragraphs[2]);
     takeaways.push({
-      title: `${takeaways.length + 1}. Langkah Nyata & Komunitas`,
+      title: `${takeaways.length + 1}. Action & Community`,
       desc: sents.join(" ")
     });
   }
@@ -433,7 +433,7 @@ export function parseEditorInsightRawText(rawText = "", meta = {}) {
       return;
     }
 
-    if (/^shalom[,.!]?$/i.test(cleanLine) || /^tuhan yesus memberkati[.!]?$/i.test(cleanLine)) {
+    if (/^shalom[,.!]?$/i.test(cleanLine) || /^(tuhan yesus memberkati|god bless you)[.!]?$/i.test(cleanLine)) {
       return;
     }
 
@@ -464,7 +464,7 @@ export function parseEditorInsightRawText(rawText = "", meta = {}) {
 
       return cleanMarkdown(cleanedBlock)
         .replace(/^shalom,\s*/i, "")
-        .replace(/\s*tuhan yesus memberkati\.?$/i, "")
+        .replace(/\s*(tuhan yesus memberkati|god bless you)\.?$/i, "")
         .trim();
     })
     .filter(Boolean);
@@ -485,9 +485,10 @@ export function parseEditorInsightRawText(rawText = "", meta = {}) {
 }
 
 export async function getEditorsInsights() {
-  const q = query(collection(db, "editors_insights"), orderBy("start_date", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const snap = await getDocs(collection(db, "editors_insights"));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.start_date || b.id || "").localeCompare(a.start_date || a.id || ""));
 }
 
 export async function saveEditorsInsight(id, data) {
@@ -517,9 +518,10 @@ export async function deleteEditorsInsight(id) {
 
 // --- 0B. SUNDAY SERVICES CINEMA GALLERY CRUD (sunday_services) ---
 export async function getSundayServices() {
-  const q = query(collection(db, "sunday_services"), orderBy("service_date", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const snap = await getDocs(collection(db, "sunday_services"));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.service_date || b.id || "").localeCompare(a.service_date || a.id || ""));
 }
 
 export async function saveSundayService(id, data) {
@@ -562,9 +564,21 @@ export async function seedSundayServicesFromList(items = []) {
 
 // --- 1. MONTHLY THEMES ---
 export async function getMonthlyThemes() {
-  const q = query(collection(db, "monthly_themes"), orderBy("month_key", "asc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const snap = await getDocs(collection(db, "monthly_themes"));
+  return snap.docs
+    .map(d => {
+      const data = d.data();
+      const monthKey = (data.month_key || data.monthKey || d.id || "").trim();
+      return {
+        id: d.id,
+        ...data,
+        month_key: monthKey,
+        title: data.title || data.theme_title || data.name || d.id,
+        scripture: data.scripture || data.verse || "",
+        narrative: data.narrative || data.description || data.focus || ""
+      };
+    })
+    .sort((a, b) => (a.month_key || "").localeCompare(b.month_key || ""));
 }
 
 export async function saveMonthlyTheme(id, data) {
@@ -589,9 +603,24 @@ export async function deleteMonthlyTheme(id) {
 
 // --- 2. WEEKLY INSIGHTS ---
 export async function getWeeklyInsights() {
-  const q = query(collection(db, "weekly_insights"), orderBy("service_date", "asc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const snap = await getDocs(collection(db, "weekly_insights"));
+  return snap.docs
+    .map(d => {
+      const data = d.data();
+      const serviceDate = (data.service_date || data.date || data.week_date || d.id || "").trim();
+      const monthKey = (data.month_key || data.monthKey || serviceDate.slice(0, 7) || "").trim();
+      return {
+        id: d.id,
+        ...data,
+        service_date: serviceDate,
+        month_key: monthKey,
+        week_label: data.week_label || data.week || "",
+        title: data.title || data.theme || data.weekly_theme || serviceDate,
+        key_verse: data.key_verse || data.verse || "",
+        speaker: data.speaker || data.preacher || ""
+      };
+    })
+    .sort((a, b) => (a.service_date || "").localeCompare(b.service_date || ""));
 }
 
 export async function saveWeeklyInsight(id, data) {
@@ -617,9 +646,10 @@ export async function deleteWeeklyInsight(id) {
 
 // --- 2B. SERMON ARCHIVES (sermon_archives) ---
 export async function getSermonArchives() {
-  const q = query(collection(db, "sermon_archives"), orderBy("service_date", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const snap = await getDocs(collection(db, "sermon_archives"));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.service_date || "").localeCompare(a.service_date || ""));
 }
 
 export async function saveSermonArchive(id, data) {
@@ -738,9 +768,10 @@ export async function seedNov20toDec31Reflections() {
 
 // --- 4. MEDIA GALLERIES ---
 export async function getMediaGalleries() {
-  const q = query(collection(db, "media_galleries"), orderBy("event_date", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const snap = await getDocs(collection(db, "media_galleries"));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.event_date || "").localeCompare(a.event_date || ""));
 }
 
 export async function saveMediaGallery(id, data) {
