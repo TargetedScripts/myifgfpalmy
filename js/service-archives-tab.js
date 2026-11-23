@@ -5,11 +5,15 @@ import {
   deleteSundayService
 } from "./db-content.js";
 import { initPublicPortal } from "./ui-portal.js";
+import {
+  initEditorInsightTab,
+  refreshEditorsInsights
+} from "./editor-insight-tab.js";
 
 let archiveState = {
   items: [],
   activeSubtab: "sunday-archive",
-  pageIndex: 0, // 0 = 2 bulan terbaru mulai (bulan_depan, bulan_ini)
+  pageIndex: 0,
   bound: false
 };
 
@@ -29,7 +33,7 @@ function getAucklandYearMonth() {
   }).formatToParts(new Date());
   const y = Number(parts.find(p => p.type === "year")?.value || "2026");
   const m = Number(parts.find(p => p.type === "month")?.value || "11");
-  return { year: y, month: m }; // month 1..12
+  return { year: y, month: m };
 }
 
 function formatYM(year, month) {
@@ -64,10 +68,6 @@ function getItemYM(item) {
   return match ? match[1] : "";
 }
 
-/**
- * Menghilangkan blok "Annual Theme" sampai "Save Monthly Theme"
- * jika ada di dalam atau sekitar area Media & Services
- */
 function removeUnwantedCurriculumBlocks() {
   const panel = document.getElementById("panel-archives");
   if (!panel) return;
@@ -82,12 +82,13 @@ function removeUnwantedCurriculumBlocks() {
     "save month & all weeks"
   ];
 
-  // 1. Jika ada elemen di dalam #panel-archives yang cocok, sembunyikan/hapus
   panel.querySelectorAll("div, section, form").forEach(el => {
     if (
       el.id === "panel-archives" ||
       el.id === "archive-subpanel-sunday-archive" ||
-      el.closest("#archive-subpanel-sunday-archive")
+      el.id === "archive-subpanel-editors-insight" ||
+      el.closest("#archive-subpanel-sunday-archive") ||
+      el.closest("#archive-subpanel-editors-insight")
     ) {
       return;
     }
@@ -97,19 +98,6 @@ function removeUnwantedCurriculumBlocks() {
       el.remove();
     }
   });
-
-  // 2. Jika ada sibling sebelum #panel-archives di dalam <main> yang bukan tab-panel resmi, sembunyikan
-  const parent = panel.parentElement;
-  if (parent) {
-    Array.from(parent.children).forEach(child => {
-      if (child === panel || child.classList.contains("tab-panel")) return;
-      const txt = (child.textContent || "").toLowerCase();
-      if (keywords.some(k => txt.includes(k))) {
-        child.classList.add("hidden");
-        child.remove();
-      }
-    });
-  }
 }
 
 function logDiag(msg, isError = false) {
@@ -174,17 +162,17 @@ function switchArchiveSubtab(subtabKey) {
   document.querySelectorAll(".archive-subpanel").forEach(panel => {
     panel.classList.toggle("hidden", panel.id !== `archive-subpanel-${subtabKey}`);
   });
+
+  if (subtabKey === "editors-insight") {
+    refreshEditorsInsights();
+  } else if (subtabKey === "sunday-archive") {
+    refreshServiceArchives();
+  }
 }
 
-/**
- * Menghasilkan pasangan 2 bulan untuk halaman ke-`pageIndex`:
- * pageIndex = 0 -> [bulan_depan, bulan_ini] (misal Nov 2026 -> ["2026-12", "2026-11"])
- * pageIndex = 1 -> ["2026-10", "2026-09"]
- * pageIndex = 2 -> ["2026-08", "2026-07"], dst.
- */
 function getTwoMonthWindow(pageIndex) {
   const { year, month } = getAucklandYearMonth();
-  const startOffset = 1 - pageIndex * 2; // page 0: +1 dan 0; page 1: -1 dan -2; dst.
+  const startOffset = 1 - pageIndex * 2;
   const firstYM = formatYM(year, month + startOffset);
   const secondYM = formatYM(year, month + startOffset - 1);
   return [firstYM, secondYM];
@@ -211,7 +199,6 @@ function renderArchiveList() {
       .some(val => String(val).toLowerCase().includes(q));
   });
 
-  // Hitung batas halaman terlama berdasarkan data yang ada
   const allYMs = statusFiltered.map(getItemYM).filter(Boolean).sort();
   const oldestYM = allYMs[0] || "";
   const { year, month } = getAucklandYearMonth();
@@ -229,7 +216,6 @@ function renderArchiveList() {
   if (archiveState.pageIndex < 0) archiveState.pageIndex = 0;
   if (archiveState.pageIndex > maxPageIndex) archiveState.pageIndex = maxPageIndex;
 
-  // Jika sedang mengetik pencarian, tampilkan hasil pencarian; jika tidak, tampilkan window 2 bulan
   const [mA, mB] = getTwoMonthWindow(archiveState.pageIndex);
   const windowMonths = [mA, mB];
 
@@ -238,11 +224,9 @@ function renderArchiveList() {
     : statusFiltered.filter(item => windowMonths.includes(getItemYM(item)));
 
   if (pageInfoEl) {
-    if (q) {
-      pageInfoEl.textContent = `Search results (${pageItems.length})`;
-    } else {
-      pageInfoEl.textContent = `Showing: ${formatMonthLabel(mA)} & ${formatMonthLabel(mB)}`;
-    }
+    pageInfoEl.textContent = q
+      ? `Search results (${pageItems.length})`
+      : `Showing: ${formatMonthLabel(mA)} & ${formatMonthLabel(mB)}`;
   }
 
   if (badgeEl) {
@@ -391,6 +375,7 @@ export async function refreshServiceArchives() {
 }
 
 export function initMediaServicesTab() {
+  initEditorInsightTab();
   removeUnwantedCurriculumBlocks();
 
   if (archiveState.bound) {
@@ -425,12 +410,13 @@ export function initMediaServicesTab() {
     listEl.parentElement.insertBefore(msgBar, listEl);
   }
 
-  switchArchiveSubtab("sunday-archive");
+  switchArchiveSubtab(archiveState.activeSubtab || "sunday-archive");
 
   document.getElementById("nav-archives")?.addEventListener("click", () => {
+    initEditorInsightTab();
+    removeUnwantedCurriculumBlocks();
     archiveState.pageIndex = 0;
     switchArchiveSubtab(archiveState.activeSubtab || "sunday-archive");
-    refreshServiceArchives();
   });
 
   document.getElementById("sa-tab-prev-page")?.addEventListener("click", () => {
@@ -456,10 +442,11 @@ export function initMediaServicesTab() {
     if (action === "delete") handleDeleteByKey(key);
   });
 
-  document.querySelectorAll(".archive-subtab").forEach(btn => {
-    btn.addEventListener("click", () => {
-      switchArchiveSubtab(btn.dataset.archiveSubtab);
-    });
+  document.getElementById("panel-archives")?.addEventListener("click", (e) => {
+    const subBtn = e.target.closest(".archive-subtab");
+    if (subBtn && subBtn.dataset.archiveSubtab) {
+      switchArchiveSubtab(subBtn.dataset.archiveSubtab);
+    }
   });
 
   document.getElementById("sa-tab-search")?.addEventListener("input", renderArchiveList);
