@@ -1197,21 +1197,17 @@
       const { initCareModule } = await import("./js/ui-care.js");
       const { initCurriculumTab } = await import("./js/ui-curriculum.js");
       const { initMediaServicesTab } = await import("./js/service-archives-tab.js");
-      const { initMediaPublicationsTab } = await import("./js/media-publications-tab.js");
+      const { initMediaPublicationsTab } = await import("./js/media-publications-tab.js?v=20261124");
 
       function activateTab(tabName) {
         document.querySelectorAll(".tab-btn").forEach(b => {
           b.classList.toggle("active", b.dataset.tab === tabName);
         });
         document.querySelectorAll(".tab-panel").forEach(p => {
-          p.classList.add("hidden");
-          p.style.display = "none";
+          const isTarget = p.id === `panel-${tabName}`;
+          p.classList.toggle("hidden", !isTarget);
+          p.style.display = isTarget ? "block" : "none";
         });
-        const targetPanel = document.getElementById(`panel-${tabName}`);
-        if (targetPanel) {
-          targetPanel.classList.remove("hidden");
-          targetPanel.style.display = "block";
-        }
       }
 
       document.querySelectorAll(".tab-btn").forEach(btn => {
@@ -1270,11 +1266,13 @@
           });
 
           if (isAdminOrCoord) {
-            await initMasterApp(profile).catch(err => console.warn("initMasterApp error:", err));
-            await initContentStudio().catch(err => console.warn("initContentStudio error:", err));
-            await initCurriculumTab().catch(err => console.warn("initCurriculumTab error:", err));
-            await initRosterEngine(profile).catch(err => console.warn("initRosterEngine error:", err));
-            await initCareModule().catch(err => console.warn("initCareModule error:", err));
+            await Promise.allSettled([
+              initMasterApp(profile),
+              initContentStudio(),
+              initCurriculumTab(),
+              initRosterEngine(profile),
+              initCareModule()
+            ]);
           } else if (isDeptLead) {
             await initRosterEngine(profile).catch(err => console.warn("initRosterEngine error:", err));
           }
