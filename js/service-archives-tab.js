@@ -10,11 +10,24 @@ import {
   refreshEditorsInsights
 } from "./editor-insight-tab.js";
 
+const OFFICIAL_TAB_PANELS = new Set([
+  "panel-public",
+  "panel-myportal",
+  "panel-roster",
+  "panel-care",
+  "panel-disciples",
+  "panel-content",
+  "panel-archives",
+  "panel-roles",
+  "panel-departments"
+]);
+
 let archiveState = {
   items: [],
   activeSubtab: "sunday-archive",
   pageIndex: 0,
-  bound: false
+  bound: false,
+  observer: null
 };
 
 function esc(str = "") {
@@ -68,9 +81,14 @@ function getItemYM(item) {
   return match ? match[1] : "";
 }
 
+/**
+ * Menghilangkan blok "Annual Theme" sampai "Save Monthly Theme"
+ * (hanya untuk newsletter & website, bukan kurikulum)
+ */
 function removeUnwantedCurriculumBlocks() {
   const panel = document.getElementById("panel-archives");
-  if (!panel) return;
+  const mainEl = panel?.parentElement || document.querySelector("main");
+  if (!mainEl) return;
 
   const keywords = [
     "annual theme",
@@ -79,25 +97,55 @@ function removeUnwantedCurriculumBlocks() {
     "smart paste monthly bundle",
     "save monthly theme",
     "save annual theme",
-    "save month & all weeks"
+    "save month & all weeks",
+    "send to monthly compass"
   ];
 
-  panel.querySelectorAll("div, section, form").forEach(el => {
-    if (
-      el.id === "panel-archives" ||
-      el.id === "archive-subpanel-sunday-archive" ||
-      el.id === "archive-subpanel-editors-insight" ||
-      el.closest("#archive-subpanel-sunday-archive") ||
-      el.closest("#archive-subpanel-editors-insight")
-    ) {
-      return;
-    }
-    const txt = (el.textContent || "").toLowerCase();
+  // 1. Bersihkan elemen di dalam <main> yang bukan tab-panel resmi
+  Array.from(mainEl.children).forEach(child => {
+    if (OFFICIAL_TAB_PANELS.has(child.id)) return;
+    if (child.contains(panel)) return;
+    const txt = (child.textContent || "").toLowerCase();
     if (keywords.some(k => txt.includes(k))) {
-      el.classList.add("hidden");
-      el.remove();
+      child.classList.add("hidden");
+      child.style.display = "none";
     }
   });
+
+  // 2. Bersihkan elemen non-arsip di dalam #panel-archives jika ada
+  if (panel) {
+    panel.querySelectorAll("div, section, form").forEach(el => {
+      if (
+        el.id === "panel-archives" ||
+        el.id === "archive-subpanel-sunday-archive" ||
+        el.id === "archive-subpanel-editors-insight" ||
+        el.closest("#archive-subpanel-sunday-archive") ||
+        el.closest("#archive-subpanel-editors-insight")
+      ) {
+        return;
+      }
+      const txt = (el.textContent || "").toLowerCase();
+      if (keywords.some(k => txt.includes(k))) {
+        el.classList.add("hidden");
+        el.style.display = "none";
+      }
+    });
+  }
+}
+
+function startCurriculumCleanerObserver() {
+  if (archiveState.observer) return;
+  const target = document.getElementById("screen-app") || document.body;
+  if (!target) return;
+
+  archiveState.observer = new MutationObserver(() => {
+    const panel = document.getElementById("panel-archives");
+    if (panel && !panel.classList.contains("hidden")) {
+      removeUnwantedCurriculumBlocks();
+    }
+  });
+
+  archiveState.observer.observe(target, { childList: true, subtree: true });
 }
 
 function logDiag(msg, isError = false) {
@@ -377,6 +425,7 @@ export async function refreshServiceArchives() {
 export function initMediaServicesTab() {
   initEditorInsightTab();
   removeUnwantedCurriculumBlocks();
+  startCurriculumCleanerObserver();
 
   if (archiveState.bound) {
     refreshServiceArchives();
