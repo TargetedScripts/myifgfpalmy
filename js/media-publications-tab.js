@@ -281,7 +281,7 @@ export function initMediaPublicationsTab() {
   const subtabButtons = document.querySelectorAll(".archive-subtab");
   const subpanels = document.querySelectorAll(".archive-subpanel");
 
-  function switchArchiveSubtab(target) {
+  function forceShowSubpanel(target) {
     subtabButtons.forEach(b => {
       const active = b.dataset.archiveSubtab === target;
       b.classList.toggle("bg-slate-900", active);
@@ -293,15 +293,16 @@ export function initMediaPublicationsTab() {
     subpanels.forEach(panel => {
       const isMatch = panel.id === `archive-subpanel-${target}`;
       panel.classList.toggle("hidden", !isMatch);
-      panel.style.display = isMatch ? "block" : "none";
+      panel.style.setProperty("display", isMatch ? "block" : "none", "important");
     });
   }
 
   subtabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
       const target = btn.dataset.archiveSubtab;
-      switchArchiveSubtab(target);
-      setTimeout(() => switchArchiveSubtab(target), 0);
+      forceShowSubpanel(target);
+      setTimeout(() => forceShowSubpanel(target), 0);
+      setTimeout(() => forceShowSubpanel(target), 80);
     });
   });
 
@@ -422,10 +423,19 @@ export function initMediaPublicationsTab() {
     };
   }
 
+  function setMcEditorVisible(visible) {
+    mcEditorContainer.classList.toggle("hidden", !visible);
+    mcEditorContainer.style.setProperty("display", visible ? "block" : "none", "important");
+    if (visible) {
+      [...mcEditorContainer.children].forEach(child => {
+        child.style.setProperty("display", "block", "important");
+      });
+    }
+  }
+
   function populateMcEditor(data) {
     currentMcData = data;
-    mcEditorContainer.classList.remove("hidden");
-    mcEditorContainer.style.display = "block";
+    setMcEditorVisible(true);
     mcPublishedCheck.checked = data.published !== false;
     mcGreeting.value = data.greeting || "Shalom,";
     mcThemeRef.value = data.monthThemeTitle || "";
@@ -462,8 +472,7 @@ export function initMediaPublicationsTab() {
         return;
       }
 
-      mcEditorContainer.classList.add("hidden");
-      mcEditorContainer.style.display = "none";
+      setMcEditorVisible(false);
       mcDbBadge.textContent = "Not Yet in DB";
       mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
       mcStatusMsg.textContent = `Data The Monthly Compass untuk ${monthKey} belum ada di database.`;
@@ -550,10 +559,19 @@ export function initMediaPublicationsTab() {
     };
   }
 
+  function setAaEditorVisible(visible) {
+    aaEditorContainer.classList.toggle("hidden", !visible);
+    aaEditorContainer.style.setProperty("display", visible ? "block" : "none", "important");
+    if (visible) {
+      [...aaEditorContainer.children].forEach(child => {
+        child.style.setProperty("display", "block", "important");
+      });
+    }
+  }
+
   function populateAaEditor(data) {
     currentAaData = data;
-    aaEditorContainer.classList.remove("hidden");
-    aaEditorContainer.style.display = "block";
+    setAaEditorVisible(true);
     aaPublishedCheck.checked = data.published !== false;
     aaTitle.value = data.annualTitle || "";
     aaSubtitle.value = data.subtitle || "";
@@ -589,8 +607,7 @@ export function initMediaPublicationsTab() {
         return;
       }
 
-      aaEditorContainer.classList.add("hidden");
-      aaEditorContainer.style.display = "none";
+      setAaEditorVisible(false);
       aaDbBadge.textContent = "Not Yet in DB";
       aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
       aaStatusMsg.textContent = `Data The Annual Anchor tahun ${yearStr} belum ada di database.`;
