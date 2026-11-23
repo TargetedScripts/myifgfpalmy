@@ -281,19 +281,27 @@ export function initMediaPublicationsTab() {
   const subtabButtons = document.querySelectorAll(".archive-subtab");
   const subpanels = document.querySelectorAll(".archive-subpanel");
 
+  function switchArchiveSubtab(target) {
+    subtabButtons.forEach(b => {
+      const active = b.dataset.archiveSubtab === target;
+      b.classList.toggle("bg-slate-900", active);
+      b.classList.toggle("text-white", active);
+      b.classList.toggle("bg-slate-100", !active);
+      b.classList.toggle("text-slate-700", !active);
+    });
+
+    subpanels.forEach(panel => {
+      const isMatch = panel.id === `archive-subpanel-${target}`;
+      panel.classList.toggle("hidden", !isMatch);
+      panel.style.display = isMatch ? "block" : "none";
+    });
+  }
+
   subtabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
       const target = btn.dataset.archiveSubtab;
-      subtabButtons.forEach(b => {
-        const active = b.dataset.archiveSubtab === target;
-        b.classList.toggle("bg-slate-900", active);
-        b.classList.toggle("text-white", active);
-        b.classList.toggle("bg-slate-100", !active);
-        b.classList.toggle("text-slate-700", !active);
-      });
-      subpanels.forEach(panel => {
-        panel.classList.toggle("hidden", panel.id !== `archive-subpanel-${target}`);
-      });
+      switchArchiveSubtab(target);
+      setTimeout(() => switchArchiveSubtab(target), 0);
     });
   });
 
@@ -691,7 +699,7 @@ export function initMediaPublicationsTab() {
     }
   });
 
- // --- INITIAL LOAD OF CURRICULUM OPTIONS ---
+  // --- INITIAL LOAD OF CURRICULUM OPTIONS ---
   async function loadSelectorsAndInitialData() {
     try {
       const [mSnap, wSnap] = await Promise.all([
