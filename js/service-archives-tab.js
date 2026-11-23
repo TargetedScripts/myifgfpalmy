@@ -9,6 +9,7 @@ import { initPublicPortal } from "./ui-portal.js";
 let archiveState = {
   items: [],
   activeSubtab: "sunday-archive",
+  pageIndex: 0, // 0 = 2 bulan terbaru mulai (bulan_depan, bulan_ini)
   bound: false
 };
 
@@ -18,6 +19,97 @@ function esc(str = "") {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function getAucklandYearMonth() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Pacific/Auckland",
+    year: "numeric",
+    month: "2-digit"
+  }).formatToParts(new Date());
+  const y = Number(parts.find(p => p.type === "year")?.value || "2026");
+  const m = Number(parts.find(p => p.type === "month")?.value || "11");
+  return { year: y, month: m }; // month 1..12
+}
+
+function formatYM(year, month) {
+  let y = year;
+  let m = month;
+  while (m > 12) {
+    y += 1;
+    m -= 12;
+  }
+  while (m < 1) {
+    y -= 1;
+    m += 12;
+  }
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
+function formatMonthLabel(ym) {
+  const [yStr, mStr] = String(ym || "").split("-");
+  const y = Number(yStr);
+  const m = Number(mStr) - 1;
+  if (!y || m < 0) return ym;
+  return new Intl.DateTimeFormat("en-NZ", {
+    timeZone: "Pacific/Auckland",
+    month: "long",
+    year: "numeric"
+  }).format(new Date(Date.UTC(y, m, 15)));
+}
+
+function getItemYM(item) {
+  const raw = String(item.service_date || item.id || "").trim();
+  const match = raw.match(/^(\d{4}-\d{2})/);
+  return match ? match[1] : "";
+}
+
+/**
+ * Menghilangkan blok "Annual Theme" sampai "Save Monthly Theme"
+ * jika ada di dalam atau sekitar area Media & Services
+ */
+function removeUnwantedCurriculumBlocks() {
+  const panel = document.getElementById("panel-archives");
+  if (!panel) return;
+
+  const keywords = [
+    "annual theme",
+    "weekly curriculum",
+    "monthly theme",
+    "smart paste monthly bundle",
+    "save monthly theme",
+    "save annual theme",
+    "save month & all weeks"
+  ];
+
+  // 1. Jika ada elemen di dalam #panel-archives yang cocok, sembunyikan/hapus
+  panel.querySelectorAll("div, section, form").forEach(el => {
+    if (
+      el.id === "panel-archives" ||
+      el.id === "archive-subpanel-sunday-archive" ||
+      el.closest("#archive-subpanel-sunday-archive")
+    ) {
+      return;
+    }
+    const txt = (el.textContent || "").toLowerCase();
+    if (keywords.some(k => txt.includes(k))) {
+      el.classList.add("hidden");
+      el.remove();
+    }
+  });
+
+  // 2. Jika ada sibling sebelum #panel-archives di dalam <main> yang bukan tab-panel resmi, sembunyikan
+  const parent = panel.parentElement;
+  if (parent) {
+    Array.from(parent.children).forEach(child => {
+      if (child === panel || child.classList.contains("tab-panel")) return;
+      const txt = (child.textContent || "").toLowerCase();
+      if (keywords.some(k => txt.includes(k))) {
+        child.classList.add("hidden");
+        child.remove();
+      }
+    });
+  }
 }
 
 function logDiag(msg, isError = false) {
@@ -84,15 +176,32 @@ function switchArchiveSubtab(subtabKey) {
   });
 }
 
+/**
+ * Menghasilkan pasangan 2 bulan untuk halaman ke-`pageIndex`:
+ * pageIndex = 0 -> [bulan_depan, bulan_ini] (misal Nov 2026 -> ["2026-12", "2026-11"])
+ * pageIndex = 1 -> ["2026-10", "2026-09"]
+ * pageIndex = 2 -> ["2026-08", "2026-07"], dst.
+ */
+function getTwoMonthWindow(pageIndex) {
+  const { year, month } = getAucklandYearMonth();
+  const startOffset = 1 - pageIndex * 2; // page 0: +1 dan 0; page 1: -1 dan -2; dst.
+  const firstYM = formatYM(year, month + startOffset);
+  const secondYM = formatYM(year, month + startOffset - 1);
+  return [firstYM, secondYM];
+}
+
 function renderArchiveList() {
   const listEl = document.getElementById("sa-tab-list");
   const badgeEl = document.getElementById("sa-tab-count");
+  const pageInfoEl = document.getElementById("sa-tab-page-info");
+  const prevBtn = document.getElementById("sa-tab-prev-page");
+  const nextBtn = document.getElementById("sa-tab-next-page");
   if (!listEl) return;
 
   const q = (document.getElementById("sa-tab-search")?.value || "").trim().toLowerCase();
   const statusFilter = document.getElementById("sa-tab-filter")?.value || "ALL";
 
-  const filtered = archiveState.items.filter(item => {
+  const statusFiltered = archiveState.items.filter(item => {
     const isPub = item.published !== false;
     if (statusFilter === "PUBLISHED" && !isPub) return false;
     if (statusFilter === "DRAFT" && isPub) return false;
@@ -102,16 +211,68 @@ function renderArchiveList() {
       .some(val => String(val).toLowerCase().includes(q));
   });
 
-  if (badgeEl) {
-    badgeEl.textContent = `${filtered.length} of ${archiveState.items.length} archive(s)`;
+  // Hitung batas halaman terlama berdasarkan data yang ada
+  const allYMs = statusFiltered.map(getItemYM).filter(Boolean).sort();
+  const oldestYM = allYMs[0] || "";
+  const { year, month } = getAucklandYearMonth();
+  const currentYM = formatYM(year, month);
+
+  let maxPageIndex = 0;
+  if (oldestYM && oldestYM < currentYM) {
+    while (maxPageIndex < 120) {
+      const [, secondYM] = getTwoMonthWindow(maxPageIndex);
+      if (secondYM <= oldestYM) break;
+      maxPageIndex += 1;
+    }
   }
 
-  if (filtered.length === 0) {
-    listEl.innerHTML = `<div class="p-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500 col-span-full">No Sunday Service archive records found.</div>`;
+  if (archiveState.pageIndex < 0) archiveState.pageIndex = 0;
+  if (archiveState.pageIndex > maxPageIndex) archiveState.pageIndex = maxPageIndex;
+
+  // Jika sedang mengetik pencarian, tampilkan hasil pencarian; jika tidak, tampilkan window 2 bulan
+  const [mA, mB] = getTwoMonthWindow(archiveState.pageIndex);
+  const windowMonths = [mA, mB];
+
+  const pageItems = q
+    ? statusFiltered
+    : statusFiltered.filter(item => windowMonths.includes(getItemYM(item)));
+
+  if (pageInfoEl) {
+    if (q) {
+      pageInfoEl.textContent = `Search results (${pageItems.length})`;
+    } else {
+      pageInfoEl.textContent = `Showing: ${formatMonthLabel(mA)} & ${formatMonthLabel(mB)}`;
+    }
+  }
+
+  if (badgeEl) {
+    badgeEl.textContent = `${pageItems.length} shown (${statusFiltered.length} total)`;
+  }
+
+  if (prevBtn) {
+    const disabled = Boolean(q) || archiveState.pageIndex <= 0;
+    prevBtn.disabled = disabled;
+    prevBtn.classList.toggle("opacity-40", disabled);
+    prevBtn.classList.toggle("cursor-not-allowed", disabled);
+  }
+
+  if (nextBtn) {
+    const disabled = Boolean(q) || archiveState.pageIndex >= maxPageIndex;
+    nextBtn.disabled = disabled;
+    nextBtn.classList.toggle("opacity-40", disabled);
+    nextBtn.classList.toggle("cursor-not-allowed", disabled);
+  }
+
+  if (pageItems.length === 0) {
+    listEl.innerHTML = `
+      <div class="p-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500 col-span-full">
+        No Sunday Service archive records for <strong>${esc(formatMonthLabel(mA))}</strong> & <strong>${esc(formatMonthLabel(mB))}</strong>. Click <strong>Next Page</strong> for earlier months.
+      </div>
+    `;
     return;
   }
 
-  listEl.innerHTML = filtered.map((item, idx) => {
+  listEl.innerHTML = pageItems.map((item, idx) => {
     const isPub = item.published !== false;
     const rawKey = String(item.id ?? item.service_date ?? idx);
     return `
@@ -220,6 +381,7 @@ async function handleDeleteByKey(rawKey) {
 
 export async function refreshServiceArchives() {
   try {
+    removeUnwantedCurriculumBlocks();
     archiveState.items = await getSundayServices();
     renderArchiveList();
   } catch (err) {
@@ -229,14 +391,33 @@ export async function refreshServiceArchives() {
 }
 
 export function initMediaServicesTab() {
+  removeUnwantedCurriculumBlocks();
+
   if (archiveState.bound) {
     refreshServiceArchives();
     return;
   }
   archiveState.bound = true;
 
-  // Sisipkan banner status di atas daftar agar terlihat jelas
   const listEl = document.getElementById("sa-tab-list");
+  if (listEl && !document.getElementById("sa-tab-pagination-bar")) {
+    const pager = document.createElement("div");
+    pager.id = "sa-tab-pagination-bar";
+    pager.className = "flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100";
+    pager.innerHTML = `
+      <span id="sa-tab-page-info" class="text-[11px] font-semibold text-slate-600"></span>
+      <div class="flex items-center gap-2">
+        <button type="button" id="sa-tab-prev-page" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs">
+          ← Newer Months
+        </button>
+        <button type="button" id="sa-tab-next-page" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs">
+          Next Page →
+        </button>
+      </div>
+    `;
+    listEl.parentElement.appendChild(pager);
+  }
+
   if (listEl && !document.getElementById("sa-tab-banner-msg")) {
     const msgBar = document.createElement("p");
     msgBar.id = "sa-tab-banner-msg";
@@ -247,11 +428,23 @@ export function initMediaServicesTab() {
   switchArchiveSubtab("sunday-archive");
 
   document.getElementById("nav-archives")?.addEventListener("click", () => {
+    archiveState.pageIndex = 0;
     switchArchiveSubtab(archiveState.activeSubtab || "sunday-archive");
     refreshServiceArchives();
   });
 
-  // Event delegation langsung pada container list (anti-bengong)
+  document.getElementById("sa-tab-prev-page")?.addEventListener("click", () => {
+    if (archiveState.pageIndex > 0) {
+      archiveState.pageIndex -= 1;
+      renderArchiveList();
+    }
+  });
+
+  document.getElementById("sa-tab-next-page")?.addEventListener("click", () => {
+    archiveState.pageIndex += 1;
+    renderArchiveList();
+  });
+
   listEl?.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-sa-action]");
     if (!btn) return;
@@ -270,7 +463,10 @@ export function initMediaServicesTab() {
   });
 
   document.getElementById("sa-tab-search")?.addEventListener("input", renderArchiveList);
-  document.getElementById("sa-tab-filter")?.addEventListener("change", renderArchiveList);
+  document.getElementById("sa-tab-filter")?.addEventListener("change", () => {
+    archiveState.pageIndex = 0;
+    renderArchiveList();
+  });
 
   document.getElementById("sa-tab-reset")?.addEventListener("click", () => {
     resetForm();
