@@ -47,6 +47,12 @@ function escapeHtml(val = "") {
     .replaceAll('"', "&quot;");
 }
 
+function toggleVisibility(el, show) {
+  if (!el) return;
+  el.classList.toggle("hidden", !show);
+  el.style.display = show ? "block" : "none";
+}
+
 function formatShortIndoDate(dateStr = "") {
   const parts = String(dateStr).split("-");
   if (parts.length !== 3) return dateStr;
@@ -280,9 +286,8 @@ async function fetchRosterSpeakerMap() {
 export function initMediaPublicationsTab() {
   const subtabButtons = document.querySelectorAll(".archive-subtab");
   const subpanels = document.querySelectorAll(".archive-subpanel");
-  let activeSubtab = "monthly-compass";
 
-  function applySubtabVisibility(target) {
+  function switchSubtab(target) {
     subtabButtons.forEach(b => {
       const active = b.dataset.archiveSubtab === target;
       b.classList.toggle("bg-slate-900", active);
@@ -292,17 +297,20 @@ export function initMediaPublicationsTab() {
     });
 
     subpanels.forEach(panel => {
-      const isMatch = panel.id === `archive-subpanel-${target}`;
-      panel.classList.toggle("hidden", !isMatch);
-      panel.style.setProperty("display", isMatch ? "block" : "none", "important");
+      toggleVisibility(panel, panel.id === `archive-subpanel-${target}`);
     });
   }
 
+  // Satu pintu navigasi subtab (menghentikan listener lama dari service-archives-tab.js agar tidak bentrok)
   subtabButtons.forEach(btn => {
-    btn.addEventListener("click", () => {
-      activeSubtab = btn.dataset.archiveSubtab;
-      applySubtabVisibility(activeSubtab);
-    });
+    btn.addEventListener(
+      "click",
+      e => {
+        e.stopImmediatePropagation();
+        switchSubtab(btn.dataset.archiveSubtab);
+      },
+      true
+    );
   });
 
   // --- MONTHLY COMPASS STATE & ELEMENTS ---
@@ -344,24 +352,6 @@ export function initMediaPublicationsTab() {
   const aaPublishBtn = document.getElementById("aa-publish-btn");
 
   let currentAaData = null;
-
-  function setMcEditorVisible(visible) {
-    if (visible) {
-      activeSubtab = "monthly-compass";
-      applySubtabVisibility("monthly-compass");
-    }
-    mcEditorContainer.classList.toggle("hidden", !visible);
-    mcEditorContainer.style.setProperty("display", visible ? "block" : "none", "important");
-  }
-
-  function setAaEditorVisible(visible) {
-    if (visible) {
-      activeSubtab = "annual-anchor";
-      applySubtabVisibility("annual-anchor");
-    }
-    aaEditorContainer.classList.toggle("hidden", !visible);
-    aaEditorContainer.style.setProperty("display", visible ? "block" : "none", "important");
-  }
 
   function renderMcWeeksEditor(weeks = []) {
     if (!weeks.length) {
@@ -442,7 +432,7 @@ export function initMediaPublicationsTab() {
 
   function populateMcEditor(data) {
     currentMcData = data;
-    setMcEditorVisible(true);
+    toggleVisibility(mcEditorContainer, true);
     mcPublishedCheck.checked = data.published !== false;
     mcGreeting.value = data.greeting || "Shalom,";
     mcThemeRef.value = data.monthThemeTitle || "";
@@ -479,7 +469,7 @@ export function initMediaPublicationsTab() {
         return;
       }
 
-      setMcEditorVisible(false);
+      toggleVisibility(mcEditorContainer, false);
       mcDbBadge.textContent = "Not Yet in DB";
       mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
       mcStatusMsg.textContent = `Data The Monthly Compass untuk ${monthKey} belum ada di database.`;
@@ -568,7 +558,7 @@ export function initMediaPublicationsTab() {
 
   function populateAaEditor(data) {
     currentAaData = data;
-    setAaEditorVisible(true);
+    toggleVisibility(aaEditorContainer, true);
     aaPublishedCheck.checked = data.published !== false;
     aaTitle.value = data.annualTitle || "";
     aaSubtitle.value = data.subtitle || "";
@@ -604,7 +594,7 @@ export function initMediaPublicationsTab() {
         return;
       }
 
-      setAaEditorVisible(false);
+      toggleVisibility(aaEditorContainer, false);
       aaDbBadge.textContent = "Not Yet in DB";
       aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
       aaStatusMsg.textContent = `Data The Annual Anchor tahun ${yearStr} belum ada di database.`;
