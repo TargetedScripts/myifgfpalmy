@@ -294,7 +294,7 @@ export function initMediaPublicationsTab() {
     subpanels.forEach(panel => {
       const isMatch = panel.id === `archive-subpanel-${target}`;
       panel.classList.toggle("hidden", !isMatch);
-      panel.style.display = isMatch ? "block" : "none";
+      panel.style.setProperty("display", isMatch ? "block" : "none", "important");
     });
   }
 
@@ -351,7 +351,7 @@ export function initMediaPublicationsTab() {
       applySubtabVisibility("monthly-compass");
     }
     mcEditorContainer.classList.toggle("hidden", !visible);
-    mcEditorContainer.style.display = visible ? "block" : "none";
+    mcEditorContainer.style.setProperty("display", visible ? "block" : "none", "important");
   }
 
   function setAaEditorVisible(visible) {
@@ -360,18 +360,8 @@ export function initMediaPublicationsTab() {
       applySubtabVisibility("annual-anchor");
     }
     aaEditorContainer.classList.toggle("hidden", !visible);
-    aaEditorContainer.style.display = visible ? "block" : "none";
+    aaEditorContainer.style.setProperty("display", visible ? "block" : "none", "important");
   }
-
-  // Jaga agar panel subtab aktif tidak tersembunyi oleh script eksternal saat DOM berubah
-  const panelObserver = new MutationObserver(() => {
-    const activePanel = document.getElementById(`archive-subpanel-${activeSubtab}`);
-    if (activePanel && (activePanel.classList.contains("hidden") || getComputedStyle(activePanel).display === "none")) {
-      activePanel.classList.remove("hidden");
-      activePanel.style.display = "block";
-    }
-  });
-  subpanels.forEach(p => panelObserver.observe(p, { attributes: true, attributeFilter: ["class", "style"] }));
 
   function renderMcWeeksEditor(weeks = []) {
     if (!weeks.length) {
