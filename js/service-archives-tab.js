@@ -20,13 +20,21 @@ function esc(str = "") {
     .replace(/"/g, "&quot;");
 }
 
-function setStatus(msg, isError = false) {
+function logDiag(msg, isError = false) {
   const el = document.getElementById("sa-tab-status");
-  if (!el) return;
-  el.textContent = msg;
-  el.className = isError
-    ? "text-xs font-semibold text-red-600"
-    : "text-xs font-semibold text-emerald-700";
+  if (el) {
+    el.textContent = msg;
+    el.className = isError
+      ? "text-xs font-bold text-red-600"
+      : "text-xs font-bold text-emerald-700";
+  }
+  const topBanner = document.getElementById("sa-tab-banner-msg");
+  if (topBanner) {
+    topBanner.textContent = msg;
+    topBanner.className = isError
+      ? "text-[11px] font-semibold text-red-600"
+      : "text-[11px] font-semibold text-blue-700";
+  }
 }
 
 function resetForm() {
@@ -105,7 +113,7 @@ function renderArchiveList() {
 
   listEl.innerHTML = filtered.map((item, idx) => {
     const isPub = item.published !== false;
-    const safeId = encodeURIComponent(String(item.id ?? idx));
+    const rawKey = String(item.id ?? item.service_date ?? idx);
     return `
       <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex items-start justify-between gap-3 text-xs">
         <div class="flex items-start gap-3 min-w-0">
@@ -130,22 +138,93 @@ function renderArchiveList() {
           </div>
         </div>
         <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
-          <button type="button" onclick="window.saEditItem('${safeId}')" class="px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold">Edit</button>
-          <button type="button" onclick="window.saDeleteItem('${safeId}')" class="px-2.5 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 font-semibold">Delete</button>
+          <button type="button" data-sa-action="edit" data-sa-key="${esc(rawKey)}" class="px-2.5 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 font-semibold cursor-pointer">Edit</button>
+          <button type="button" data-sa-action="delete" data-sa-key="${esc(rawKey)}" class="px-2.5 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 font-semibold cursor-pointer">Delete</button>
         </div>
       </div>
     `;
   }).join("");
 }
 
+function openEditFormByKey(rawKey) {
+  const item =
+    archiveState.items.find(x => String(x.id) === rawKey) ||
+    archiveState.items.find(x => String(x.service_date) === rawKey);
+
+  if (!item) {
+    logDiag(`Record "${rawKey}" not found in memory (${archiveState.items.length} loaded).`, true);
+    return;
+  }
+
+  switchArchiveSubtab("sunday-archive");
+
+  const heading = document.getElementById("sa-tab-form-title");
+  if (heading) heading.textContent = `✏️ Edit Sunday Service Archive (${item.service_date || item.id})`;
+
+  const idEl = document.getElementById("sa-tab-edit-id");
+  if (idEl) idEl.value = item.id ?? item.service_date ?? "";
+
+  const dateInput = document.getElementById("sa-tab-date");
+  if (dateInput) {
+    dateInput.value = item.service_date || item.id || "";
+    dateInput.setAttribute("readonly", "readonly");
+    dateInput.classList.add("bg-slate-100");
+  }
+
+  const titleInput = document.getElementById("sa-tab-title");
+  if (titleInput) titleInput.value = item.title || "";
+
+  const speakerInput = document.getElementById("sa-tab-speaker");
+  if (speakerInput) speakerInput.value = item.speaker || "";
+
+  const ytInput = document.getElementById("sa-tab-youtube");
+  if (ytInput) ytInput.value = item.youtube_url || "";
+
+  const postInput = document.getElementById("sa-tab-post");
+  if (postInput) postInput.value = item.post_url || "";
+
+  const posterInput = document.getElementById("sa-tab-poster");
+  if (posterInput) posterInput.value = item.poster_url || "";
+
+  const pubInput = document.getElementById("sa-tab-published");
+  if (pubInput) pubInput.checked = item.published !== false;
+
+  logDiag(`Editing ${item.service_date || item.id} — silakan ubah data di form bawah lalu klik Save Archive.`);
+
+  const formCard = document.getElementById("sa-tab-form")?.closest("div");
+  if (formCard) {
+    formCard.classList.add("ring-2", "ring-amber-400");
+    formCard.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => formCard.classList.remove("ring-2", "ring-amber-400"), 2500);
+  }
+  setTimeout(() => titleInput?.focus(), 200);
+}
+
+async function handleDeleteByKey(rawKey) {
+  const item =
+    archiveState.items.find(x => String(x.id) === rawKey) ||
+    archiveState.items.find(x => String(x.service_date) === rawKey);
+  const targetId = item?.id ?? rawKey;
+  if (!targetId) return;
+  if (!confirm(`Delete Sunday Service archive "${targetId}" from Firestore?`)) return;
+
+  try {
+    await deleteSundayService(targetId);
+    await refreshServiceArchives();
+    await initPublicPortal();
+    logDiag(`Archive "${targetId}" deleted.`);
+  } catch (err) {
+    logDiag("Failed to delete: " + (err?.message || err), true);
+  }
+}
+
 export async function refreshServiceArchives() {
   try {
     archiveState.items = await getSundayServices();
     renderArchiveList();
-    setStatus("");
   } catch (err) {
     console.error("Failed to load sunday_services:", err);
-    setStatus("Failed to load archives: " + (err?.message || err), true);
+    logDiag("Failed to load archives: " + (err?.message || err), true);
   }
 }
 
@@ -156,11 +235,32 @@ export function initMediaServicesTab() {
   }
   archiveState.bound = true;
 
+  // Sisipkan banner status di atas daftar agar terlihat jelas
+  const listEl = document.getElementById("sa-tab-list");
+  if (listEl && !document.getElementById("sa-tab-banner-msg")) {
+    const msgBar = document.createElement("p");
+    msgBar.id = "sa-tab-banner-msg";
+    msgBar.className = "text-[11px] font-semibold text-blue-700";
+    listEl.parentElement.insertBefore(msgBar, listEl);
+  }
+
   switchArchiveSubtab("sunday-archive");
 
   document.getElementById("nav-archives")?.addEventListener("click", () => {
     switchArchiveSubtab(archiveState.activeSubtab || "sunday-archive");
     refreshServiceArchives();
+  });
+
+  // Event delegation langsung pada container list (anti-bengong)
+  listEl?.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-sa-action]");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const action = btn.dataset.saAction;
+    const key = btn.dataset.saKey || "";
+    if (action === "edit") openEditFormByKey(key);
+    if (action === "delete") handleDeleteByKey(key);
   });
 
   document.querySelectorAll(".archive-subtab").forEach(btn => {
@@ -174,7 +274,7 @@ export function initMediaServicesTab() {
 
   document.getElementById("sa-tab-reset")?.addEventListener("click", () => {
     resetForm();
-    setStatus("");
+    logDiag("Form siap untuk entri baru.");
   });
 
   document.getElementById("sa-tab-form")?.addEventListener("submit", async (e) => {
@@ -192,98 +292,18 @@ export function initMediaServicesTab() {
     };
 
     try {
-      setStatus("Saving...");
+      logDiag("Saving...");
       await saveSundayService(editId || serviceDate, payload);
       resetForm();
       await refreshServiceArchives();
       await initPublicPortal();
-      setStatus(`Saved (${serviceDate} — ${payload.title})`);
+      logDiag(`Saved (${serviceDate} — ${payload.title})`);
     } catch (err) {
       console.error("Error saving sunday service:", err);
       const msg = err?.message || String(err);
-      setStatus("Failed to save: " + msg, true);
-      alert("Failed to save Sunday Service archive: " + msg);
+      logDiag("Failed to save: " + msg, true);
     }
   });
 
   refreshServiceArchives();
 }
-
-function findItemByEncodedId(encodedId) {
-  const decoded = decodeURIComponent(String(encodedId || ""));
-  return (
-    archiveState.items.find(x => String(x.id) === decoded) ||
-    archiveState.items.find(x => String(x.service_date) === decoded) ||
-    null
-  );
-}
-
-window.saEditItem = (encodedId) => {
-  try {
-    const item = findItemByEncodedId(encodedId);
-    if (!item) {
-      setStatus("Archive record not found. Refreshing list...", true);
-      refreshServiceArchives();
-      return;
-    }
-
-    switchArchiveSubtab("sunday-archive");
-
-    const heading = document.getElementById("sa-tab-form-title");
-    if (heading) heading.textContent = `✏️ Edit Sunday Service Archive (${item.service_date || item.id})`;
-
-    const idEl = document.getElementById("sa-tab-edit-id");
-    if (idEl) idEl.value = item.id ?? item.service_date ?? "";
-
-    const dateInput = document.getElementById("sa-tab-date");
-    if (dateInput) {
-      dateInput.value = item.service_date || item.id || "";
-      dateInput.setAttribute("readonly", "readonly");
-      dateInput.classList.add("bg-slate-100");
-    }
-
-    const titleInput = document.getElementById("sa-tab-title");
-    if (titleInput) titleInput.value = item.title || "";
-
-    const speakerInput = document.getElementById("sa-tab-speaker");
-    if (speakerInput) speakerInput.value = item.speaker || "";
-
-    const ytInput = document.getElementById("sa-tab-youtube");
-    if (ytInput) ytInput.value = item.youtube_url || "";
-
-    const postInput = document.getElementById("sa-tab-post");
-    if (postInput) postInput.value = item.post_url || "";
-
-    const posterInput = document.getElementById("sa-tab-poster");
-    if (posterInput) posterInput.value = item.poster_url || "";
-
-    const pubInput = document.getElementById("sa-tab-published");
-    if (pubInput) pubInput.checked = item.published !== false;
-
-    setStatus(`Editing ${item.service_date || item.id}`);
-
-    const formEl = document.getElementById("sa-tab-form");
-    if (formEl) {
-      formEl.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-    setTimeout(() => titleInput?.focus(), 200);
-  } catch (err) {
-    console.error("saEditItem error:", err);
-    setStatus("Error opening edit form: " + (err?.message || err), true);
-  }
-};
-
-window.saDeleteItem = async (encodedId) => {
-  const item = findItemByEncodedId(encodedId);
-  const targetId = item?.id ?? decodeURIComponent(String(encodedId || ""));
-  if (!targetId) return;
-  if (!confirm("Delete this Sunday Service archive from Firestore?")) return;
-  try {
-    await deleteSundayService(targetId);
-    await refreshServiceArchives();
-    await initPublicPortal();
-    setStatus("Archive deleted.");
-  } catch (err) {
-    alert("Failed to delete archive: " + (err?.message || err));
-  }
-};
