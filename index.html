@@ -1168,7 +1168,7 @@
     </div>
   </div>
 
-  <script type="module">
+<script type="module">
     const loadingScreen = document.getElementById("screen-loading");
     const appScreen = document.getElementById("screen-app");
 
@@ -1197,7 +1197,28 @@
       const { initCareModule } = await import("./js/ui-care.js");
       const { initCurriculumTab } = await import("./js/ui-curriculum.js");
       const { initMediaServicesTab } = await import("./js/service-archives-tab.js");
-      const { initMediaPublicationsTab } = await import("./js/media-publications-tab.js?v=20261124");
+      const { initMediaPublicationsTab } = await import("./js/media-publications-tab.js");
+
+      function syncActiveArchiveSubpanel(preferredSubtab = null) {
+        const activeSubtab =
+          preferredSubtab ||
+          document.querySelector(".archive-subtab.bg-slate-900")?.dataset.archiveSubtab ||
+          "sunday-archive";
+
+        document.querySelectorAll(".archive-subtab").forEach(btn => {
+          const isCurrent = btn.dataset.archiveSubtab === activeSubtab;
+          btn.classList.toggle("bg-slate-900", isCurrent);
+          btn.classList.toggle("text-white", isCurrent);
+          btn.classList.toggle("bg-slate-100", !isCurrent);
+          btn.classList.toggle("text-slate-700", !isCurrent);
+        });
+
+        document.querySelectorAll(".archive-subpanel").forEach(panel => {
+          const isTarget = panel.id === `archive-subpanel-${activeSubtab}`;
+          panel.classList.toggle("hidden", !isTarget);
+          panel.style.display = isTarget ? "block" : "none";
+        });
+      }
 
       function activateTab(tabName) {
         document.querySelectorAll(".tab-btn").forEach(b => {
@@ -1208,11 +1229,20 @@
           p.classList.toggle("hidden", !isTarget);
           p.style.display = isTarget ? "block" : "none";
         });
+        if (tabName === "archives") {
+          syncActiveArchiveSubpanel();
+        }
       }
 
       document.querySelectorAll(".tab-btn").forEach(btn => {
         btn.addEventListener("click", () => {
           activateTab(btn.dataset.tab);
+        });
+      });
+
+      document.querySelectorAll(".archive-subtab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          syncActiveArchiveSubpanel(btn.dataset.archiveSubtab);
         });
       });
 
@@ -1293,6 +1323,5 @@
       clearTimeout(bootTimer);
       showErrorOnLoading(err.message || "Failed to load JS modules.");
     }
-  </script>
-</body>
+  </script></body>
 </html>
