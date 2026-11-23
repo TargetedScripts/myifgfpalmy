@@ -83,6 +83,7 @@
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="care">🌱 Care & Growth</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="disciples">Disciples (360°)</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="content">📖 Content Studio</button>
+          <button id="nav-curriculum" class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="curriculum">🎓 Curriculum</button>
           <button id="nav-archives" class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="archives">🗂️ Media & Services</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roles">Roles</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="departments">Departments</button>
@@ -426,13 +427,130 @@
         </div>
       </section>
 
-      <!-- TAB NEW: MEDIA & SERVICES (SUNDAY SERVICE ARCHIVE) -->
+      <!-- TAB CURRICULUM (PREACHER SERMON GUIDELINE: MONTHLY & WEEKLY THEMES) -->
+      <section id="panel-curriculum" class="tab-panel hidden space-y-4">
+        <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">CURRICULUM • PREACHER SERMON GUIDELINE (2026 & 2027)</span>
+            <h2 class="text-lg font-bold">Monthly & Weekly Themes for Preachers</h2>
+            <p class="text-xs text-slate-300">Guideline penyusunan khotbah pembicara (terpisah dari publikasi website & newsletter di Media & Services)</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <button type="button" id="curr-seed-2026-btn" class="px-3.5 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition">
+              ⚡ Seed 2026 (Jan–Dec)
+            </button>
+            <button type="button" id="curr-seed-2027-btn" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-xl transition">
+              ⚡ Seed 2027 (Months + Sundays)
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="curr-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold" data-curr-subtab="monthly">
+              📅 Monthly Themes
+            </button>
+          </div>
+          <select id="curr-year-filter" class="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800">
+            <option value="ALL">All Years (2026 & 2027)</option>
+            <option value="2026">2026 (Align in Promise)</option>
+            <option value="2027">2027 (Align in Purpose)</option>
+          </select>
+        </div>
+
+        <div id="curr-subpanel-monthly" class="curr-subpanel grid grid-cols-1 lg:grid-cols-3 gap-4 text-xs">
+          <!-- FORM ADD / EDIT MONTHLY THEME -->
+          <form id="form-curr-monthly" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 h-fit">
+            <div class="flex items-center justify-between">
+              <h3 id="curr-form-title" class="font-bold text-sm text-slate-900">➕ Add / Edit Monthly Theme (Preacher Guideline)</h3>
+              <button type="button" id="curr-reset-btn" class="text-[11px] font-semibold text-slate-500 hover:text-slate-800">Reset</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="font-semibold text-slate-600">Month Key (YYYY-MM) *</label>
+                <input type="text" id="curr-month-key" required placeholder="2027-01" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5 font-mono" />
+              </div>
+              <div>
+                <label class="font-semibold text-slate-600">Month Name</label>
+                <input type="text" id="curr-month-name" placeholder="January" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
+              </div>
+            </div>
+
+            <div>
+              <label class="font-semibold text-slate-600">Phase / Series</label>
+              <input type="text" id="curr-phase" placeholder="FASE 1: SEE (Jan–Apr 2027)" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
+            </div>
+
+            <div>
+              <label class="font-semibold text-slate-600">Monthly Theme Title *</label>
+              <input type="text" id="curr-title" required placeholder="GOD SEES OUR CRY" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5 font-semibold" />
+            </div>
+
+            <div>
+              <label class="font-semibold text-slate-600">Subtitle / Focus</label>
+              <input type="text" id="curr-subtitle" placeholder="Tuhan Melihat & Mendengar Seruan Umat-Nya" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="font-semibold text-slate-600">Passages</label>
+                <input type="text" id="curr-passages" placeholder="Keluaran 1–3" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
+              </div>
+              <div>
+                <label class="font-semibold text-slate-600">Scripture</label>
+                <input type="text" id="curr-scripture" placeholder="Keluaran 1–3" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
+              </div>
+            </div>
+
+            <div>
+              <label class="font-semibold text-slate-600">Synopsis</label>
+              <textarea id="curr-synopsis" rows="3" placeholder="Ringkasan tema bulanan..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5"></textarea>
+            </div>
+
+            <div>
+              <label class="font-semibold text-slate-600">Preacher Sermon Guideline</label>
+              <textarea id="curr-preacher-guide" rows="2" placeholder="Arahan penyusunan khotbah bagi pembicara..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="font-semibold text-slate-600">Topic / Pillar</label>
+                <input type="text" id="curr-topic" placeholder="Compassionate Awareness" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
+              </div>
+              <div>
+                <label class="font-semibold text-slate-600">Keyword</label>
+                <input type="text" id="curr-keyword" placeholder="Planning, Reflection" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
+              </div>
+            </div>
+
+            <div>
+              <label class="font-semibold text-slate-600">Notable Events</label>
+              <input type="text" id="curr-events" placeholder="Christmas, End of Year" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
+            </div>
+
+            <div class="pt-1 flex items-center justify-between gap-2">
+              <span id="curr-status" class="text-[11px] font-semibold text-emerald-700"></span>
+              <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
+                💾 Save Theme
+              </button>
+            </div>
+          </form>
+
+          <!-- DAFTAR MONTHLY THEMES -->
+          <div class="lg:col-span-2 space-y-2.5">
+            <div id="curr-monthly-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB NEW: MEDIA & SERVICES (WEBSITE & NEWSLETTER PUBLICATION) -->
       <section id="panel-archives" class="tab-panel hidden space-y-4">
         <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">MEDIA & SERVICES</span>
+            <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">MEDIA & SERVICES • WEBSITE & NEWSLETTER</span>
             <h2 class="text-lg font-bold">Sunday Service Archive & Media</h2>
-            <p class="text-xs text-slate-300">Kelola arsip ibadah Minggu (<code class="font-mono text-amber-300">sunday_services</code>): tanggal, judul khotbah, pembicara, tautan YouTube, tautan post & poster</p>
+            <p class="text-xs text-slate-300">Kelola publikasi website & newsletter (<code class="font-mono text-amber-300">sunday_services</code>): tanggal, judul khotbah, pembicara, tautan YouTube, tautan post & poster</p>
           </div>
         </div>
 
@@ -813,6 +931,7 @@
       const { initRosterEngine } = await import("./js/ui-roster.js");
       const { initPublicPortal, initMemberSelfService } = await import("./js/ui-portal.js");
       const { initCareModule } = await import("./js/ui-care.js");
+      const { initCurriculumTab } = await import("./js/ui-curriculum.js");
       const { initMediaServicesTab } = await import("./js/service-archives-tab.js");
 
       document.querySelectorAll(".tab-btn").forEach(btn => {
@@ -871,6 +990,7 @@
           if (isAdminOrCoord) {
             await initMasterApp(profile);
             await initContentStudio();
+            await initCurriculumTab();
             await initRosterEngine(profile);
             await initCareModule();
           } else if (isDeptLead) {
