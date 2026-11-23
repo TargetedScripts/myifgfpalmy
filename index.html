@@ -1051,8 +1051,12 @@
           : "Error: " + res.message;
       });
 
-      await initPublicPortal();
-      initMediaServicesTab();
+      await initPublicPortal().catch(err => console.warn("initPublicPortal error:", err));
+      try {
+        initMediaServicesTab();
+      } catch (err) {
+        console.warn("initMediaServicesTab error:", err);
+      }
 
       initAuthObserver(
         async (profile) => {
@@ -1067,7 +1071,7 @@
           document.getElementById("user-name-badge").textContent = profile.displayName;
           document.getElementById("user-role-badge").textContent = profile.accessLevel.toUpperCase();
 
-          await initMemberSelfService(profile);
+          await initMemberSelfService(profile).catch(err => console.warn("initMemberSelfService error:", err));
 
           const isAdminOrCoord = profile.accessLevel === "super_admin" || profile.accessLevel === "coordinator";
           const isDeptLead =
@@ -1082,13 +1086,13 @@
           });
 
           if (isAdminOrCoord) {
-            await initMasterApp(profile);
-            await initContentStudio();
-            await initCurriculumTab();
-            await initRosterEngine(profile);
-            await initCareModule();
+            await initMasterApp(profile).catch(err => console.warn("initMasterApp error:", err));
+            await initContentStudio().catch(err => console.warn("initContentStudio error:", err));
+            await initCurriculumTab().catch(err => console.warn("initCurriculumTab error:", err));
+            await initRosterEngine(profile).catch(err => console.warn("initRosterEngine error:", err));
+            await initCareModule().catch(err => console.warn("initCareModule error:", err));
           } else if (isDeptLead) {
-            await initRosterEngine(profile);
+            await initRosterEngine(profile).catch(err => console.warn("initRosterEngine error:", err));
           }
         },
         () => {
