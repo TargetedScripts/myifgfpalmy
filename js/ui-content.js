@@ -83,6 +83,13 @@ function computeEditorDateLabels(startDateStr) {
   return { date_label, header_date };
 }
 
+function findRealSubtabBar() {
+  const anySubtab = document.querySelector(
+    ".content-subtab[data-subtab='weekly'], .content-subtab[data-subtab='monthly'], .content-subtab"
+  );
+  return anySubtab ? anySubtab.parentElement : null;
+}
+
 function switchToSubtab(subtabName) {
   document.querySelectorAll(".content-subtab").forEach(b => {
     b.classList.remove("bg-slate-900", "text-white");
@@ -93,7 +100,10 @@ function switchToSubtab(subtabName) {
     }
   });
   document.querySelectorAll(".content-subpanel").forEach(p => p.classList.add("hidden"));
-  document.getElementById(`subpanel-${subtabName}`)?.classList.remove("hidden");
+  const targetPanel = document.getElementById(`subpanel-${subtabName}`);
+  if (targetPanel) {
+    targetPanel.classList.remove("hidden");
+  }
 }
 
 function ensureWeeklyPosterFields() {
@@ -125,116 +135,8 @@ function ensureWeeklyPosterFields() {
   if (modalHeading) modalHeading.id = "modal-weekly-title";
 }
 
-function ensureSundayServiceArchiveTabUI() {
-  const subtabBar = document.querySelector(".content-subtab")?.parentElement;
-  const subtabContainer = subtabBar?.parentElement;
-  if (!subtabBar || !subtabContainer || document.getElementById("subpanel-sunday-archive")) return;
-
-  const tabBtn = document.createElement("button");
-  tabBtn.type = "button";
-  tabBtn.className = "content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold";
-  tabBtn.dataset.subtab = "sunday-archive";
-  tabBtn.textContent = "🎬 Sunday Service Archive";
-  subtabBar.appendChild(tabBtn);
-
-  const panel = document.createElement("div");
-  panel.id = "subpanel-sunday-archive";
-  panel.className = "content-subpanel hidden space-y-5 text-xs mb-4";
-  panel.innerHTML = `
-    <!-- TOP: INQUIRY & SAVED ARCHIVE LIST -->
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 class="font-bold text-sm text-slate-900">🗂️ Sunday Service Archive Inquiry</h3>
-          <p class="text-[11px] text-slate-500">Inquiry, search, edit, or delete saved Sunday services in <code class="font-mono">sunday_services</code> (date, sermon title, preacher, YouTube link, post link, poster image link).</p>
-        </div>
-        <span id="ssa-count-badge" class="text-xs font-semibold text-slate-500"></span>
-      </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-        <input
-          type="text"
-          id="ssa-search-input"
-          placeholder="Search date, sermon title, preacher, link..."
-          class="sm:col-span-2 px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
-        />
-        <select id="ssa-status-filter" class="px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white">
-          <option value="ALL">All Status</option>
-          <option value="PUBLISHED">Published Only</option>
-          <option value="DRAFT">Draft Only</option>
-        </select>
-      </div>
-
-      <div id="ssa-archive-list" class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1"></div>
-    </div>
-
-    <!-- BOTTOM: ADD / EDIT FORM -->
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-      <div class="flex items-center justify-between gap-2">
-        <div>
-          <h3 id="ssa-form-heading" class="font-bold text-sm text-slate-900">➕ Add Sunday Service Archive</h3>
-          <p class="text-[11px] text-slate-500">Create a new Sunday Service archive entry or click <strong>Edit</strong> above to update an existing record.</p>
-        </div>
-        <button type="button" id="ssa-btn-reset" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs">
-          New Entry
-        </button>
-      </div>
-
-      <form id="ssa-archive-form" class="space-y-3">
-        <input type="hidden" id="ssa-edit-id" value="" />
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label class="font-semibold text-slate-700">Service Date *</label>
-            <input type="date" id="ssa-date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
-          </div>
-          <div>
-            <label class="font-semibold text-slate-700">Sermon Title *</label>
-            <input type="text" id="ssa-title" required placeholder="Sermon title" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1 font-semibold" />
-          </div>
-          <div>
-            <label class="font-semibold text-slate-700">Preacher / Speaker *</label>
-            <input type="text" id="ssa-speaker" required placeholder="Preacher / speaker name" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label class="font-semibold text-slate-700">YouTube Link</label>
-            <input type="url" id="ssa-youtube" placeholder="https://www.youtube.com/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
-          </div>
-          <div>
-            <label class="font-semibold text-slate-700">Post Link</label>
-            <input type="url" id="ssa-post" placeholder="https://ifgfpalmy.org/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
-          </div>
-          <div>
-            <label class="font-semibold text-slate-700">Poster Image Link *</label>
-            <input type="url" id="ssa-poster" required placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
-          </div>
-        </div>
-
-        <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="ssa-published" checked class="rounded border-slate-300" />
-            <span class="font-semibold text-slate-700">Published</span>
-          </label>
-
-          <div class="flex items-center gap-3">
-            <span id="ssa-status-msg" class="text-xs font-semibold text-emerald-700"></span>
-            <button type="submit" id="ssa-btn-save" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
-              💾 Save Archive
-            </button>
-          </div>
-        </div>
-      </form>
-    </div>
-  `;
-
-  subtabContainer.parentElement.insertBefore(panel, subtabContainer);
-}
-
 function ensureCurriculumTabUI() {
-  const subtabBar = document.querySelector(".content-subtab")?.parentElement;
+  const subtabBar = findRealSubtabBar();
   const subtabContainer = subtabBar?.parentElement;
   if (!subtabBar || !subtabContainer || document.getElementById("subpanel-curriculum")) return;
 
@@ -367,7 +269,7 @@ function ensureCurriculumTabUI() {
 }
 
 function ensureSermonArchivesTabUI() {
-  const subtabBar = document.querySelector(".content-subtab")?.parentElement;
+  const subtabBar = findRealSubtabBar();
   const mediaPanel = document.getElementById("subpanel-media");
   if (!subtabBar || !mediaPanel || document.getElementById("subpanel-sermons")) return;
 
@@ -559,7 +461,7 @@ function ensureMonthlyCompassTabUI() {
 }
 
 function ensureEditorsInsightTabUI() {
-  const subtabBar = document.querySelector(".content-subtab")?.parentElement;
+  const subtabBar = findRealSubtabBar();
   const mediaPanel = document.getElementById("subpanel-media");
   if (!subtabBar || !mediaPanel || document.getElementById("subpanel-editors")) return;
 
@@ -656,7 +558,7 @@ function ensureDailyReflectionGeneratorUI() {
 }
 
 function ensureSundayServicesStudioUI() {
-  const subtabBar = document.querySelector(".content-subtab")?.parentElement;
+  const subtabBar = findRealSubtabBar();
   const mediaPanel = document.getElementById("subpanel-media");
   if (!subtabBar || !mediaPanel || document.getElementById("subpanel-sunday")) return;
 
@@ -687,7 +589,7 @@ function ensureSundayServicesStudioUI() {
         <h3 class="font-bold text-sm text-slate-900">🎬 Sunday Service Poster & Cinema Data</h3>
         <button type="button" id="btn-reset-sunday-service" class="text-[11px] text-slate-500 hover:underline">New Entry</button>
       </div>
-      <p class="text-[11px] text-slate-500">Manage <code class="font-mono">sunday_services</code> collection for cinema gallery on <code class="font-mono">ifgfpalmy.org</code>[cite: 1, 3].</p>
+      <p class="text-[11px] text-slate-500">Manage <code class="font-mono">sunday_services</code> collection for cinema gallery on <code class="font-mono">ifgfpalmy.org</code>.</p>
 
       <form id="form-sunday-service" class="space-y-2.5">
         <input type="hidden" id="ss-edit-id" value="" />
@@ -737,6 +639,111 @@ function ensureSundayServicesStudioUI() {
   `;
 
   mediaPanel.parentElement.appendChild(panel);
+}
+
+function ensureSundayServiceArchiveTabUI() {
+  const subtabBar = findRealSubtabBar();
+  if (!subtabBar || document.getElementById("subpanel-sunday-archive")) return;
+
+  const tabBtn = document.createElement("button");
+  tabBtn.type = "button";
+  tabBtn.className = "content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold";
+  tabBtn.dataset.subtab = "sunday-archive";
+  tabBtn.textContent = "🎬 Sunday Service Archive";
+  subtabBar.appendChild(tabBtn);
+
+  const panel = document.createElement("div");
+  panel.id = "subpanel-sunday-archive";
+  panel.className = "content-subpanel hidden space-y-5 text-xs mt-4";
+  panel.innerHTML = `
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 class="font-bold text-sm text-slate-900">🗂️ Sunday Service Archive Inquiry</h3>
+          <p class="text-[11px] text-slate-500">Inquiry, search, edit, or delete saved Sunday services in <code class="font-mono">sunday_services</code> (date, sermon title, preacher, YouTube link, post link, poster image link).</p>
+        </div>
+        <span id="ssa-count-badge" class="text-xs font-semibold text-slate-500"></span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+        <input
+          type="text"
+          id="ssa-search-input"
+          placeholder="Search date, sermon title, preacher, link..."
+          class="sm:col-span-2 px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
+        />
+        <select id="ssa-status-filter" class="px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white">
+          <option value="ALL">All Status</option>
+          <option value="PUBLISHED">Published Only</option>
+          <option value="DRAFT">Draft Only</option>
+        </select>
+      </div>
+
+      <div id="ssa-archive-list" class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1"></div>
+    </div>
+
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <h3 id="ssa-form-heading" class="font-bold text-sm text-slate-900">➕ Add Sunday Service Archive</h3>
+          <p class="text-[11px] text-slate-500">Create a new Sunday Service archive entry or click <strong>Edit</strong> above to update an existing record.</p>
+        </div>
+        <button type="button" id="ssa-btn-reset" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs">
+          New Entry
+        </button>
+      </div>
+
+      <form id="ssa-archive-form" class="space-y-3">
+        <input type="hidden" id="ssa-edit-id" value="" />
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-semibold text-slate-700">Service Date *</label>
+            <input type="date" id="ssa-date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-700">Sermon Title *</label>
+            <input type="text" id="ssa-title" required placeholder="Sermon title" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1 font-semibold" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-700">Preacher / Speaker *</label>
+            <input type="text" id="ssa-speaker" required placeholder="Preacher / speaker name" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-semibold text-slate-700">YouTube Link</label>
+            <input type="url" id="ssa-youtube" placeholder="https://www.youtube.com/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-700">Post Link</label>
+            <input type="url" id="ssa-post" placeholder="https://ifgfpalmy.org/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-700">Poster Image Link *</label>
+            <input type="url" id="ssa-poster" required placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="ssa-published" checked class="rounded border-slate-300" />
+            <span class="font-semibold text-slate-700">Published</span>
+          </label>
+
+          <div class="flex items-center gap-3">
+            <span id="ssa-status-msg" class="text-xs font-semibold text-emerald-700"></span>
+            <button type="submit" id="ssa-btn-save" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
+              💾 Save Archive
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  `;
+
+  subtabBar.insertAdjacentElement("afterend", panel);
 }
 
 function setArchiveStatus(msg, isError = false) {
@@ -1476,10 +1483,24 @@ function runBundleParse() {
 }
 
 function bindContentEvents() {
-  document.querySelectorAll(".content-subtab").forEach(btn => {
-    btn.addEventListener("click", () => {
-      switchToSubtab(btn.dataset.subtab);
+  const subtabBar = findRealSubtabBar();
+  if (subtabBar && !subtabBar.dataset.subtabBound) {
+    subtabBar.dataset.subtabBound = "1";
+    subtabBar.addEventListener("click", (e) => {
+      const btn = e.target.closest(".content-subtab");
+      if (btn && btn.dataset.subtab) {
+        switchToSubtab(btn.dataset.subtab);
+      }
     });
+  }
+
+  document.querySelectorAll(".content-subtab").forEach(btn => {
+    if (!btn.dataset.directBound) {
+      btn.dataset.directBound = "1";
+      btn.addEventListener("click", () => {
+        switchToSubtab(btn.dataset.subtab);
+      });
+    }
   });
 
   document.getElementById("ssa-search-input")?.addEventListener("input", renderSundayServiceArchive);
