@@ -280,8 +280,9 @@ async function fetchRosterSpeakerMap() {
 export function initMediaPublicationsTab() {
   const subtabButtons = document.querySelectorAll(".archive-subtab");
   const subpanels = document.querySelectorAll(".archive-subpanel");
+  let activeSubtab = "monthly-compass";
 
-  function forceShowSubpanel(target) {
+  function applySubtabVisibility(target) {
     subtabButtons.forEach(b => {
       const active = b.dataset.archiveSubtab === target;
       b.classList.toggle("bg-slate-900", active);
@@ -293,16 +294,14 @@ export function initMediaPublicationsTab() {
     subpanels.forEach(panel => {
       const isMatch = panel.id === `archive-subpanel-${target}`;
       panel.classList.toggle("hidden", !isMatch);
-      panel.style.setProperty("display", isMatch ? "block" : "none", "important");
+      panel.style.display = isMatch ? "block" : "none";
     });
   }
 
   subtabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
-      const target = btn.dataset.archiveSubtab;
-      forceShowSubpanel(target);
-      setTimeout(() => forceShowSubpanel(target), 0);
-      setTimeout(() => forceShowSubpanel(target), 80);
+      activeSubtab = btn.dataset.archiveSubtab;
+      applySubtabVisibility(activeSubtab);
     });
   });
 
@@ -345,6 +344,34 @@ export function initMediaPublicationsTab() {
   const aaPublishBtn = document.getElementById("aa-publish-btn");
 
   let currentAaData = null;
+
+  function setMcEditorVisible(visible) {
+    if (visible) {
+      activeSubtab = "monthly-compass";
+      applySubtabVisibility("monthly-compass");
+    }
+    mcEditorContainer.classList.toggle("hidden", !visible);
+    mcEditorContainer.style.display = visible ? "block" : "none";
+  }
+
+  function setAaEditorVisible(visible) {
+    if (visible) {
+      activeSubtab = "annual-anchor";
+      applySubtabVisibility("annual-anchor");
+    }
+    aaEditorContainer.classList.toggle("hidden", !visible);
+    aaEditorContainer.style.display = visible ? "block" : "none";
+  }
+
+  // Jaga agar panel subtab aktif tidak tersembunyi oleh script eksternal saat DOM berubah
+  const panelObserver = new MutationObserver(() => {
+    const activePanel = document.getElementById(`archive-subpanel-${activeSubtab}`);
+    if (activePanel && (activePanel.classList.contains("hidden") || getComputedStyle(activePanel).display === "none")) {
+      activePanel.classList.remove("hidden");
+      activePanel.style.display = "block";
+    }
+  });
+  subpanels.forEach(p => panelObserver.observe(p, { attributes: true, attributeFilter: ["class", "style"] }));
 
   function renderMcWeeksEditor(weeks = []) {
     if (!weeks.length) {
@@ -421,16 +448,6 @@ export function initMediaPublicationsTab() {
       closing: mcClosing.value.trim() || "Kiranya Tuhan Yesus memberkati.",
       published: Boolean(mcPublishedCheck.checked)
     };
-  }
-
-  function setMcEditorVisible(visible) {
-    mcEditorContainer.classList.toggle("hidden", !visible);
-    mcEditorContainer.style.setProperty("display", visible ? "block" : "none", "important");
-    if (visible) {
-      [...mcEditorContainer.children].forEach(child => {
-        child.style.setProperty("display", "block", "important");
-      });
-    }
   }
 
   function populateMcEditor(data) {
@@ -557,16 +574,6 @@ export function initMediaPublicationsTab() {
       closing: aaClosing.value.trim() || "Kiranya Tuhan Yesus memberkati.",
       published: Boolean(aaPublishedCheck.checked)
     };
-  }
-
-  function setAaEditorVisible(visible) {
-    aaEditorContainer.classList.toggle("hidden", !visible);
-    aaEditorContainer.style.setProperty("display", visible ? "block" : "none", "important");
-    if (visible) {
-      [...aaEditorContainer.children].forEach(child => {
-        child.style.setProperty("display", "block", "important");
-      });
-    }
   }
 
   function populateAaEditor(data) {
