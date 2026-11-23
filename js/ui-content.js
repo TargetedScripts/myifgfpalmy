@@ -154,7 +154,15 @@ function ensureSermonArchivesTabUI() {
   tabBtn.dataset.subtab = "sermons";
   tabBtn.textContent = "🎙️ Sermon Archives";
   const editorsPanel = document.getElementById("subpanel-editors");
-  safeInsertBefore(subtabBar, tabBtn, editorsPanel && editorsPanel.parentNode === subtabBar ? editorsPanel : mediaPanel.parentNode === subtabBar ? mediaPanel : null);
+  safeInsertBefore(
+    subtabBar,
+    tabBtn,
+    editorsPanel && editorsPanel.parentNode === subtabBar
+      ? editorsPanel
+      : mediaPanel.parentNode === subtabBar
+      ? mediaPanel
+      : null
+  );
 
   const panel = document.createElement("div");
   panel.id = "subpanel-sermons";
@@ -681,23 +689,35 @@ export async function initContentStudio() {
 
 async function refreshContentData() {
   const [months, weeks, reflections, media, editorsInsights, sundayServices, sermonArchives] = await Promise.all([
-    getMonthlyThemes(),
-    getWeeklyInsights(),
-    getDailyReflections(),
-    getMediaGalleries(),
+    getMonthlyThemes().catch(err => {
+      console.warn("Failed to load monthly_themes:", err);
+      return [];
+    }),
+    getWeeklyInsights().catch(err => {
+      console.warn("Failed to load weekly_insights:", err);
+      return [];
+    }),
+    getDailyReflections().catch(err => {
+      console.warn("Failed to load daily_reflections:", err);
+      return [];
+    }),
+    getMediaGalleries().catch(err => {
+      console.warn("Failed to load media_galleries:", err);
+      return [];
+    }),
     getEditorsInsights().catch(err => {
-      console.error("Failed to load editors_insights:", err);
+      console.warn("Failed to load editors_insights:", err);
       setEditorStatus("Failed to load editors_insights: " + (err.message || err), true);
       return [];
     }),
     getSundayServices().catch(err => {
-      console.error("Failed to load sunday_services:", err);
+      console.warn("Failed to load sunday_services:", err);
       setSundayServiceStatus("Failed to load sunday_services: " + (err.message || err), true);
       setArchiveStatus("Failed to load sunday_services: " + (err.message || err), true);
       return [];
     }),
     getSermonArchives().catch(err => {
-      console.error("Failed to load sermon_archives:", err);
+      console.warn("Failed to load sermon_archives:", err);
       setSermonArchiveStatus("Failed to load sermon_archives: " + (err.message || err), true);
       return [];
     })
