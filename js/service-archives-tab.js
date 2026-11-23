@@ -103,8 +103,9 @@ function renderArchiveList() {
     return;
   }
 
-  listEl.innerHTML = filtered.map(item => {
+  listEl.innerHTML = filtered.map((item, idx) => {
     const isPub = item.published !== false;
+    const safeId = encodeURIComponent(String(item.id ?? idx));
     return `
       <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex items-start justify-between gap-3 text-xs">
         <div class="flex items-start gap-3 min-w-0">
@@ -129,8 +130,8 @@ function renderArchiveList() {
           </div>
         </div>
         <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
-          <button type="button" onclick="window.saEditItem('${esc(item.id)}')" class="text-xs font-semibold text-blue-600 hover:underline">Edit</button>
-          <button type="button" onclick="window.saDeleteItem('${esc(item.id)}')" class="text-xs font-semibold text-red-600 hover:underline">Delete</button>
+          <button type="button" onclick="window.saEditItem('${safeId}')" class="px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold">Edit</button>
+          <button type="button" onclick="window.saDeleteItem('${safeId}')" class="px-2.5 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 font-semibold">Delete</button>
         </div>
       </div>
     `;
@@ -208,33 +209,77 @@ export function initMediaServicesTab() {
   refreshServiceArchives();
 }
 
-window.saEditItem = (id) => {
-  const item = archiveState.items.find(x => x.id === id);
-  if (!item) return;
-  switchArchiveSubtab("sunday-archive");
+function findItemByEncodedId(encodedId) {
+  const decoded = decodeURIComponent(String(encodedId || ""));
+  return (
+    archiveState.items.find(x => String(x.id) === decoded) ||
+    archiveState.items.find(x => String(x.service_date) === decoded) ||
+    null
+  );
+}
 
-  const heading = document.getElementById("sa-tab-form-title");
-  if (heading) heading.textContent = `✏️ Edit Sunday Service Archive (${item.service_date || item.id})`;
+window.saEditItem = (encodedId) => {
+  try {
+    const item = findItemByEncodedId(encodedId);
+    if (!item) {
+      setStatus("Archive record not found. Refreshing list...", true);
+      refreshServiceArchives();
+      return;
+    }
 
-  document.getElementById("sa-tab-edit-id").value = item.id;
-  const dateInput = document.getElementById("sa-tab-date");
-  dateInput.value = item.service_date || item.id || "";
-  dateInput.setAttribute("readonly", "readonly");
-  dateInput.classList.add("bg-slate-100");
+    switchArchiveSubtab("sunday-archive");
 
-  document.getElementById("sa-tab-title").value = item.title || "";
-  document.getElementById("sa-tab-speaker").value = item.speaker || "";
-  document.getElementById("sa-tab-youtube").value = item.youtube_url || "";
-  document.getElementById("sa-tab-post").value = item.post_url || "";
-  document.getElementById("sa-tab-poster").value = item.poster_url || "";
-  document.getElementById("sa-tab-published").checked = item.published !== false;
-  setStatus(`Editing ${item.service_date || item.id}`);
+    const heading = document.getElementById("sa-tab-form-title");
+    if (heading) heading.textContent = `✏️ Edit Sunday Service Archive (${item.service_date || item.id})`;
+
+    const idEl = document.getElementById("sa-tab-edit-id");
+    if (idEl) idEl.value = item.id ?? item.service_date ?? "";
+
+    const dateInput = document.getElementById("sa-tab-date");
+    if (dateInput) {
+      dateInput.value = item.service_date || item.id || "";
+      dateInput.setAttribute("readonly", "readonly");
+      dateInput.classList.add("bg-slate-100");
+    }
+
+    const titleInput = document.getElementById("sa-tab-title");
+    if (titleInput) titleInput.value = item.title || "";
+
+    const speakerInput = document.getElementById("sa-tab-speaker");
+    if (speakerInput) speakerInput.value = item.speaker || "";
+
+    const ytInput = document.getElementById("sa-tab-youtube");
+    if (ytInput) ytInput.value = item.youtube_url || "";
+
+    const postInput = document.getElementById("sa-tab-post");
+    if (postInput) postInput.value = item.post_url || "";
+
+    const posterInput = document.getElementById("sa-tab-poster");
+    if (posterInput) posterInput.value = item.poster_url || "";
+
+    const pubInput = document.getElementById("sa-tab-published");
+    if (pubInput) pubInput.checked = item.published !== false;
+
+    setStatus(`Editing ${item.service_date || item.id}`);
+
+    const formEl = document.getElementById("sa-tab-form");
+    if (formEl) {
+      formEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    setTimeout(() => titleInput?.focus(), 200);
+  } catch (err) {
+    console.error("saEditItem error:", err);
+    setStatus("Error opening edit form: " + (err?.message || err), true);
+  }
 };
 
-window.saDeleteItem = async (id) => {
+window.saDeleteItem = async (encodedId) => {
+  const item = findItemByEncodedId(encodedId);
+  const targetId = item?.id ?? decodeURIComponent(String(encodedId || ""));
+  if (!targetId) return;
   if (!confirm("Delete this Sunday Service archive from Firestore?")) return;
   try {
-    await deleteSundayService(id);
+    await deleteSundayService(targetId);
     await refreshServiceArchives();
     await initPublicPortal();
     setStatus("Archive deleted.");
