@@ -8,7 +8,8 @@ import { initPublicPortal } from "./ui-portal.js";
 
 let archiveState = {
   items: [],
-  activeSubtab: "sunday-archive"
+  activeSubtab: "sunday-archive",
+  bound: false
 };
 
 function esc(str = "") {
@@ -17,27 +18,6 @@ function esc(str = "") {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function findMainNavBar() {
-  const knownTab = Array.from(document.querySelectorAll("button, a")).find(el => {
-    const txt = (el.textContent || "").trim();
-    return txt.includes("Sunday Roster") || txt.includes("Care & Growth") || txt.includes("Content Studio");
-  });
-  return knownTab ? knownTab.parentElement : null;
-}
-
-function findMainPanelsContainer() {
-  const navBar = findMainNavBar();
-  if (!navBar) return null;
-  let sibling = navBar.nextElementSibling;
-  while (sibling) {
-    if (sibling.children && sibling.children.length >= 2) {
-      return sibling;
-    }
-    sibling = sibling.nextElementSibling;
-  }
-  return navBar.parentElement;
 }
 
 function setStatus(msg, isError = false) {
@@ -84,15 +64,15 @@ function resetForm() {
 
 function switchArchiveSubtab(subtabKey) {
   archiveState.activeSubtab = subtabKey;
-  document.querySelectorAll(".sa-subtab-btn").forEach(btn => {
-    const active = btn.dataset.saSubtab === subtabKey;
+  document.querySelectorAll(".archive-subtab").forEach(btn => {
+    const active = btn.dataset.archiveSubtab === subtabKey;
     btn.className = active
-      ? "sa-subtab-btn px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-900 text-white"
-      : "sa-subtab-btn px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200";
+      ? "archive-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold"
+      : "archive-subtab bg-slate-100 text-slate-700 hover:bg-slate-200 px-3.5 py-2 rounded-lg text-xs font-semibold";
   });
 
-  document.querySelectorAll(".sa-subpanel").forEach(panel => {
-    panel.classList.toggle("hidden", panel.dataset.saPanel !== subtabKey);
+  document.querySelectorAll(".archive-subpanel").forEach(panel => {
+    panel.classList.toggle("hidden", panel.id !== `archive-subpanel-${subtabKey}`);
   });
 }
 
@@ -126,10 +106,10 @@ function renderArchiveList() {
   listEl.innerHTML = filtered.map(item => {
     const isPub = item.published !== false;
     return `
-      <div class="p-3.5 rounded-xl border border-slate-200 bg-white shadow-sm flex items-start justify-between gap-3 text-xs">
+      <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex items-start justify-between gap-3 text-xs">
         <div class="flex items-start gap-3 min-w-0">
           ${item.poster_url
-            ? `<img src="${esc(item.poster_url)}" alt="${esc(item.title || "")}" class="w-14 h-20 object-cover rounded-lg border border-slate-200 bg-slate-100 shrink-0" />`
+            ? `<img src="${esc(item.poster_url)}" alt="${esc(item.title || "")}" class="w-14 h-20 object-cover rounded-lg border border-slate-200 bg-white shrink-0" />`
             : `<div class="w-14 h-20 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 shrink-0 text-center px-1">No Poster</div>`
           }
           <div class="min-w-0 space-y-1">
@@ -168,173 +148,29 @@ export async function refreshServiceArchives() {
   }
 }
 
-function activateMainTab(mainTabBtn, mainViewEl) {
-  const navBar = findMainNavBar();
-  if (navBar) {
-    navBar.querySelectorAll("button, a").forEach(btn => {
-      if (btn === mainTabBtn) {
-        btn.classList.remove("bg-white", "text-slate-700", "border", "border-slate-200");
-        btn.classList.add("bg-slate-900", "text-white");
-      } else {
-        btn.classList.remove("bg-slate-900", "text-white");
-      }
-    });
-  }
-
-  const panelsParent = findMainPanelsContainer();
-  if (panelsParent) {
-    Array.from(panelsParent.children).forEach(child => {
-      if (child !== navBar && child !== mainViewEl) {
-        child.classList.add("hidden");
-      }
-    });
-  }
-
-  if (mainViewEl) {
-    mainViewEl.classList.remove("hidden");
-  }
-  refreshServiceArchives();
-}
-
 export function initMediaServicesTab() {
-  const navBar = findMainNavBar();
-  const panelsParent = findMainPanelsContainer();
-  if (!navBar || !panelsParent || document.getElementById("main-view-media-services")) return;
+  if (archiveState.bound) {
+    refreshServiceArchives();
+    return;
+  }
+  archiveState.bound = true;
 
-  const mainTabBtn = document.createElement("button");
-  mainTabBtn.type = "button";
-  mainTabBtn.id = "main-tab-media-services";
-  mainTabBtn.className = "px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 transition";
-  mainTabBtn.textContent = "🗂️ Media & Services";
-  navBar.appendChild(mainTabBtn);
+  switchArchiveSubtab("sunday-archive");
 
-  const mainViewEl = document.createElement("section");
-  mainViewEl.id = "main-view-media-services";
-  mainViewEl.className = "hidden space-y-4 mt-4";
-  mainViewEl.innerHTML = `
-    <div class="bg-slate-900 text-white p-4 rounded-xl border border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-amber-400 text-slate-950 rounded">Media & Services</span>
-        <h2 class="font-bold text-base mt-1">Sunday Service Archive & Media</h2>
-        <p class="text-[11px] text-slate-300">Manage <code class="font-mono">sunday_services</code> records (date, sermon title, preacher, YouTube link, post link, poster image link).</p>
-      </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <button type="button" data-sa-subtab="sunday-archive" class="sa-subtab-btn px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-900 text-white">
-          🎬 Sunday Service Archive
-        </button>
-      </div>
-    </div>
-
-    <div data-sa-panel="sunday-archive" class="sa-subpanel space-y-5 text-xs">
-      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 class="font-bold text-sm text-slate-900">📋 Sunday Service Archive Inquiry</h3>
-            <p class="text-[11px] text-slate-500">Search, filter, edit, or delete saved Sunday Service archives.</p>
-          </div>
-          <span id="sa-tab-count" class="text-xs font-semibold text-slate-500"></span>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <input
-            type="text"
-            id="sa-tab-search"
-            placeholder="Search date, sermon title, preacher, link..."
-            class="sm:col-span-2 px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
-          />
-          <select id="sa-tab-filter" class="px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white">
-            <option value="ALL">All Status</option>
-            <option value="PUBLISHED">Published Only</option>
-            <option value="DRAFT">Draft Only</option>
-          </select>
-        </div>
-
-        <div id="sa-tab-list" class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1"></div>
-      </div>
-
-      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-        <div class="flex items-center justify-between gap-2">
-          <div>
-            <h3 id="sa-tab-form-title" class="font-bold text-sm text-slate-900">➕ Add Sunday Service Archive</h3>
-            <p class="text-[11px] text-slate-500">Save a new Sunday Service archive entry or edit an existing one.</p>
-          </div>
-          <button type="button" id="sa-tab-reset" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs">
-            New Entry
-          </button>
-        </div>
-
-        <form id="sa-tab-form" class="space-y-3">
-          <input type="hidden" id="sa-tab-edit-id" value="" />
-
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label class="font-semibold text-slate-700">Service Date *</label>
-              <input type="date" id="sa-tab-date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
-            </div>
-            <div>
-              <label class="font-semibold text-slate-700">Sermon Title *</label>
-              <input type="text" id="sa-tab-title" required placeholder="Sermon title" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1 font-semibold" />
-            </div>
-            <div>
-              <label class="font-semibold text-slate-700">Preacher / Speaker *</label>
-              <input type="text" id="sa-tab-speaker" required placeholder="Preacher / speaker name" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label class="font-semibold text-slate-700">YouTube Link</label>
-              <input type="url" id="sa-tab-youtube" placeholder="https://www.youtube.com/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
-            </div>
-            <div>
-              <label class="font-semibold text-slate-700">Post Link</label>
-              <input type="url" id="sa-tab-post" placeholder="https://ifgfpalmy.org/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
-            </div>
-            <div>
-              <label class="font-semibold text-slate-700">Poster Image Link *</label>
-              <input type="url" id="sa-tab-poster" required placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
-            </div>
-          </div>
-
-          <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" id="sa-tab-published" checked class="rounded border-slate-300" />
-              <span class="font-semibold text-slate-700">Published</span>
-            </label>
-
-            <div class="flex items-center gap-3">
-              <span id="sa-tab-status" class="text-xs font-semibold text-emerald-700"></span>
-              <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
-                💾 Save Archive
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  `;
-
-  panelsParent.appendChild(mainViewEl);
-
-  mainTabBtn.addEventListener("click", () => activateMainTab(mainTabBtn, mainViewEl));
-
-  navBar.addEventListener("click", (e) => {
-    const clicked = e.target.closest("button, a");
-    if (clicked && clicked !== mainTabBtn) {
-      mainViewEl.classList.add("hidden");
-      mainTabBtn.classList.remove("bg-slate-900", "text-white");
-    }
+  document.getElementById("nav-archives")?.addEventListener("click", () => {
+    switchArchiveSubtab(archiveState.activeSubtab || "sunday-archive");
+    refreshServiceArchives();
   });
 
-  mainViewEl.addEventListener("click", (e) => {
-    const subBtn = e.target.closest(".sa-subtab-btn");
-    if (subBtn && subBtn.dataset.saSubtab) {
-      switchArchiveSubtab(subBtn.dataset.saSubtab);
-    }
+  document.querySelectorAll(".archive-subtab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      switchArchiveSubtab(btn.dataset.archiveSubtab);
+    });
   });
 
   document.getElementById("sa-tab-search")?.addEventListener("input", renderArchiveList);
   document.getElementById("sa-tab-filter")?.addEventListener("change", renderArchiveList);
+
   document.getElementById("sa-tab-reset")?.addEventListener("click", () => {
     resetForm();
     setStatus("");
@@ -368,6 +204,8 @@ export function initMediaServicesTab() {
       alert("Failed to save Sunday Service archive: " + msg);
     }
   });
+
+  refreshServiceArchives();
 }
 
 window.saEditItem = (id) => {
