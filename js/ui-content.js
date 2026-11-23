@@ -3,7 +3,6 @@ import {
   getMonthlyThemes,
   saveMonthlyTheme,
   deleteMonthlyTheme,
-  parseMonthlyBundleRawText,
   getWeeklyInsights,
   saveWeeklyInsight,
   deleteWeeklyInsight,
@@ -52,6 +51,15 @@ function esc(str = "") {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function safeInsertBefore(parent, newNode, refNode) {
+  if (!parent || !newNode) return;
+  if (refNode && refNode.parentNode === parent) {
+    parent.insertBefore(newNode, refNode);
+  } else {
+    parent.appendChild(newNode);
+  }
 }
 
 function computeEditorDateLabels(startDateStr) {
@@ -111,7 +119,7 @@ function ensureWeeklyPosterFields() {
   if (!form || document.getElementById("wk-speaker")) return;
 
   const focusField = document.getElementById("wk-focus")?.parentElement;
-  if (!focusField) return;
+  const targetParent = focusField?.parentElement || form;
 
   const extraRow = document.createElement("div");
   extraRow.className = "grid grid-cols-1 sm:grid-cols-3 gap-2";
@@ -129,143 +137,10 @@ function ensureWeeklyPosterFields() {
       <input type="url" id="wk-youtube" placeholder="https://youtube.com/watch?v=..." class="w-full px-3 py-2 border rounded-lg" />
     </div>
   `;
-  focusField.parentElement.insertBefore(extraRow, focusField);
+  safeInsertBefore(targetParent, extraRow, focusField);
 
   const modalHeading = form.parentElement?.querySelector("h3");
-  if (modalHeading) modalHeading.id = "modal-weekly-title";
-}
-
-function ensureCurriculumTabUI() {
-  const subtabBar = findRealSubtabBar();
-  const subtabContainer = subtabBar?.parentElement;
-  if (!subtabBar || !subtabContainer || document.getElementById("subpanel-curriculum")) return;
-
-  const tabBtn = document.createElement("button");
-  tabBtn.type = "button";
-  tabBtn.className = "content-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold";
-  tabBtn.dataset.subtab = "curriculum";
-  tabBtn.textContent = "📘 Curriculum";
-  subtabBar.insertBefore(tabBtn, subtabBar.firstChild);
-
-  const panel = document.createElement("div");
-  panel.id = "subpanel-curriculum";
-  panel.className = "content-subpanel space-y-4 text-xs mb-4";
-  panel.innerHTML = `
-    <div class="bg-slate-900 text-white p-4 rounded-xl border border-slate-800 shadow-sm space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-amber-400 text-slate-950 rounded">Annual Theme</span>
-          <h3 id="curr-yearly-title" class="font-bold text-base mt-1">ALIGN IN PURPOSE — Exodus</h3>
-          <p class="text-[11px] text-slate-300">Technical curriculum (annual, monthly & weekly themes, winning points, scriptures, focus & preacher allocation).</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <input type="text" id="curr-yearly-input" value="ALIGN IN PURPOSE — Exodus" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white w-64" />
-          <button type="button" id="btn-curr-save-yearly" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs">
-            Save Annual Theme
-          </button>
-        </div>
-      </div>
-
-      <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
-        <div class="flex flex-wrap items-center gap-2">
-          <label class="text-[11px] text-slate-300 font-semibold">Select Month:</label>
-          <select id="curr-month-filter" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"></select>
-          <button type="button" id="btn-curr-new-month" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-xs">
-            + New Month
-          </button>
-          <button type="button" id="btn-curr-delete-month" class="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs">
-            🗑️ Delete Month
-          </button>
-        </div>
-        <div id="curr-preacher-allocation" class="flex flex-wrap items-center gap-1.5 text-[11px]"></div>
-      </div>
-    </div>
-
-    <div class="space-y-2.5">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h4 class="font-bold text-sm text-slate-900">📌 Weekly Curriculum, Winning Points & Preacher Allocation</h4>
-        <div class="flex items-center gap-2">
-          <span id="curr-weeks-badge" class="text-xs text-slate-500"></span>
-          <button type="button" id="btn-curr-add-week" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs">
-            + Add Week
-          </button>
-        </div>
-      </div>
-      <div id="curr-month-weeks-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-2 border-t border-slate-200">
-      <form id="curr-month-form" class="lg:col-span-5 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 h-fit">
-        <div class="flex items-center justify-between gap-2">
-          <h4 id="curr-month-form-title" class="font-bold text-sm text-slate-900">🗓️ Monthly Theme</h4>
-          <button type="button" id="btn-curr-gen-compass" class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold rounded-lg text-[11px]">
-            ✨ Send to Monthly Compass
-          </button>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div>
-            <label class="font-semibold text-slate-600">Month Key (YYYY-MM) *</label>
-            <input type="month" id="curr-m-key" value="2027-01" required class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-          </div>
-          <div>
-            <label class="font-semibold text-slate-600">Scripture / Passage</label>
-            <input type="text" id="curr-m-scripture" placeholder="e.g., Exodus 1–2 / Keluaran 1–2" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5" />
-          </div>
-        </div>
-
-        <div>
-          <label class="font-semibold text-slate-600">Monthly Theme Title *</label>
-          <input type="text" id="curr-m-title" required placeholder="e.g., Begin to See" class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5 font-semibold" />
-        </div>
-
-        <div>
-          <label class="font-semibold text-slate-600">Monthly Focus / Narrative *</label>
-          <textarea id="curr-m-narrative" rows="3" placeholder="Monthly curriculum focus..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
-        </div>
-
-        <div>
-          <label class="font-semibold text-slate-600">Technical Notes / Reflection</label>
-          <textarea id="curr-m-reflection" rows="2" placeholder="Technical notes or monthly reflection..." class="w-full px-2.5 py-1.5 border rounded-lg mt-0.5"></textarea>
-        </div>
-
-        <div class="flex items-center justify-between gap-2 pt-1">
-          <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
-            💾 Save Monthly Theme
-          </button>
-          <span id="curr-month-status" class="text-[11px] font-semibold text-emerald-700"></span>
-        </div>
-      </form>
-
-      <div class="lg:col-span-7 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 h-fit">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h4 class="font-bold text-sm text-slate-900">⚡ Smart Paste Monthly Bundle (Monthly Theme + All Weeks)</h4>
-            <p class="text-[11px] text-slate-500">Paste full monthly text with WEEK 1–5 / MINGGU 1–5; automatically extracts monthly theme and weekly items (winning points, verses, focus).</p>
-          </div>
-          <button type="button" id="btn-curr-clear-paste" class="text-[11px] text-slate-500 hover:underline">Clear</button>
-        </div>
-
-        <textarea id="curr-bundle-paste" rows="6" placeholder="Paste full monthly curriculum bundle including Week 1 ... Week 5 here..." class="w-full px-3 py-2 border border-slate-300 rounded-lg font-sans leading-relaxed"></textarea>
-
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="flex flex-wrap items-center gap-2">
-            <button type="button" id="btn-curr-parse-bundle" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg">
-              🔍 Parse Monthly Bundle
-            </button>
-            <button type="button" id="btn-curr-save-bundle" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg">
-              💾 Save Month & All Weeks
-            </button>
-          </div>
-          <span id="curr-bundle-status" class="text-[11px] font-semibold text-slate-600"></span>
-        </div>
-
-        <div id="curr-bundle-preview" class="hidden p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2"></div>
-      </div>
-    </div>
-  `;
-
-  subtabContainer.parentElement.insertBefore(panel, subtabContainer);
+  if (modalHeading && !modalHeading.id) modalHeading.id = "modal-weekly-title";
 }
 
 function ensureSermonArchivesTabUI() {
@@ -278,7 +153,8 @@ function ensureSermonArchivesTabUI() {
   tabBtn.className = "content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold";
   tabBtn.dataset.subtab = "sermons";
   tabBtn.textContent = "🎙️ Sermon Archives";
-  subtabBar.insertBefore(tabBtn, document.getElementById("subpanel-editors") ? undefined : mediaPanel);
+  const editorsPanel = document.getElementById("subpanel-editors");
+  safeInsertBefore(subtabBar, tabBtn, editorsPanel && editorsPanel.parentNode === subtabBar ? editorsPanel : mediaPanel.parentNode === subtabBar ? mediaPanel : null);
 
   const panel = document.createElement("div");
   panel.id = "subpanel-sermons";
@@ -375,7 +251,7 @@ function ensureSermonArchivesTabUI() {
     </div>
   `;
 
-  mediaPanel.parentElement.appendChild(panel);
+  mediaPanel.parentElement?.appendChild(panel);
 }
 
 function ensureMonthlyCompassTabUI() {
@@ -470,7 +346,7 @@ function ensureEditorsInsightTabUI() {
   tabBtn.className = "content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold";
   tabBtn.dataset.subtab = "editors";
   tabBtn.textContent = "✍️ Editor's Insight";
-  subtabBar.insertBefore(tabBtn, mediaPanel);
+  safeInsertBefore(subtabBar, tabBtn, mediaPanel.parentNode === subtabBar ? mediaPanel : null);
 
   const panel = document.createElement("div");
   panel.id = "subpanel-editors";
@@ -536,7 +412,7 @@ function ensureEditorsInsightTabUI() {
     </div>
   `;
 
-  mediaPanel.parentElement.appendChild(panel);
+  mediaPanel.parentElement?.appendChild(panel);
 }
 
 function ensureDailyReflectionGeneratorUI() {
@@ -554,7 +430,7 @@ function ensureDailyReflectionGeneratorUI() {
       ⚡ Draft Daily Reflection from Curriculum
     </button>
   `;
-  devForm.insertBefore(helperBar, devForm.firstChild);
+  safeInsertBefore(devForm, helperBar, devForm.firstChild);
 }
 
 function ensureSundayServicesStudioUI() {
@@ -638,7 +514,7 @@ function ensureSundayServicesStudioUI() {
     </div>
   `;
 
-  mediaPanel.parentElement.appendChild(panel);
+  mediaPanel.parentElement?.appendChild(panel);
 }
 
 function ensureSundayServiceArchiveTabUI() {
@@ -773,24 +649,6 @@ function setSundayServiceStatus(msg, isError = false) {
     : "text-[11px] font-semibold text-emerald-700";
 }
 
-function setCurrBundleStatus(msg, isError = false) {
-  const el = document.getElementById("curr-bundle-status");
-  if (!el) return;
-  el.textContent = msg;
-  el.className = isError
-    ? "text-[11px] font-semibold text-red-600"
-    : "text-[11px] font-semibold text-emerald-700";
-}
-
-function setCurrMonthStatus(msg, isError = false) {
-  const el = document.getElementById("curr-month-status");
-  if (!el) return;
-  el.textContent = msg;
-  el.className = isError
-    ? "text-[11px] font-semibold text-red-600"
-    : "text-[11px] font-semibold text-emerald-700";
-}
-
 function setMonthlyStatus(msg, isError = false) {
   const el = document.getElementById("mt-status-msg");
   if (!el) return;
@@ -811,7 +669,6 @@ function setSermonArchiveStatus(msg, isError = false) {
 
 export async function initContentStudio() {
   ensureWeeklyPosterFields();
-  ensureCurriculumTabUI();
   ensureSermonArchivesTabUI();
   ensureMonthlyCompassTabUI();
   ensureEditorsInsightTabUI();
@@ -854,9 +711,7 @@ async function refreshContentData() {
   contentState.sundayServices = sundayServices;
   contentState.sermonArchives = sermonArchives;
 
-  populateCurriculumMonthFilter();
   populateWeekSourceDropdowns();
-  renderCurriculumView();
   renderMonthlyCompassList();
   renderReflections();
   renderMedia();
@@ -867,18 +722,22 @@ async function refreshContentData() {
 }
 
 function resetArchiveForm() {
-  document.getElementById("ssa-form-heading").textContent = "➕ Add Sunday Service Archive";
-  document.getElementById("ssa-edit-id").value = "";
+  const heading = document.getElementById("ssa-form-heading");
+  if (heading) heading.textContent = "➕ Add Sunday Service Archive";
+  const editId = document.getElementById("ssa-edit-id");
+  if (editId) editId.value = "";
   const dateEl = document.getElementById("ssa-date");
-  dateEl.removeAttribute("readonly");
-  dateEl.classList.remove("bg-slate-100");
-  dateEl.value = "";
-  document.getElementById("ssa-title").value = "";
-  document.getElementById("ssa-speaker").value = "";
-  document.getElementById("ssa-youtube").value = "";
-  document.getElementById("ssa-post").value = "";
-  document.getElementById("ssa-poster").value = "";
-  document.getElementById("ssa-published").checked = true;
+  if (dateEl) {
+    dateEl.removeAttribute("readonly");
+    dateEl.classList.remove("bg-slate-100");
+    dateEl.value = "";
+  }
+  if (document.getElementById("ssa-title")) document.getElementById("ssa-title").value = "";
+  if (document.getElementById("ssa-speaker")) document.getElementById("ssa-speaker").value = "";
+  if (document.getElementById("ssa-youtube")) document.getElementById("ssa-youtube").value = "";
+  if (document.getElementById("ssa-post")) document.getElementById("ssa-post").value = "";
+  if (document.getElementById("ssa-poster")) document.getElementById("ssa-poster").value = "";
+  if (document.getElementById("ssa-published")) document.getElementById("ssa-published").checked = true;
 }
 
 function renderSundayServiceArchive() {
@@ -946,22 +805,6 @@ function getYearlyThemeFromState() {
   return contentState.months.find(m => m.yearly_theme)?.yearly_theme || "ALIGN IN PURPOSE — Exodus";
 }
 
-function populateCurriculumMonthFilter() {
-  const select = document.getElementById("curr-month-filter");
-  if (!select) return;
-  const current = select.value || contentState.months[0]?.month_key || "2027-01";
-  if (!contentState.months.length) {
-    select.innerHTML = `<option value="2027-01">2027-01 (Empty)</option>`;
-    return;
-  }
-  select.innerHTML = contentState.months
-    .map(m => `<option value="${esc(m.month_key)}">${esc(m.month_key)} — ${esc(m.title || "")}</option>`)
-    .join("");
-  select.value = contentState.months.some(m => m.month_key === current)
-    ? current
-    : contentState.months[0].month_key;
-}
-
 function populateWeekSourceDropdowns() {
   const optionsHtml = contentState.weeks.length
     ? contentState.weeks
@@ -978,115 +821,6 @@ function populateWeekSourceDropdowns() {
       sel.value = prev;
     }
   });
-}
-
-function loadMonthFormFromState(monthKey) {
-  const mObj = contentState.months.find(m => m.month_key === monthKey || m.id === monthKey);
-  document.getElementById("curr-m-key").value = mObj?.month_key || monthKey || "2027-01";
-  document.getElementById("curr-m-title").value = mObj?.title || "";
-  document.getElementById("curr-m-scripture").value = mObj?.scripture || "";
-  document.getElementById("curr-m-narrative").value = mObj?.narrative || "";
-  document.getElementById("curr-m-reflection").value = mObj?.reflection || "";
-  document.getElementById("curr-month-form-title").textContent = mObj
-    ? `🗓️ Edit Monthly Theme (${mObj.month_key})`
-    : `🗓️ New Monthly Theme (${monthKey || "2027-01"})`;
-}
-
-function renderCurriculumView() {
-  const yearlyTheme = getYearlyThemeFromState();
-  const yearlyTitleEl = document.getElementById("curr-yearly-title");
-  const yearlyInputEl = document.getElementById("curr-yearly-input");
-  if (yearlyTitleEl) yearlyTitleEl.textContent = yearlyTheme;
-  if (yearlyInputEl && document.activeElement !== yearlyInputEl) {
-    yearlyInputEl.value = yearlyTheme;
-  }
-
-  const monthKey = document.getElementById("curr-month-filter")?.value || contentState.months[0]?.month_key || "2027-01";
-  loadMonthFormFromState(monthKey);
-
-  const monthWeeks = contentState.weeks.filter(w => {
-    const wkMonth = w.month_key || (w.service_date || "").slice(0, 7);
-    return wkMonth === monthKey;
-  });
-
-  const allocBox = document.getElementById("curr-preacher-allocation");
-  if (allocBox) {
-    allocBox.innerHTML = `<span class="text-slate-400 font-semibold">Preacher Allocation:</span>` +
-      (monthWeeks.length
-        ? monthWeeks.map(w => `
-            <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-amber-300">
-              ${esc(w.week_label || w.service_date)}: <strong>${esc(w.speaker || "Unassigned")}</strong>
-            </span>
-          `).join("")
-        : `<span class="text-slate-400">No weeks</span>`);
-  }
-
-  const weeksList = document.getElementById("curr-month-weeks-list");
-  const badge = document.getElementById("curr-weeks-badge");
-  if (!weeksList) return;
-  if (badge) badge.textContent = `${monthWeeks.length} weeks in ${monthKey}`;
-
-  if (!monthWeeks.length) {
-    weeksList.innerHTML = `<div class="p-6 bg-white rounded-xl border text-center text-xs text-slate-500 col-span-full">No weekly curriculum items for <strong>${esc(monthKey)}</strong>. Use Smart Paste below or click <strong>+ Add Week</strong>.</div>`;
-    return;
-  }
-
-  weeksList.innerHTML = monthWeeks.map(w => `
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2 text-xs">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded">${esc(w.service_date)}</span>
-          <span class="font-bold text-amber-700">${esc(w.week_label || "")}</span>
-          <span class="px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded text-[10px] font-bold">
-            🎙️ Preacher: ${esc(w.speaker || "Unassigned")}
-          </span>
-          ${w.mission_application ? `<span class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">${esc(w.mission_application)}</span>` : ""}
-        </div>
-        <div class="flex items-center gap-2">
-          <button type="button" onclick="window.openWeeklyModal('${esc(w.service_date)}')" class="text-xs font-semibold text-blue-600 hover:underline">Edit / Preacher</button>
-          <button type="button" onclick="window.removeWeeklyInsightItem('${esc(w.service_date)}')" class="text-xs font-semibold text-red-600 hover:underline">Delete</button>
-        </div>
-      </div>
-
-      <h5 class="font-bold text-sm text-slate-900">${esc(w.title || "")}</h5>
-      ${w.key_verse ? `<p class="text-[11px] text-slate-700">🔑 Key Verse: <strong>${esc(w.key_verse)}</strong></p>` : ""}
-      ${w.scripture_reading ? `<p class="text-[11px] text-slate-600">📖 Scripture Reading: <strong>${esc(w.scripture_reading)}</strong></p>` : ""}
-      ${w.christ_connection ? `<p class="text-[11px] text-slate-700">🔗 Focus / Theme Link: ${esc(w.christ_connection)}</p>` : ""}
-      ${w.sermon_summary ? `<div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-[11px] text-slate-700 whitespace-pre-line"><strong>Winning Point:</strong>\n${esc(w.sermon_summary)}</div>` : ""}
-    </div>
-  `).join("");
-}
-
-function renderBundlePreview(bundle) {
-  const box = document.getElementById("curr-bundle-preview");
-  if (!box) return;
-  if (!bundle || (!bundle.monthData?.title && !bundle.weeks?.length)) {
-    box.classList.add("hidden");
-    box.innerHTML = "";
-    return;
-  }
-
-  const m = bundle.monthData;
-  const wks = bundle.weeks || [];
-
-  box.classList.remove("hidden");
-  box.innerHTML = `
-    <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-lg space-y-1">
-      <div class="font-bold text-amber-950">🗓️ Monthly Theme: ${esc(m.month_key)} — ${esc(m.title)} (${esc(m.scripture || "-")})</div>
-      ${m.narrative ? `<p class="text-[11px] text-slate-700">${esc(m.narrative)}</p>` : ""}
-    </div>
-    <div class="space-y-1.5">
-      <div class="font-bold text-slate-800">📌 Detected Weeks (${wks.length}):</div>
-      ${wks.map(w => `
-        <div class="p-2 bg-white border border-slate-200 rounded-lg text-[11px]">
-          <span class="font-mono font-bold text-slate-900">${esc(w.service_date || "NO-DATE")}</span> •
-          <span class="font-semibold text-amber-700">${esc(w.week_label)}</span> —
-          <strong>${esc(w.title)}</strong>
-          ${w.key_verse ? `<div class="text-slate-600">🔑 ${esc(w.key_verse)}</div>` : ""}
-        </div>
-      `).join("")}
-    </div>
-  `;
 }
 
 function renderMonthlyCompassList() {
@@ -1178,17 +912,17 @@ function renderSermonArchivesList() {
 }
 
 function resetSermonArchiveForm() {
-  document.getElementById("sa-form-title").textContent = "🎙️ Add / Edit Sermon Archive";
-  document.getElementById("sa-edit-id").value = "";
-  document.getElementById("sa-date").value = "";
-  document.getElementById("sa-type").value = "Sunday Service";
-  document.getElementById("sa-title").value = "";
-  document.getElementById("sa-speaker").value = "";
-  document.getElementById("sa-time").value = "10:30";
-  document.getElementById("sa-youtube").value = "";
-  document.getElementById("sa-poster").value = "";
-  document.getElementById("sa-post").value = "";
-  document.getElementById("sa-notes").value = "";
+  if (document.getElementById("sa-form-title")) document.getElementById("sa-form-title").textContent = "🎙️ Add / Edit Sermon Archive";
+  if (document.getElementById("sa-edit-id")) document.getElementById("sa-edit-id").value = "";
+  if (document.getElementById("sa-date")) document.getElementById("sa-date").value = "";
+  if (document.getElementById("sa-type")) document.getElementById("sa-type").value = "Sunday Service";
+  if (document.getElementById("sa-title")) document.getElementById("sa-title").value = "";
+  if (document.getElementById("sa-speaker")) document.getElementById("sa-speaker").value = "";
+  if (document.getElementById("sa-time")) document.getElementById("sa-time").value = "10:30";
+  if (document.getElementById("sa-youtube")) document.getElementById("sa-youtube").value = "";
+  if (document.getElementById("sa-poster")) document.getElementById("sa-poster").value = "";
+  if (document.getElementById("sa-post")) document.getElementById("sa-post").value = "";
+  if (document.getElementById("sa-notes")) document.getElementById("sa-notes").value = "";
 }
 
 function renderReflections() {
@@ -1355,37 +1089,37 @@ function renderSundayServicesList() {
 }
 
 function resetSundayServiceForm() {
-  document.getElementById("ss-edit-id").value = "";
-  document.getElementById("ss-date").value = "";
-  document.getElementById("ss-speaker").value = "";
-  document.getElementById("ss-title").value = "";
-  document.getElementById("ss-poster").value = "";
-  document.getElementById("ss-youtube").value = "";
-  document.getElementById("ss-post").value = "";
-  document.getElementById("ss-published").checked = true;
+  if (document.getElementById("ss-edit-id")) document.getElementById("ss-edit-id").value = "";
+  if (document.getElementById("ss-date")) document.getElementById("ss-date").value = "";
+  if (document.getElementById("ss-speaker")) document.getElementById("ss-speaker").value = "";
+  if (document.getElementById("ss-title")) document.getElementById("ss-title").value = "";
+  if (document.getElementById("ss-poster")) document.getElementById("ss-poster").value = "";
+  if (document.getElementById("ss-youtube")) document.getElementById("ss-youtube").value = "";
+  if (document.getElementById("ss-post")) document.getElementById("ss-post").value = "";
+  if (document.getElementById("ss-published")) document.getElementById("ss-published").checked = true;
 }
 
 function applyCompassDraftToForm(monthKey) {
   const mObj = contentState.months.find(m => m.month_key === monthKey || m.id === monthKey) || {
     month_key: monthKey,
-    title: document.getElementById("curr-m-title")?.value || "",
-    scripture: document.getElementById("curr-m-scripture")?.value || "",
-    narrative: document.getElementById("curr-m-narrative")?.value || "",
-    reflection: document.getElementById("curr-m-reflection")?.value || "",
+    title: "",
+    scripture: "",
+    narrative: "",
+    reflection: "",
     yearly_theme: getYearlyThemeFromState()
   };
   const weeksInMonth = contentState.weeks.filter(w => w.month_key === (mObj.month_key || monthKey));
   const draft = buildCompassDraftFromCurriculum(mObj, weeksInMonth);
 
-  document.getElementById("mt-key").value = draft.month_key;
-  document.getElementById("mt-phase").value = draft.phase;
-  document.getElementById("mt-title").value = draft.title;
-  document.getElementById("mt-subtitle").value = draft.subtitle;
-  document.getElementById("mt-scripture").value = draft.scripture;
-  document.getElementById("mt-pillar").value = draft.pillar;
-  document.getElementById("mt-narrative").value = draft.narrative;
-  document.getElementById("mt-reflection").value = draft.reflection;
-  document.getElementById("mt-closing").value = draft.closing;
+  if (document.getElementById("mt-key")) document.getElementById("mt-key").value = draft.month_key;
+  if (document.getElementById("mt-phase")) document.getElementById("mt-phase").value = draft.phase;
+  if (document.getElementById("mt-title")) document.getElementById("mt-title").value = draft.title;
+  if (document.getElementById("mt-subtitle")) document.getElementById("mt-subtitle").value = draft.subtitle;
+  if (document.getElementById("mt-scripture")) document.getElementById("mt-scripture").value = draft.scripture;
+  if (document.getElementById("mt-pillar")) document.getElementById("mt-pillar").value = draft.pillar;
+  if (document.getElementById("mt-narrative")) document.getElementById("mt-narrative").value = draft.narrative;
+  if (document.getElementById("mt-reflection")) document.getElementById("mt-reflection").value = draft.reflection;
+  if (document.getElementById("mt-closing")) document.getElementById("mt-closing").value = draft.closing;
   setMonthlyStatus(`Monthly Compass draft pulled from curriculum ${draft.month_key}.`);
 }
 
@@ -1399,11 +1133,11 @@ function applyEditorDraftToForm(weekDate) {
   const draft = buildEditorInsightDraftFromCurriculum(wObj, mObj);
   const labels = computeEditorDateLabels(wObj.service_date);
 
-  document.getElementById("ei-edit-id").value = wObj.service_date;
-  document.getElementById("ei-start-date").value = wObj.service_date;
-  document.getElementById("ei-edition-no").value = draft.edition_no;
-  document.getElementById("ei-date-label").value = labels.date_label || wObj.service_date;
-  document.getElementById("ei-header-date").value = labels.header_date || wObj.service_date;
+  if (document.getElementById("ei-edit-id")) document.getElementById("ei-edit-id").value = wObj.service_date;
+  if (document.getElementById("ei-start-date")) document.getElementById("ei-start-date").value = wObj.service_date;
+  if (document.getElementById("ei-edition-no")) document.getElementById("ei-edition-no").value = draft.edition_no;
+  if (document.getElementById("ei-date-label")) document.getElementById("ei-date-label").value = labels.date_label || wObj.service_date;
+  if (document.getElementById("ei-header-date")) document.getElementById("ei-header-date").value = labels.header_date || wObj.service_date;
 
   const paras = [...draft.paragraphs];
   if (paras.length > 0 && draft.sticky_hook) {
@@ -1417,7 +1151,7 @@ function applyEditorDraftToForm(weekDate) {
     "God Bless You."
   ].filter(Boolean).join("\n\n");
 
-  document.getElementById("ei-raw-text").value = rawText;
+  if (document.getElementById("ei-raw-text")) document.getElementById("ei-raw-text").value = rawText;
   runEditorInsightParse();
   setEditorStatus(`Editor's Insight draft generated from week ${wObj.service_date}.`);
 }
@@ -1429,11 +1163,11 @@ function applyReflectionDraftToForm(weekDate) {
   const currentDateVal = document.getElementById("dev-date")?.value || wObj.service_date;
   const draft = buildDailyReflectionDraftFromCurriculum(wObj, mObj, currentDateVal);
 
-  document.getElementById("dev-date").value = draft.reflection_date;
-  document.getElementById("dev-title").value = draft.title;
-  document.getElementById("dev-verse").value = draft.scripture;
-  document.getElementById("dev-body").value = draft.reflection;
-  document.getElementById("dev-prayer").value = draft.prayer;
+  if (document.getElementById("dev-date")) document.getElementById("dev-date").value = draft.reflection_date;
+  if (document.getElementById("dev-title")) document.getElementById("dev-title").value = draft.title;
+  if (document.getElementById("dev-verse")) document.getElementById("dev-verse").value = draft.scripture;
+  if (document.getElementById("dev-body")) document.getElementById("dev-body").value = draft.reflection;
+  if (document.getElementById("dev-prayer")) document.getElementById("dev-prayer").value = draft.prayer;
 }
 
 function runEditorInsightParse() {
@@ -1454,32 +1188,6 @@ function runEditorInsightParse() {
   contentState.parsedDraft = parsed;
   renderParsedPreview(parsed);
   return parsed;
-}
-
-function runBundleParse() {
-  const rawText = document.getElementById("curr-bundle-paste")?.value || "";
-  const fallbackMonth = document.getElementById("curr-month-filter")?.value || "2027-01";
-  if (!rawText.trim()) {
-    setCurrBundleStatus("Please paste monthly bundle text first.", true);
-    return null;
-  }
-  const bundle = parseMonthlyBundleRawText(rawText, {
-    month_key: fallbackMonth,
-    yearly_theme: getYearlyThemeFromState()
-  });
-  contentState.parsedBundle = bundle;
-  contentState.parsedWeeklyDrafts = bundle.weeks || [];
-  renderBundlePreview(bundle);
-
-  if (bundle.monthData?.month_key) {
-    document.getElementById("curr-m-key").value = bundle.monthData.month_key;
-    if (bundle.monthData.title) document.getElementById("curr-m-title").value = bundle.monthData.title;
-    if (bundle.monthData.scripture) document.getElementById("curr-m-scripture").value = bundle.monthData.scripture;
-    if (bundle.monthData.narrative) document.getElementById("curr-m-narrative").value = bundle.monthData.narrative;
-  }
-
-  setCurrBundleStatus(`Parsed ${bundle.monthData.month_key} (${bundle.monthData.title || "-"}) and ${(bundle.weeks || []).length} weeks.`);
-  return bundle;
 }
 
 function bindContentEvents() {
@@ -1540,153 +1248,21 @@ function bindContentEvents() {
     }
   });
 
-  document.getElementById("btn-curr-save-yearly")?.addEventListener("click", async () => {
-    const newYearly = (document.getElementById("curr-yearly-input")?.value || "").trim();
-    if (!newYearly) return;
-    try {
-      for (const m of contentState.months) {
-        await saveMonthlyTheme(m.month_key || m.id, { ...m, yearly_theme: newYearly });
-      }
-      await refreshContentData();
-      setCurrMonthStatus(`Annual theme updated: ${newYearly}`);
-    } catch (err) {
-      setCurrMonthStatus("Failed to save annual theme: " + (err?.message || err), true);
-    }
-  });
-
-  document.getElementById("curr-month-filter")?.addEventListener("change", renderCurriculumView);
-
-  document.getElementById("btn-curr-new-month")?.addEventListener("click", () => {
-    document.getElementById("curr-month-form-title").textContent = "🗓️ New Monthly Theme";
-    document.getElementById("curr-m-key").value = "2027-02";
-    document.getElementById("curr-m-title").value = "";
-    document.getElementById("curr-m-scripture").value = "";
-    document.getElementById("curr-m-narrative").value = "";
-    document.getElementById("curr-m-reflection").value = "";
-    setCurrMonthStatus("");
-  });
-
-  document.getElementById("btn-curr-delete-month")?.addEventListener("click", async () => {
-    const monthKey = document.getElementById("curr-m-key")?.value || document.getElementById("curr-month-filter")?.value;
-    if (!monthKey) return;
-    const relatedWeeks = contentState.weeks.filter(w => (w.month_key || (w.service_date || "").slice(0, 7)) === monthKey);
-    if (!confirm(`Delete monthly theme ${monthKey} and ${relatedWeeks.length} linked weeks?`)) return;
-
-    try {
-      await deleteMonthlyTheme(monthKey);
-      for (const w of relatedWeeks) {
-        await deleteWeeklyInsight(w.service_date || w.id);
-      }
-      await refreshContentData();
-      await initPublicPortal();
-      setCurrMonthStatus(`Deleted ${monthKey} and ${relatedWeeks.length} weeks.`);
-    } catch (err) {
-      setCurrMonthStatus("Failed to delete month: " + (err?.message || err), true);
-    }
-  });
-
-  document.getElementById("curr-month-form")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const monthKey = document.getElementById("curr-m-key").value.trim();
-    if (!monthKey) return;
-    const existing = contentState.months.find(m => m.month_key === monthKey || m.id === monthKey);
-    const payload = {
-      ...(existing || {}),
-      month_key: monthKey,
-      yearly_theme: existing?.yearly_theme || getYearlyThemeFromState(),
-      title: document.getElementById("curr-m-title").value.trim(),
-      scripture: document.getElementById("curr-m-scripture").value.trim(),
-      narrative: document.getElementById("curr-m-narrative").value.trim(),
-      reflection: document.getElementById("curr-m-reflection").value.trim(),
-      status: "Published"
-    };
-
-    try {
-      await saveMonthlyTheme(monthKey, payload);
-      await refreshContentData();
-      document.getElementById("curr-month-filter").value = monthKey;
-      renderCurriculumView();
-      await initPublicPortal();
-      setCurrMonthStatus(`Saved (${monthKey} — ${payload.title})`);
-    } catch (err) {
-      setCurrMonthStatus("Failed to save: " + (err?.message || err), true);
-    }
-  });
-
-  document.getElementById("btn-curr-gen-compass")?.addEventListener("click", () => {
-    const monthKey = document.getElementById("curr-m-key")?.value || "2027-01";
-    switchToSubtab("monthly");
-    applyCompassDraftToForm(monthKey);
-  });
-
-  document.getElementById("btn-curr-parse-bundle")?.addEventListener("click", () => {
-    runBundleParse();
-  });
-
-  document.getElementById("btn-curr-save-bundle")?.addEventListener("click", async () => {
-    const bundle = contentState.parsedBundle || runBundleParse();
-    if (!bundle) return;
-
-    const monthKey = document.getElementById("curr-m-key").value.trim() || bundle.monthData?.month_key || "2027-01";
-    const monthPayload = {
-      month_key: monthKey,
-      yearly_theme: getYearlyThemeFromState(),
-      title: document.getElementById("curr-m-title").value.trim() || bundle.monthData?.title || `Theme ${monthKey}`,
-      scripture: document.getElementById("curr-m-scripture").value.trim() || bundle.monthData?.scripture || "",
-      narrative: document.getElementById("curr-m-narrative").value.trim() || bundle.monthData?.narrative || "",
-      reflection: document.getElementById("curr-m-reflection").value.trim() || bundle.monthData?.reflection || "",
-      status: "Published"
-    };
-
-    const validWeeks = (bundle.weeks || []).filter(w => w.service_date);
-    setCurrBundleStatus(`Saving ${monthKey} and ${validWeeks.length} weeks to Firestore...`);
-
-    try {
-      await saveMonthlyTheme(monthKey, monthPayload);
-      for (const w of validWeeks) {
-        await saveWeeklyInsight(w.service_date, {
-          ...w,
-          month_key: w.service_date.slice(0, 7) || monthKey
-        });
-      }
-      await refreshContentData();
-      document.getElementById("curr-month-filter").value = monthKey;
-      renderCurriculumView();
-      await initPublicPortal();
-      setCurrBundleStatus(`Saved ${monthKey} and ${validWeeks.length} weeks (${validWeeks.map(x => x.service_date).join(", ")}).`);
-    } catch (err) {
-      setCurrBundleStatus("Failed to save bundle: " + (err?.message || err), true);
-    }
-  });
-
-  document.getElementById("btn-curr-clear-paste")?.addEventListener("click", () => {
-    document.getElementById("curr-bundle-paste").value = "";
-    contentState.parsedBundle = null;
-    contentState.parsedWeeklyDrafts = [];
-    renderBundlePreview(null);
-    setCurrBundleStatus("");
-  });
-
-  document.getElementById("btn-curr-add-week")?.addEventListener("click", () => {
-    const monthKey = document.getElementById("curr-m-key")?.value || document.getElementById("curr-month-filter")?.value || "2027-01";
-    window.openNewWeeklyModal(`${monthKey}-01`);
-  });
-
   document.getElementById("btn-gen-compass-from-curr")?.addEventListener("click", () => {
-    const mk = document.getElementById("mt-key")?.value || document.getElementById("curr-month-filter")?.value || "2027-01";
+    const mk = document.getElementById("mt-key")?.value || contentState.months[0]?.month_key || "2027-01";
     applyCompassDraftToForm(mk);
   });
 
   document.getElementById("btn-reset-monthly-theme")?.addEventListener("click", () => {
-    document.getElementById("mt-key").value = "2027-01";
-    document.getElementById("mt-phase").value = "";
-    document.getElementById("mt-title").value = "";
-    document.getElementById("mt-subtitle").value = "";
-    document.getElementById("mt-scripture").value = "";
-    document.getElementById("mt-pillar").value = "";
-    document.getElementById("mt-narrative").value = "";
-    document.getElementById("mt-reflection").value = "";
-    document.getElementById("mt-closing").value = "God bless you.";
+    if (document.getElementById("mt-key")) document.getElementById("mt-key").value = "2027-01";
+    if (document.getElementById("mt-phase")) document.getElementById("mt-phase").value = "";
+    if (document.getElementById("mt-title")) document.getElementById("mt-title").value = "";
+    if (document.getElementById("mt-subtitle")) document.getElementById("mt-subtitle").value = "";
+    if (document.getElementById("mt-scripture")) document.getElementById("mt-scripture").value = "";
+    if (document.getElementById("mt-pillar")) document.getElementById("mt-pillar").value = "";
+    if (document.getElementById("mt-narrative")) document.getElementById("mt-narrative").value = "";
+    if (document.getElementById("mt-reflection")) document.getElementById("mt-reflection").value = "";
+    if (document.getElementById("mt-closing")) document.getElementById("mt-closing").value = "God bless you.";
     setMonthlyStatus("");
   });
 
@@ -1802,8 +1378,12 @@ function bindContentEvents() {
 
   document.getElementById("ei-start-date")?.addEventListener("change", (e) => {
     const labels = computeEditorDateLabels(e.target.value);
-    if (labels.date_label) document.getElementById("ei-date-label").value = labels.date_label;
-    if (labels.header_date) document.getElementById("ei-header-date").value = labels.header_date;
+    if (labels.date_label && document.getElementById("ei-date-label")) {
+      document.getElementById("ei-date-label").value = labels.date_label;
+    }
+    if (labels.header_date && document.getElementById("ei-header-date")) {
+      document.getElementById("ei-header-date").value = labels.header_date;
+    }
     if (document.getElementById("ei-raw-text")?.value.trim()) runEditorInsightParse();
   });
 
@@ -1849,8 +1429,8 @@ function bindContentEvents() {
   });
 
   document.getElementById("btn-reset-editor-insight")?.addEventListener("click", () => {
-    document.getElementById("ei-edit-id").value = "";
-    document.getElementById("ei-raw-text").value = "";
+    if (document.getElementById("ei-edit-id")) document.getElementById("ei-edit-id").value = "";
+    if (document.getElementById("ei-raw-text")) document.getElementById("ei-raw-text").value = "";
     document.getElementById("ei-parsed-preview")?.classList.add("hidden");
     setEditorStatus("");
     contentState.parsedDraft = null;
@@ -1878,7 +1458,7 @@ function bindContentEvents() {
       icare_questions: document.getElementById("wk-icare").value.trim(),
       status: document.getElementById("wk-status").value
     });
-    document.getElementById("modal-weekly").classList.add("hidden");
+    document.getElementById("modal-weekly")?.classList.add("hidden");
     await refreshContentData();
     await initPublicPortal();
   });
@@ -1916,18 +1496,22 @@ function bindContentEvents() {
 window.editSundayArchiveItem = (id) => {
   const item = contentState.sundayServices.find(x => x.id === id);
   if (!item) return;
-  document.getElementById("ssa-form-heading").textContent = `✏️ Edit Sunday Service Archive (${item.service_date || item.id})`;
-  document.getElementById("ssa-edit-id").value = item.id;
+  if (document.getElementById("ssa-form-heading")) {
+    document.getElementById("ssa-form-heading").textContent = `✏️ Edit Sunday Service Archive (${item.service_date || item.id})`;
+  }
+  if (document.getElementById("ssa-edit-id")) document.getElementById("ssa-edit-id").value = item.id;
   const dateEl = document.getElementById("ssa-date");
-  dateEl.value = item.service_date || item.id || "";
-  dateEl.setAttribute("readonly", "readonly");
-  dateEl.classList.add("bg-slate-100");
-  document.getElementById("ssa-title").value = item.title || "";
-  document.getElementById("ssa-speaker").value = item.speaker || "";
-  document.getElementById("ssa-youtube").value = item.youtube_url || "";
-  document.getElementById("ssa-post").value = item.post_url || "";
-  document.getElementById("ssa-poster").value = item.poster_url || "";
-  document.getElementById("ssa-published").checked = item.published !== false;
+  if (dateEl) {
+    dateEl.value = item.service_date || item.id || "";
+    dateEl.setAttribute("readonly", "readonly");
+    dateEl.classList.add("bg-slate-100");
+  }
+  if (document.getElementById("ssa-title")) document.getElementById("ssa-title").value = item.title || "";
+  if (document.getElementById("ssa-speaker")) document.getElementById("ssa-speaker").value = item.speaker || "";
+  if (document.getElementById("ssa-youtube")) document.getElementById("ssa-youtube").value = item.youtube_url || "";
+  if (document.getElementById("ssa-post")) document.getElementById("ssa-post").value = item.post_url || "";
+  if (document.getElementById("ssa-poster")) document.getElementById("ssa-poster").value = item.poster_url || "";
+  if (document.getElementById("ssa-published")) document.getElementById("ssa-published").checked = item.published !== false;
   setArchiveStatus(`Editing ${item.service_date || item.id}`);
   document.getElementById("ssa-archive-form")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 };
@@ -1947,17 +1531,17 @@ window.removeSundayArchiveItem = async (id) => {
 window.editSermonArchiveItem = (id) => {
   const item = contentState.sermonArchives.find(x => x.id === id);
   if (!item) return;
-  document.getElementById("sa-form-title").textContent = "✏️ Edit Sermon Archive";
-  document.getElementById("sa-edit-id").value = item.id;
-  document.getElementById("sa-date").value = item.service_date || "";
-  document.getElementById("sa-type").value = item.service_type || "Sunday Service";
-  document.getElementById("sa-title").value = item.title || "";
-  document.getElementById("sa-speaker").value = item.speaker || "";
-  document.getElementById("sa-time").value = item.service_time || "10:30";
-  document.getElementById("sa-youtube").value = item.youtube_url || "";
-  document.getElementById("sa-poster").value = item.poster_url || "";
-  document.getElementById("sa-post").value = item.post_url || "";
-  document.getElementById("sa-notes").value = item.notes || "";
+  if (document.getElementById("sa-form-title")) document.getElementById("sa-form-title").textContent = "✏️ Edit Sermon Archive";
+  if (document.getElementById("sa-edit-id")) document.getElementById("sa-edit-id").value = item.id;
+  if (document.getElementById("sa-date")) document.getElementById("sa-date").value = item.service_date || "";
+  if (document.getElementById("sa-type")) document.getElementById("sa-type").value = item.service_type || "Sunday Service";
+  if (document.getElementById("sa-title")) document.getElementById("sa-title").value = item.title || "";
+  if (document.getElementById("sa-speaker")) document.getElementById("sa-speaker").value = item.speaker || "";
+  if (document.getElementById("sa-time")) document.getElementById("sa-time").value = item.service_time || "10:30";
+  if (document.getElementById("sa-youtube")) document.getElementById("sa-youtube").value = item.youtube_url || "";
+  if (document.getElementById("sa-poster")) document.getElementById("sa-poster").value = item.poster_url || "";
+  if (document.getElementById("sa-post")) document.getElementById("sa-post").value = item.post_url || "";
+  if (document.getElementById("sa-notes")) document.getElementById("sa-notes").value = item.notes || "";
   setSermonArchiveStatus(`Editing: ${item.title || item.service_date}`);
 };
 
@@ -1975,16 +1559,16 @@ window.removeSermonArchiveItem = async (id) => {
 window.editMonthlyThemeItem = (monthKey) => {
   const m = contentState.months.find(x => x.month_key === monthKey || x.id === monthKey);
   if (!m) return;
-  document.getElementById("mt-form-title").textContent = `🧭 Edit Monthly Compass (${m.month_key})`;
-  document.getElementById("mt-key").value = m.month_key || m.id || "";
-  document.getElementById("mt-phase").value = m.phase || "";
-  document.getElementById("mt-title").value = m.title || "";
-  document.getElementById("mt-subtitle").value = m.subtitle || "";
-  document.getElementById("mt-scripture").value = m.scripture || "";
-  document.getElementById("mt-pillar").value = m.pillar || "";
-  document.getElementById("mt-narrative").value = m.narrative || "";
-  document.getElementById("mt-reflection").value = m.reflection || "";
-  document.getElementById("mt-closing").value = m.closing || "God bless you.";
+  if (document.getElementById("mt-form-title")) document.getElementById("mt-form-title").textContent = `🧭 Edit Monthly Compass (${m.month_key})`;
+  if (document.getElementById("mt-key")) document.getElementById("mt-key").value = m.month_key || m.id || "";
+  if (document.getElementById("mt-phase")) document.getElementById("mt-phase").value = m.phase || "";
+  if (document.getElementById("mt-title")) document.getElementById("mt-title").value = m.title || "";
+  if (document.getElementById("mt-subtitle")) document.getElementById("mt-subtitle").value = m.subtitle || "";
+  if (document.getElementById("mt-scripture")) document.getElementById("mt-scripture").value = m.scripture || "";
+  if (document.getElementById("mt-pillar")) document.getElementById("mt-pillar").value = m.pillar || "";
+  if (document.getElementById("mt-narrative")) document.getElementById("mt-narrative").value = m.narrative || "";
+  if (document.getElementById("mt-reflection")) document.getElementById("mt-reflection").value = m.reflection || "";
+  if (document.getElementById("mt-closing")) document.getElementById("mt-closing").value = m.closing || "God bless you.";
   setMonthlyStatus(`Editing ${m.month_key}`);
 };
 
@@ -1997,52 +1581,56 @@ window.removeMonthlyThemeItem = async (monthKey) => {
 
 window.openNewWeeklyModal = (defaultDate = "2027-01-03") => {
   const dateInput = document.getElementById("wk-date");
-  dateInput.removeAttribute("readonly");
-  dateInput.classList.remove("bg-slate-100");
-  dateInput.value = defaultDate;
-  document.getElementById("wk-label").value = "Week 1";
-  document.getElementById("wk-title").value = "";
-  document.getElementById("wk-verse").value = "";
-  document.getElementById("wk-reading").value = "";
+  if (dateInput) {
+    dateInput.removeAttribute("readonly");
+    dateInput.classList.remove("bg-slate-100");
+    dateInput.value = defaultDate;
+  }
+  if (document.getElementById("wk-label")) document.getElementById("wk-label").value = "Week 1";
+  if (document.getElementById("wk-title")) document.getElementById("wk-title").value = "";
+  if (document.getElementById("wk-verse")) document.getElementById("wk-verse").value = "";
+  if (document.getElementById("wk-reading")) document.getElementById("wk-reading").value = "";
   if (document.getElementById("wk-speaker")) document.getElementById("wk-speaker").value = "";
   if (document.getElementById("wk-poster")) document.getElementById("wk-poster").value = "";
   if (document.getElementById("wk-youtube")) document.getElementById("wk-youtube").value = "";
-  document.getElementById("wk-focus").value = "";
-  document.getElementById("wk-christ").value = "";
-  document.getElementById("wk-mission").value = "";
-  document.getElementById("wk-diaspora").value = "";
-  document.getElementById("wk-summary").value = "";
-  document.getElementById("wk-icare").value = "";
-  document.getElementById("wk-status").value = "Published";
+  if (document.getElementById("wk-focus")) document.getElementById("wk-focus").value = "";
+  if (document.getElementById("wk-christ")) document.getElementById("wk-christ").value = "";
+  if (document.getElementById("wk-mission")) document.getElementById("wk-mission").value = "";
+  if (document.getElementById("wk-diaspora")) document.getElementById("wk-diaspora").value = "";
+  if (document.getElementById("wk-summary")) document.getElementById("wk-summary").value = "";
+  if (document.getElementById("wk-icare")) document.getElementById("wk-icare").value = "";
+  if (document.getElementById("wk-status")) document.getElementById("wk-status").value = "Published";
   const heading = document.getElementById("modal-weekly-title");
   if (heading) heading.textContent = "Add Week & Preacher";
-  document.getElementById("modal-weekly").classList.remove("hidden");
+  document.getElementById("modal-weekly")?.classList.remove("hidden");
 };
 
 window.openWeeklyModal = (serviceDate) => {
   const w = contentState.weeks.find(x => x.service_date === serviceDate);
   if (!w) return;
   const dateInput = document.getElementById("wk-date");
-  dateInput.setAttribute("readonly", "readonly");
-  dateInput.classList.add("bg-slate-100");
-  dateInput.value = w.service_date;
-  document.getElementById("wk-label").value = w.week_label || "";
-  document.getElementById("wk-title").value = w.title || "";
-  document.getElementById("wk-verse").value = w.key_verse || "";
-  document.getElementById("wk-reading").value = w.scripture_reading || "";
+  if (dateInput) {
+    dateInput.setAttribute("readonly", "readonly");
+    dateInput.classList.add("bg-slate-100");
+    dateInput.value = w.service_date;
+  }
+  if (document.getElementById("wk-label")) document.getElementById("wk-label").value = w.week_label || "";
+  if (document.getElementById("wk-title")) document.getElementById("wk-title").value = w.title || "";
+  if (document.getElementById("wk-verse")) document.getElementById("wk-verse").value = w.key_verse || "";
+  if (document.getElementById("wk-reading")) document.getElementById("wk-reading").value = w.scripture_reading || "";
   if (document.getElementById("wk-speaker")) document.getElementById("wk-speaker").value = w.speaker || "";
   if (document.getElementById("wk-poster")) document.getElementById("wk-poster").value = w.poster_url || "";
   if (document.getElementById("wk-youtube")) document.getElementById("wk-youtube").value = w.youtube_url || "";
-  document.getElementById("wk-focus").value = w.weekly_focus || "";
-  document.getElementById("wk-christ").value = w.christ_connection || "";
-  document.getElementById("wk-mission").value = w.mission_application || "";
-  document.getElementById("wk-diaspora").value = w.diaspora_lens || "";
-  document.getElementById("wk-summary").value = w.sermon_summary || "";
-  document.getElementById("wk-icare").value = w.icare_questions || "";
-  document.getElementById("wk-status").value = w.status || "Scheduled";
+  if (document.getElementById("wk-focus")) document.getElementById("wk-focus").value = w.weekly_focus || "";
+  if (document.getElementById("wk-christ")) document.getElementById("wk-christ").value = w.christ_connection || "";
+  if (document.getElementById("wk-mission")) document.getElementById("wk-mission").value = w.mission_application || "";
+  if (document.getElementById("wk-diaspora")) document.getElementById("wk-diaspora").value = w.diaspora_lens || "";
+  if (document.getElementById("wk-summary")) document.getElementById("wk-summary").value = w.sermon_summary || "";
+  if (document.getElementById("wk-icare")) document.getElementById("wk-icare").value = w.icare_questions || "";
+  if (document.getElementById("wk-status")) document.getElementById("wk-status").value = w.status || "Scheduled";
   const heading = document.getElementById("modal-weekly-title");
   if (heading) heading.textContent = "Edit Week & Preacher";
-  document.getElementById("modal-weekly").classList.remove("hidden");
+  document.getElementById("modal-weekly")?.classList.remove("hidden");
 };
 
 window.removeWeeklyInsightItem = async (serviceDate) => {
@@ -2055,14 +1643,14 @@ window.removeWeeklyInsightItem = async (serviceDate) => {
 window.editSundayServiceItem = (id) => {
   const item = contentState.sundayServices.find(x => x.id === id);
   if (!item) return;
-  document.getElementById("ss-edit-id").value = item.id;
-  document.getElementById("ss-date").value = item.service_date || item.id || "";
-  document.getElementById("ss-speaker").value = item.speaker || "";
-  document.getElementById("ss-title").value = item.title || "";
-  document.getElementById("ss-poster").value = item.poster_url || "";
-  document.getElementById("ss-youtube").value = item.youtube_url || "";
-  document.getElementById("ss-post").value = item.post_url || "";
-  document.getElementById("ss-published").checked = item.published !== false;
+  if (document.getElementById("ss-edit-id")) document.getElementById("ss-edit-id").value = item.id;
+  if (document.getElementById("ss-date")) document.getElementById("ss-date").value = item.service_date || item.id || "";
+  if (document.getElementById("ss-speaker")) document.getElementById("ss-speaker").value = item.speaker || "";
+  if (document.getElementById("ss-title")) document.getElementById("ss-title").value = item.title || "";
+  if (document.getElementById("ss-poster")) document.getElementById("ss-poster").value = item.poster_url || "";
+  if (document.getElementById("ss-youtube")) document.getElementById("ss-youtube").value = item.youtube_url || "";
+  if (document.getElementById("ss-post")) document.getElementById("ss-post").value = item.post_url || "";
+  if (document.getElementById("ss-published")) document.getElementById("ss-published").checked = item.published !== false;
   setSundayServiceStatus(`Editing ${item.service_date || item.id}`);
 };
 
@@ -2081,11 +1669,11 @@ window.editEditorInsightItem = (id) => {
   const item = contentState.editorsInsights.find(x => x.id === id);
   if (!item) return;
 
-  document.getElementById("ei-edit-id").value = item.id;
-  document.getElementById("ei-start-date").value = item.start_date || "";
-  document.getElementById("ei-edition-no").value = item.edition_no || "";
-  document.getElementById("ei-date-label").value = item.date_label || "";
-  document.getElementById("ei-header-date").value = item.header_date || "";
+  if (document.getElementById("ei-edit-id")) document.getElementById("ei-edit-id").value = item.id;
+  if (document.getElementById("ei-start-date")) document.getElementById("ei-start-date").value = item.start_date || "";
+  if (document.getElementById("ei-edition-no")) document.getElementById("ei-edition-no").value = item.edition_no || "";
+  if (document.getElementById("ei-date-label")) document.getElementById("ei-date-label").value = item.date_label || "";
+  if (document.getElementById("ei-header-date")) document.getElementById("ei-header-date").value = item.header_date || "";
 
   const paras = [...(item.paragraphs || [])];
   if (paras.length > 0 && item.sticky_hook) {
@@ -2099,7 +1687,7 @@ window.editEditorInsightItem = (id) => {
     "God Bless You."
   ].filter(Boolean).join("\n\n");
 
-  document.getElementById("ei-raw-text").value = reconstructed;
+  if (document.getElementById("ei-raw-text")) document.getElementById("ei-raw-text").value = reconstructed;
   runEditorInsightParse();
 };
 
