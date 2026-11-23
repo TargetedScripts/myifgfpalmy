@@ -1028,12 +1028,24 @@
       const { initCurriculumTab } = await import("./js/ui-curriculum.js");
       const { initMediaServicesTab } = await import("./js/service-archives-tab.js");
 
+      function activateTab(tabName) {
+        document.querySelectorAll(".tab-btn").forEach(b => {
+          b.classList.toggle("active", b.dataset.tab === tabName);
+        });
+        document.querySelectorAll(".tab-panel").forEach(p => {
+          p.classList.add("hidden");
+          p.style.display = "none";
+        });
+        const targetPanel = document.getElementById(`panel-${tabName}`);
+        if (targetPanel) {
+          targetPanel.classList.remove("hidden");
+          targetPanel.style.display = "block";
+        }
+      }
+
       document.querySelectorAll(".tab-btn").forEach(btn => {
         btn.addEventListener("click", () => {
-          document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          document.querySelectorAll(".tab-panel").forEach(p => p.classList.add("hidden"));
-          document.getElementById(`panel-${btn.dataset.tab}`)?.classList.remove("hidden");
+          activateTab(btn.dataset.tab);
         });
       });
 
