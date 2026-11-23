@@ -691,8 +691,8 @@ export function initMediaPublicationsTab() {
     }
   });
 
-  // --- INITIAL LOAD OF CURRICULUM OPTIONS ---
-  (async function initSelectors() {
+ // --- INITIAL LOAD OF CURRICULUM OPTIONS ---
+  async function loadSelectorsAndInitialData() {
     try {
       const [mSnap, wSnap] = await Promise.all([
         getDocs(collection(db, "monthly_themes")),
@@ -745,5 +745,7 @@ export function initMediaPublicationsTab() {
       mcStatusMsg.textContent = `Gagal memuat daftar bulan/tahun: ${err.message}`;
       aaStatusMsg.textContent = `Gagal memuat daftar tahun: ${err.message}`;
     }
-  })();
+  }
+
+  loadSelectorsAndInitialData();
 }
