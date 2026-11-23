@@ -47,10 +47,10 @@ function escapeHtml(val = "") {
     .replaceAll('"', "&quot;");
 }
 
-function toggleVisibility(el, show) {
+function showEl(el, visible) {
   if (!el) return;
-  el.classList.toggle("hidden", !show);
-  el.style.display = show ? "block" : "none";
+  el.classList.toggle("hidden", !visible);
+  el.style.display = visible ? "block" : "none";
 }
 
 function setFieldValue(el, val = "") {
@@ -302,7 +302,7 @@ export function initMediaPublicationsTab() {
     });
 
     subpanels.forEach(panel => {
-      toggleVisibility(panel, panel.id === `archive-subpanel-${target}`);
+      showEl(panel, panel.id === `archive-subpanel-${target}`);
     });
   }
 
@@ -437,7 +437,6 @@ export function initMediaPublicationsTab() {
 
   function populateMcEditor(data) {
     currentMcData = data;
-    toggleVisibility(mcEditorContainer, true);
     if (mcPublishedCheck) mcPublishedCheck.checked = data.published !== false;
     setFieldValue(mcGreeting, data.greeting || "Shalom,");
     setFieldValue(mcThemeRef, data.monthThemeTitle || "");
@@ -445,7 +444,7 @@ export function initMediaPublicationsTab() {
     renderMcWeeksEditor(data.weeks || []);
     setFieldValue(mcReflection, data.reflection || "");
     setFieldValue(mcClosing, data.closing || "Kiranya Tuhan Yesus memberkati.");
-    toggleVisibility(mcEditorContainer, true);
+    showEl(mcEditorContainer, true);
   }
 
   async function buildFreshMcDraft(monthKey) {
@@ -479,7 +478,7 @@ export function initMediaPublicationsTab() {
         return;
       }
 
-      toggleVisibility(mcEditorContainer, false);
+      showEl(mcEditorContainer, false);
       if (mcDbBadge) {
         mcDbBadge.textContent = "Not Yet in DB";
         mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
@@ -571,7 +570,6 @@ export function initMediaPublicationsTab() {
 
   function populateAaEditor(data) {
     currentAaData = data;
-    toggleVisibility(aaEditorContainer, true);
     if (aaPublishedCheck) aaPublishedCheck.checked = data.published !== false;
     setFieldValue(aaTitle, data.annualTitle || "");
     setFieldValue(aaSubtitle, data.subtitle || "");
@@ -581,7 +579,7 @@ export function initMediaPublicationsTab() {
     renderAaMonthsEditor(data.months || []);
     setFieldValue(aaReflection, data.annualReflection || "");
     setFieldValue(aaClosing, data.closing || "Kiranya Tuhan Yesus memberkati.");
-    toggleVisibility(aaEditorContainer, true);
+    showEl(aaEditorContainer, true);
   }
 
   function buildFreshAaDraft(yearStr) {
@@ -612,7 +610,7 @@ export function initMediaPublicationsTab() {
         return;
       }
 
-      toggleVisibility(aaEditorContainer, false);
+      showEl(aaEditorContainer, false);
       if (aaDbBadge) {
         aaDbBadge.textContent = "Not Yet in DB";
         aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
