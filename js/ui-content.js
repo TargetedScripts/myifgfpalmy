@@ -125,6 +125,114 @@ function ensureWeeklyPosterFields() {
   if (modalHeading) modalHeading.id = "modal-weekly-title";
 }
 
+function ensureSundayServiceArchiveTabUI() {
+  const subtabBar = document.querySelector(".content-subtab")?.parentElement;
+  const subtabContainer = subtabBar?.parentElement;
+  if (!subtabBar || !subtabContainer || document.getElementById("subpanel-sunday-archive")) return;
+
+  const tabBtn = document.createElement("button");
+  tabBtn.type = "button";
+  tabBtn.className = "content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold";
+  tabBtn.dataset.subtab = "sunday-archive";
+  tabBtn.textContent = "🎬 Sunday Service Archive";
+  subtabBar.appendChild(tabBtn);
+
+  const panel = document.createElement("div");
+  panel.id = "subpanel-sunday-archive";
+  panel.className = "content-subpanel hidden space-y-5 text-xs mb-4";
+  panel.innerHTML = `
+    <!-- TOP: INQUIRY & SAVED ARCHIVE LIST -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 class="font-bold text-sm text-slate-900">🗂️ Sunday Service Archive Inquiry</h3>
+          <p class="text-[11px] text-slate-500">Inquiry, search, edit, or delete saved Sunday services in <code class="font-mono">sunday_services</code> (date, sermon title, preacher, YouTube link, post link, poster image link).</p>
+        </div>
+        <span id="ssa-count-badge" class="text-xs font-semibold text-slate-500"></span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+        <input
+          type="text"
+          id="ssa-search-input"
+          placeholder="Search date, sermon title, preacher, link..."
+          class="sm:col-span-2 px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
+        />
+        <select id="ssa-status-filter" class="px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white">
+          <option value="ALL">All Status</option>
+          <option value="PUBLISHED">Published Only</option>
+          <option value="DRAFT">Draft Only</option>
+        </select>
+      </div>
+
+      <div id="ssa-archive-list" class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1"></div>
+    </div>
+
+    <!-- BOTTOM: ADD / EDIT FORM -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <h3 id="ssa-form-heading" class="font-bold text-sm text-slate-900">➕ Add Sunday Service Archive</h3>
+          <p class="text-[11px] text-slate-500">Create a new Sunday Service archive entry or click <strong>Edit</strong> above to update an existing record.</p>
+        </div>
+        <button type="button" id="ssa-btn-reset" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs">
+          New Entry
+        </button>
+      </div>
+
+      <form id="ssa-archive-form" class="space-y-3">
+        <input type="hidden" id="ssa-edit-id" value="" />
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-semibold text-slate-700">Service Date *</label>
+            <input type="date" id="ssa-date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-700">Sermon Title *</label>
+            <input type="text" id="ssa-title" required placeholder="Sermon title" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1 font-semibold" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-700">Preacher / Speaker *</label>
+            <input type="text" id="ssa-speaker" required placeholder="Preacher / speaker name" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-semibold text-slate-700">YouTube Link</label>
+            <input type="url" id="ssa-youtube" placeholder="https://www.youtube.com/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-700">Post Link</label>
+            <input type="url" id="ssa-post" placeholder="https://ifgfpalmy.org/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-700">Poster Image Link *</label>
+            <input type="url" id="ssa-poster" required placeholder="https://ifgfpalmy.org/wp-content/uploads/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="ssa-published" checked class="rounded border-slate-300" />
+            <span class="font-semibold text-slate-700">Published</span>
+          </label>
+
+          <div class="flex items-center gap-3">
+            <span id="ssa-status-msg" class="text-xs font-semibold text-emerald-700"></span>
+            <button type="submit" id="ssa-btn-save" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
+              💾 Save Archive
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  `;
+
+  subtabContainer.parentElement.insertBefore(panel, subtabContainer);
+}
+
 function ensureCurriculumTabUI() {
   const subtabBar = document.querySelector(".content-subtab")?.parentElement;
   const subtabContainer = subtabBar?.parentElement;
@@ -579,7 +687,7 @@ function ensureSundayServicesStudioUI() {
         <h3 class="font-bold text-sm text-slate-900">🎬 Sunday Service Poster & Cinema Data</h3>
         <button type="button" id="btn-reset-sunday-service" class="text-[11px] text-slate-500 hover:underline">New Entry</button>
       </div>
-      <p class="text-[11px] text-slate-500">Manage <code class="font-mono">sunday_services</code> collection for cinema gallery on <code class="font-mono">ifgfpalmy.org</code>.</p>
+      <p class="text-[11px] text-slate-500">Manage <code class="font-mono">sunday_services</code> collection for cinema gallery on <code class="font-mono">ifgfpalmy.org</code>[cite: 1, 3].</p>
 
       <form id="form-sunday-service" class="space-y-2.5">
         <input type="hidden" id="ss-edit-id" value="" />
@@ -629,6 +737,15 @@ function ensureSundayServicesStudioUI() {
   `;
 
   mediaPanel.parentElement.appendChild(panel);
+}
+
+function setArchiveStatus(msg, isError = false) {
+  const el = document.getElementById("ssa-status-msg");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = isError
+    ? "text-xs font-semibold text-red-600"
+    : "text-xs font-semibold text-emerald-700";
 }
 
 function setEditorStatus(msg, isError = false) {
@@ -693,6 +810,7 @@ export async function initContentStudio() {
   ensureEditorsInsightTabUI();
   ensureDailyReflectionGeneratorUI();
   ensureSundayServicesStudioUI();
+  ensureSundayServiceArchiveTabUI();
   bindContentEvents();
   await refreshContentData();
 }
@@ -711,6 +829,7 @@ async function refreshContentData() {
     getSundayServices().catch(err => {
       console.error("Failed to load sunday_services:", err);
       setSundayServiceStatus("Failed to load sunday_services: " + (err.message || err), true);
+      setArchiveStatus("Failed to load sunday_services: " + (err.message || err), true);
       return [];
     }),
     getSermonArchives().catch(err => {
@@ -737,6 +856,83 @@ async function refreshContentData() {
   renderSermonArchivesList();
   renderEditorsInsightsList();
   renderSundayServicesList();
+  renderSundayServiceArchive();
+}
+
+function resetArchiveForm() {
+  document.getElementById("ssa-form-heading").textContent = "➕ Add Sunday Service Archive";
+  document.getElementById("ssa-edit-id").value = "";
+  const dateEl = document.getElementById("ssa-date");
+  dateEl.removeAttribute("readonly");
+  dateEl.classList.remove("bg-slate-100");
+  dateEl.value = "";
+  document.getElementById("ssa-title").value = "";
+  document.getElementById("ssa-speaker").value = "";
+  document.getElementById("ssa-youtube").value = "";
+  document.getElementById("ssa-post").value = "";
+  document.getElementById("ssa-poster").value = "";
+  document.getElementById("ssa-published").checked = true;
+}
+
+function renderSundayServiceArchive() {
+  const listEl = document.getElementById("ssa-archive-list");
+  const badgeEl = document.getElementById("ssa-count-badge");
+  if (!listEl) return;
+
+  const queryText = (document.getElementById("ssa-search-input")?.value || "").trim().toLowerCase();
+  const statusFilter = document.getElementById("ssa-status-filter")?.value || "ALL";
+
+  const filtered = contentState.sundayServices.filter(item => {
+    const isPub = item.published !== false;
+    if (statusFilter === "PUBLISHED" && !isPub) return false;
+    if (statusFilter === "DRAFT" && isPub) return false;
+    if (!queryText) return true;
+    return [item.service_date, item.title, item.speaker, item.youtube_url, item.post_url, item.poster_url]
+      .filter(Boolean)
+      .some(v => String(v).toLowerCase().includes(queryText));
+  });
+
+  if (badgeEl) {
+    badgeEl.textContent = `${filtered.length} of ${contentState.sundayServices.length} archive(s)`;
+  }
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `<div class="p-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center text-slate-500 col-span-full">No Sunday Service archive records found. Add one using the form below.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = filtered.map(item => {
+    const isPub = item.published !== false;
+    return `
+      <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3">
+        <div class="flex items-start gap-3 min-w-0">
+          ${item.poster_url
+            ? `<img src="${esc(item.poster_url)}" alt="${esc(item.title || "")}" class="w-14 h-20 object-cover rounded-lg border border-slate-200 bg-white shrink-0" />`
+            : `<div class="w-14 h-20 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 shrink-0 text-center px-1">No Poster</div>`
+          }
+          <div class="min-w-0 space-y-1">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">${esc(item.service_date || item.id)}</span>
+              <span class="px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded font-semibold text-[10px]">🎙️ ${esc(item.speaker || "-")}</span>
+              <span class="px-2 py-0.5 ${isPub ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-200 text-slate-600"} rounded font-semibold text-[10px]">
+                ${isPub ? "Published" : "Draft"}
+              </span>
+            </div>
+            <h4 class="font-bold text-sm text-slate-900 break-words">${esc(item.title || "Sunday Service")}</h4>
+            <div class="flex flex-wrap items-center gap-3 pt-0.5 text-[11px]">
+              ${item.youtube_url ? `<a href="${esc(item.youtube_url)}" target="_blank" rel="noopener" class="text-red-600 hover:underline font-medium">▶️ YouTube</a>` : `<span class="text-slate-400">YouTube: -</span>`}
+              ${item.post_url ? `<a href="${esc(item.post_url)}" target="_blank" rel="noopener" class="text-emerald-700 hover:underline font-medium">🔗 Post</a>` : `<span class="text-slate-400">Post: -</span>`}
+              ${item.poster_url ? `<a href="${esc(item.poster_url)}" target="_blank" rel="noopener" class="text-blue-600 hover:underline font-medium">🖼️ Poster</a>` : `<span class="text-slate-400">Poster: -</span>`}
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
+          <button type="button" onclick="window.editSundayArchiveItem('${esc(item.id)}')" class="text-xs font-semibold text-blue-600 hover:underline">Edit</button>
+          <button type="button" onclick="window.removeSundayArchiveItem('${esc(item.id)}')" class="text-xs font-semibold text-red-600 hover:underline">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
 function getYearlyThemeFromState() {
@@ -1286,6 +1482,43 @@ function bindContentEvents() {
     });
   });
 
+  document.getElementById("ssa-search-input")?.addEventListener("input", renderSundayServiceArchive);
+  document.getElementById("ssa-status-filter")?.addEventListener("change", renderSundayServiceArchive);
+
+  document.getElementById("ssa-btn-reset")?.addEventListener("click", () => {
+    resetArchiveForm();
+    setArchiveStatus("");
+  });
+
+  document.getElementById("ssa-archive-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const editId = document.getElementById("ssa-edit-id").value.trim();
+    const serviceDate = document.getElementById("ssa-date").value.trim();
+    const payload = {
+      service_date: serviceDate,
+      title: document.getElementById("ssa-title").value.trim(),
+      speaker: document.getElementById("ssa-speaker").value.trim(),
+      youtube_url: document.getElementById("ssa-youtube").value.trim(),
+      post_url: document.getElementById("ssa-post").value.trim(),
+      poster_url: document.getElementById("ssa-poster").value.trim(),
+      published: document.getElementById("ssa-published").checked
+    };
+
+    try {
+      setArchiveStatus("Saving...");
+      await saveSundayService(editId || serviceDate, payload);
+      resetArchiveForm();
+      await refreshContentData();
+      await initPublicPortal();
+      setArchiveStatus(`Saved (${serviceDate} — ${payload.title})`);
+    } catch (err) {
+      console.error("Error saving sunday service archive:", err);
+      const msg = err?.message || String(err);
+      setArchiveStatus("Failed to save: " + msg, true);
+      alert("Failed to save Sunday Service archive: " + msg);
+    }
+  });
+
   document.getElementById("btn-curr-save-yearly")?.addEventListener("click", async () => {
     const newYearly = (document.getElementById("curr-yearly-input")?.value || "").trim();
     if (!newYearly) return;
@@ -1658,6 +1891,37 @@ function bindContentEvents() {
     await initPublicPortal();
   });
 }
+
+window.editSundayArchiveItem = (id) => {
+  const item = contentState.sundayServices.find(x => x.id === id);
+  if (!item) return;
+  document.getElementById("ssa-form-heading").textContent = `✏️ Edit Sunday Service Archive (${item.service_date || item.id})`;
+  document.getElementById("ssa-edit-id").value = item.id;
+  const dateEl = document.getElementById("ssa-date");
+  dateEl.value = item.service_date || item.id || "";
+  dateEl.setAttribute("readonly", "readonly");
+  dateEl.classList.add("bg-slate-100");
+  document.getElementById("ssa-title").value = item.title || "";
+  document.getElementById("ssa-speaker").value = item.speaker || "";
+  document.getElementById("ssa-youtube").value = item.youtube_url || "";
+  document.getElementById("ssa-post").value = item.post_url || "";
+  document.getElementById("ssa-poster").value = item.poster_url || "";
+  document.getElementById("ssa-published").checked = item.published !== false;
+  setArchiveStatus(`Editing ${item.service_date || item.id}`);
+  document.getElementById("ssa-archive-form")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+};
+
+window.removeSundayArchiveItem = async (id) => {
+  if (!confirm("Delete this Sunday Service archive from Firestore?")) return;
+  try {
+    await deleteSundayService(id);
+    await refreshContentData();
+    await initPublicPortal();
+    setArchiveStatus("Archive deleted.");
+  } catch (err) {
+    alert("Failed to delete archive: " + (err?.message || err));
+  }
+};
 
 window.editSermonArchiveItem = (id) => {
   const item = contentState.sermonArchives.find(x => x.id === id);
