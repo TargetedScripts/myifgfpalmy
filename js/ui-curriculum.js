@@ -28,6 +28,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Resolution",
     notable_events: "New Year, iDeclare, 21 days of prayer and fasting",
     keyword: "Planning, Reflection",
+    preacher_guide: "Arahkan khotbah pada ketetapan janji Tuhan di tengah kejatuhan & awal tahun baru.",
     status: "Published"
   },
   {
@@ -44,6 +45,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Restoration",
     notable_events: "Chinese New Year",
     keyword: "Restoration",
+    preacher_guide: "Soroti pemulihan perjanjian dan keadaan oleh Tuhan untuk memulai kembali.",
     status: "Published"
   },
   {
@@ -60,6 +62,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Humility",
     notable_events: "",
     keyword: "Pride",
+    preacher_guide: "Tekankan kerendahan hati dan ketaatan pada amanat Tuhan dibanding membangun nama sendiri.",
     status: "Published"
   },
   {
@@ -76,6 +79,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Separated",
     notable_events: "Good Friday, Easter",
     keyword: "Separated, Holiness",
+    preacher_guide: "Arahkan pembicara pada panggilan pengudusan & melangkah keluar dari zona nyaman.",
     status: "Published"
   },
   {
@@ -92,6 +96,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Worship and sacrifice",
     notable_events: "Ascension Day, Pentecost, Mother's Day",
     keyword: "Worship, Sacrifice",
+    preacher_guide: "Fokuskan khotbah pada mezbah penyembahan dan penyerahan diri sebagai respons iman.",
     status: "Published"
   },
   {
@@ -108,6 +113,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Generations",
     notable_events: "Father's Day",
     keyword: "Generations",
+    preacher_guide: "Bantu pembicara mengarahkan jemaat pada warisan iman lintas generasi.",
     status: "Published"
   },
   {
@@ -124,6 +130,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Waiting period",
     notable_events: "",
     keyword: "Transitions, Seasons",
+    preacher_guide: "Soroti kesetiaan & pembentukan iman selama masa penantian sebelum janji digenapi.",
     status: "Published"
   },
   {
@@ -140,6 +147,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Providence",
     notable_events: "Independence Day",
     keyword: "Providence",
+    preacher_guide: "Tekankan bahwa ibadah & kesepakatan pada janji mendahului pemeliharaan/penyediaan Tuhan.",
     status: "Published"
   },
   {
@@ -156,6 +164,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Identity",
     notable_events: "",
     keyword: "Identity",
+    preacher_guide: "Arahkan pembicara pada keunikan panggilan tiap pribadi tanpa membandingkan secara tidak sehat.",
     status: "Published"
   },
   {
@@ -172,6 +181,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Purpose",
     notable_events: "",
     keyword: "Mission, Purpose",
+    preacher_guide: "Kaitkan kerja keras harian & musim pembentukan dengan penggenapan tujuan panggilan Tuhan.",
     status: "Published"
   },
   {
@@ -188,6 +198,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Dreaming again",
     notable_events: "",
     keyword: "Dreaming again",
+    preacher_guide: "Arahkan khotbah pada kedewasaan rohani & penerapan praktis dari visi/mimpi yang Tuhan beri.",
     status: "Published"
   },
   {
@@ -204,6 +215,7 @@ export const MONTHLY_THEMES_2026 = [
     topic: "Abundance",
     notable_events: "Christmas, End of Year",
     keyword: "Abundance",
+    preacher_guide: "Fokus pada keberbuahan di tengah proses & ucapan syukur menutup tahun.",
     status: "Published"
   }
 ];
@@ -305,7 +317,7 @@ function setCurrStatus(msg, isError = false) {
 
 function resetCurrForm() {
   const heading = document.getElementById("curr-form-title");
-  if (heading) heading.textContent = "➕ Add / Edit Monthly Theme";
+  if (heading) heading.textContent = "➕ Add / Edit Monthly Theme (Preacher Guideline)";
   [
     "curr-month-key",
     "curr-month-name",
@@ -317,7 +329,8 @@ function resetCurrForm() {
     "curr-synopsis",
     "curr-topic",
     "curr-keyword",
-    "curr-events"
+    "curr-events",
+    "curr-preacher-guide"
   ].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = "";
@@ -380,6 +393,7 @@ function renderMonthlyThemes() {
         ${item.subtitle ? `<p class="text-[11px] font-medium text-slate-700">${esc(item.subtitle)}</p>` : ""}
         ${item.passages || item.scripture ? `<p class="text-[11px] text-amber-800 font-semibold">📖 ${esc(item.passages || "")}${item.scripture && item.scripture !== item.passages ? ` • Ayat: ${esc(item.scripture)}` : ""}</p>` : ""}
         ${item.synopsis ? `<p class="text-slate-600 leading-relaxed">${esc(item.synopsis)}</p>` : ""}
+        ${item.preacher_guide ? `<p class="text-[11px] text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5"><strong>Guideline Pembicara:</strong> ${esc(item.preacher_guide)}</p>` : ""}
         <div class="flex flex-wrap gap-1.5 pt-1">
           ${item.pillar ? `<span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded text-[10px] font-semibold">Pillar: ${esc(item.pillar)}</span>` : ""}
           ${item.topic ? `<span class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Topic: ${esc(item.topic)}</span>` : ""}
@@ -476,6 +490,7 @@ export function initCurriculumTab() {
       document.getElementById("curr-topic").value = item.topic || item.pillar || "";
       document.getElementById("curr-keyword").value = item.keyword || "";
       document.getElementById("curr-events").value = item.notable_events || "";
+      document.getElementById("curr-preacher-guide").value = item.preacher_guide || "";
       setCurrStatus(`Editing ${key}`);
     }
 
@@ -507,6 +522,7 @@ export function initCurriculumTab() {
       topic: document.getElementById("curr-topic").value.trim(),
       keyword: document.getElementById("curr-keyword").value.trim(),
       notable_events: document.getElementById("curr-events").value.trim(),
+      preacher_guide: document.getElementById("curr-preacher-guide").value.trim(),
       status: "Published",
       updated_at: serverTimestamp()
     };
