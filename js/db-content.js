@@ -520,7 +520,20 @@ export async function deleteEditorsInsight(id) {
 export async function getSundayServices() {
   const snap = await getDocs(collection(db, "sunday_services"));
   return snap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
+    .map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        service_date: (data.service_date || d.id || "").trim(),
+        title: (data.title || "Sunday Service").trim(),
+        speaker: (data.speaker || "").trim(),
+        poster_url: cleanDashUrl(data.poster_url),
+        youtube_url: cleanDashUrl(data.youtube_url),
+        post_url: cleanDashUrl(data.post_url),
+        published: data.published !== undefined ? Boolean(data.published) : true
+      };
+    })
     .sort((a, b) => (b.service_date || b.id || "").localeCompare(a.service_date || a.id || ""));
 }
 
