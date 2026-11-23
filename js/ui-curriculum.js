@@ -567,16 +567,17 @@ function setWeeklyStatus(msg, isError = false) {
 }
 
 function switchCurrSubtab(subtab) {
-  currState.activeSubtab = subtab;
+  const target = subtab || "monthly";
+  currState.activeSubtab = target;
   document.querySelectorAll(".curr-subtab").forEach(btn => {
-    const active = btn.dataset.currSubtab === subtab;
+    const active = btn.dataset.currSubtab === target;
     btn.className = active
       ? "curr-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold"
       : "curr-subtab bg-slate-100 text-slate-700 hover:bg-slate-200 px-3.5 py-2 rounded-lg text-xs font-semibold";
   });
 
   document.querySelectorAll(".curr-subpanel").forEach(panel => {
-    panel.classList.toggle("hidden", panel.id !== `curr-subpanel-${subtab}`);
+    panel.classList.toggle("hidden", panel.id !== `curr-subpanel-${target}`);
   });
 }
 
@@ -729,13 +730,14 @@ function renderWeeklyThemes() {
 
   listEl.innerHTML = items.map(w => {
     const key = w.service_date || "";
+    const speakerLabel = w.speaker_guideline || w.speaker || "";
     return `
       <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2 text-xs">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2 flex-wrap">
             <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">${esc(key)}</span>
             <span class="font-bold text-slate-800">${esc(w.week_label || "")}</span>
-            ${w.speaker_guideline ? `<span class="px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded text-[10px] font-semibold">🎙️ Guideline Pembicara: ${esc(w.speaker_guideline)}</span>` : ""}
+            ${speakerLabel ? `<span class="px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded text-[10px] font-semibold">🎙️ Guideline Pembicara: ${esc(speakerLabel)}</span>` : ""}
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <button type="button" data-curr-action="edit-weekly" data-curr-key="${esc(key)}" class="text-blue-600 hover:underline font-semibold">Edit</button>
@@ -796,9 +798,11 @@ export async function seed2027FullCurriculum() {
   setCurrStatus(`Seed 2027 sukses: ${res.months} bulan & ${res.weeks} minggu tersimpan!`);
 }
 
-export function initCurriculumTab() {
+export async function initCurriculumTab() {
+  switchCurrSubtab(currState.activeSubtab);
+
   if (currState.bound) {
-    refreshCurriculumData();
+    await refreshCurriculumData();
     return;
   }
   currState.bound = true;
@@ -875,9 +879,13 @@ export function initCurriculumTab() {
 
     if (btn.dataset.currAction === "delete-monthly" && key) {
       if (!confirm(`Hapus tema bulanan ${key} dari Firestore?`)) return;
-      await deleteDoc(doc(db, COLLECTION_MONTHLY, key));
-      await refreshCurriculumData();
-      setCurrStatus(`Deleted ${key}`);
+      try {
+        await deleteDoc(doc(db, COLLECTION_MONTHLY, key));
+        await refreshCurriculumData();
+        setCurrStatus(`Deleted ${key}`);
+      } catch (err) {
+        setCurrStatus("Gagal hapus: " + (err?.message || err), true);
+      }
     }
   });
 
@@ -892,7 +900,7 @@ export function initCurriculumTab() {
       document.getElementById("wk-guide-date").value = item.service_date || key;
       document.getElementById("wk-guide-month").value = item.month_key || key.slice(0, 7);
       document.getElementById("wk-guide-label").value = item.week_label || "";
-      document.getElementById("wk-guide-speaker").value = item.speaker_guideline || "";
+      document.getElementById("wk-guide-speaker").value = item.speaker_guideline || item.speaker || "";
       document.getElementById("wk-guide-monthly-focus").value = item.monthly_focus || "";
       document.getElementById("wk-guide-flow").value = item.flow_position || "";
       document.getElementById("wk-guide-title").value = item.title || "";
@@ -905,9 +913,13 @@ export function initCurriculumTab() {
 
     if (btn.dataset.currAction === "delete-weekly" && key) {
       if (!confirm(`Hapus guideline mingguan ${key} dari Firestore?`)) return;
-      await deleteDoc(doc(db, COLLECTION_WEEKLY, key));
-      await refreshCurriculumData();
-      setWeeklyStatus(`Deleted ${key}`);
+      try {
+        await deleteDoc(doc(db, COLLECTION_WEEKLY, key));
+        await refreshCurriculumData();
+        setWeeklyStatus(`Deleted ${key}`);
+      } catch (err) {
+        setWeeklyStatus("Gagal hapus: " + (err?.message || err), true);
+      }
     }
   });
 
@@ -953,11 +965,13 @@ export function initCurriculumTab() {
     if (!serviceDate) return;
 
     const monthKey = document.getElementById("wk-guide-month").value.trim() || serviceDate.slice(0, 7);
+    const speakerVal = document.getElementById("wk-guide-speaker").value.trim();
     const payload = {
       service_date: serviceDate,
       month_key: monthKey,
       week_label: document.getElementById("wk-guide-label").value.trim(),
-      speaker_guideline: document.getElementById("wk-guide-speaker").value.trim(),
+      speaker_guideline: speakerVal,
+      speaker: speakerVal,
       monthly_focus: document.getElementById("wk-guide-monthly-focus").value.trim(),
       flow_position: document.getElementById("wk-guide-flow").value.trim(),
       title: document.getElementById("wk-guide-title").value.trim(),
@@ -980,5 +994,5 @@ export function initCurriculumTab() {
     }
   });
 
-  refreshCurriculumData();
+  await refreshCurriculumData();
 }
