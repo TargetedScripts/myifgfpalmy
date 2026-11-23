@@ -425,6 +425,7 @@ export function initMediaPublicationsTab() {
   function populateMcEditor(data) {
     currentMcData = data;
     mcEditorContainer.classList.remove("hidden");
+    mcEditorContainer.style.display = "block";
     mcPublishedCheck.checked = data.published !== false;
     mcGreeting.value = data.greeting || "Shalom,";
     mcThemeRef.value = data.monthThemeTitle || "";
@@ -462,6 +463,7 @@ export function initMediaPublicationsTab() {
       }
 
       mcEditorContainer.classList.add("hidden");
+      mcEditorContainer.style.display = "none";
       mcDbBadge.textContent = "Not Yet in DB";
       mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
       mcStatusMsg.textContent = `Data The Monthly Compass untuk ${monthKey} belum ada di database.`;
@@ -551,6 +553,7 @@ export function initMediaPublicationsTab() {
   function populateAaEditor(data) {
     currentAaData = data;
     aaEditorContainer.classList.remove("hidden");
+    aaEditorContainer.style.display = "block";
     aaPublishedCheck.checked = data.published !== false;
     aaTitle.value = data.annualTitle || "";
     aaSubtitle.value = data.subtitle || "";
@@ -587,6 +590,7 @@ export function initMediaPublicationsTab() {
       }
 
       aaEditorContainer.classList.add("hidden");
+      aaEditorContainer.style.display = "none";
       aaDbBadge.textContent = "Not Yet in DB";
       aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
       aaStatusMsg.textContent = `Data The Annual Anchor tahun ${yearStr} belum ada di database.`;
