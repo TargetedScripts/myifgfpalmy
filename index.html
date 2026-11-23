@@ -645,11 +645,11 @@
           <div>
             <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">MEDIA & SERVICES • WEBSITE & NEWSLETTER</span>
             <h2 class="text-lg font-bold">Media, Monthly Compass, Annual Anchor & Sunday Archive</h2>
-            <p class="text-xs text-slate-300">Kelola arsip ibadah (<code class="font-mono text-amber-300">sunday_services</code>), The Monthly Compass, dan The Annual Anchor untuk website</p>
+            <p class="text-xs text-slate-300">Kelola arsip ibadah (<code class="font-mono text-amber-300">sunday_services</code>), The Editor's Insight, The Monthly Compass, dan The Annual Anchor untuk website</p>
           </div>
         </div>
 
-        <!-- 3 SUBTABS DI MEDIA & SERVICES -->
+        <!-- SUBTABS DI MEDIA & SERVICES (DIURUTKAN OTOMATIS OLEH reorderArchiveSubtabs()) -->
         <div class="flex flex-wrap gap-2">
           <button type="button" class="archive-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold" data-archive-subtab="sunday-archive">
             🎬 Sunday Service Archive
@@ -1168,7 +1168,7 @@
     </div>
   </div>
 
-<script type="module">
+  <script type="module">
     const loadingScreen = document.getElementById("screen-loading");
     const appScreen = document.getElementById("screen-app");
 
@@ -1188,6 +1188,31 @@
       }
     }, 6000);
 
+    function reorderArchiveSubtabs() {
+      const archivePanel = document.getElementById("panel-archives");
+      if (!archivePanel) return;
+
+      const subtabs = Array.from(archivePanel.querySelectorAll(".archive-subtab"));
+      if (subtabs.length === 0) return;
+
+      const container = subtabs[0].parentElement;
+      if (!container) return;
+
+      const priorityRank = (btn) => {
+        const key = (btn.dataset.archiveSubtab || "").toLowerCase();
+        const label = (btn.textContent || "").toLowerCase();
+
+        if (key.includes("sunday") || label.includes("sunday service archive")) return 1;
+        if (key.includes("editor") || label.includes("editor's insight") || label.includes("editors insight")) return 2;
+        if (key.includes("monthly") || key.includes("compass") || label.includes("monthly compass")) return 3;
+        if (key.includes("annual") || key.includes("anchor") || label.includes("annual anchor")) return 4;
+        return 99;
+      };
+
+      const sorted = [...subtabs].sort((a, b) => priorityRank(a) - priorityRank(b));
+      sorted.forEach(btn => container.appendChild(btn));
+    }
+
     try {
       const { initAuthObserver, loginWithGoogle, sendMagicLink, logoutUser } = await import("./js/auth.js");
       const { initMasterApp } = await import("./js/ui-master.js");
@@ -1200,6 +1225,8 @@
       const { initMediaPublicationsTab } = await import("./js/media-publications-tab.js");
 
       function syncActiveArchiveSubpanel(preferredSubtab = null) {
+        reorderArchiveSubtabs();
+
         const activeSubtab =
           preferredSubtab ||
           document.querySelector(".archive-subtab.bg-slate-900")?.dataset.archiveSubtab ||
@@ -1267,6 +1294,7 @@
       } catch (err) {
         console.warn("initMediaServicesTab / initMediaPublicationsTab error:", err);
       }
+      reorderArchiveSubtabs();
 
       initAuthObserver(
         async (profile) => {
@@ -1306,6 +1334,7 @@
           } else if (isDeptLead) {
             await initRosterEngine(profile).catch(err => console.warn("initRosterEngine error:", err));
           }
+          reorderArchiveSubtabs();
         },
         () => {
           clearTimeout(bootTimer);
@@ -1323,5 +1352,6 @@
       clearTimeout(bootTimer);
       showErrorOnLoading(err.message || "Failed to load JS modules.");
     }
-  </script></body>
+  </script>
+</body>
 </html>
