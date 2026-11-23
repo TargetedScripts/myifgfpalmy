@@ -53,6 +53,11 @@ function toggleVisibility(el, show) {
   el.style.display = show ? "block" : "none";
 }
 
+function setFieldValue(el, val = "") {
+  if (!el) return;
+  el.value = val;
+}
+
 function formatShortIndoDate(dateStr = "") {
   const parts = String(dateStr).split("-");
   if (parts.length !== 3) return dateStr;
@@ -301,7 +306,6 @@ export function initMediaPublicationsTab() {
     });
   }
 
-  // Satu pintu navigasi subtab (menghentikan listener lama dari service-archives-tab.js agar tidak bentrok)
   subtabButtons.forEach(btn => {
     btn.addEventListener(
       "click",
@@ -354,6 +358,7 @@ export function initMediaPublicationsTab() {
   let currentAaData = null;
 
   function renderMcWeeksEditor(weeks = []) {
+    if (!mcWeeksEditor) return;
     if (!weeks.length) {
       mcWeeksEditor.innerHTML = `<div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-500">Belum ada data mingguan untuk bulan ini di kurikulum. Anda tetap bisa mengisi pembuka & refleksi atau menambahkan data minggu di tab Curriculum.</div>`;
       return;
@@ -420,26 +425,27 @@ export function initMediaPublicationsTab() {
     return {
       monthKey,
       year: yr,
-      monthThemeTitle: mcThemeRef.value.trim(),
-      greeting: mcGreeting.value.trim() || "Shalom,",
-      intro: mcIntro.value.trim(),
+      monthThemeTitle: (mcThemeRef?.value || "").trim(),
+      greeting: (mcGreeting?.value || "").trim() || "Shalom,",
+      intro: (mcIntro?.value || "").trim(),
       weeks,
-      reflection: mcReflection.value.trim(),
-      closing: mcClosing.value.trim() || "Kiranya Tuhan Yesus memberkati.",
-      published: Boolean(mcPublishedCheck.checked)
+      reflection: (mcReflection?.value || "").trim(),
+      closing: (mcClosing?.value || "").trim() || "Kiranya Tuhan Yesus memberkati.",
+      published: Boolean(mcPublishedCheck?.checked)
     };
   }
 
   function populateMcEditor(data) {
     currentMcData = data;
     toggleVisibility(mcEditorContainer, true);
-    mcPublishedCheck.checked = data.published !== false;
-    mcGreeting.value = data.greeting || "Shalom,";
-    mcThemeRef.value = data.monthThemeTitle || "";
-    mcIntro.value = data.intro || "";
+    if (mcPublishedCheck) mcPublishedCheck.checked = data.published !== false;
+    setFieldValue(mcGreeting, data.greeting || "Shalom,");
+    setFieldValue(mcThemeRef, data.monthThemeTitle || "");
+    setFieldValue(mcIntro, data.intro || "");
     renderMcWeeksEditor(data.weeks || []);
-    mcReflection.value = data.reflection || "";
-    mcClosing.value = data.closing || "Kiranya Tuhan Yesus memberkati.";
+    setFieldValue(mcReflection, data.reflection || "");
+    setFieldValue(mcClosing, data.closing || "Kiranya Tuhan Yesus memberkati.");
+    toggleVisibility(mcEditorContainer, true);
   }
 
   async function buildFreshMcDraft(monthKey) {
@@ -454,25 +460,31 @@ export function initMediaPublicationsTab() {
 
   async function handleSelectMcMonth(monthKey, forceAskIfMissing = true) {
     if (!monthKey) return;
-    mcStatusMsg.textContent = "Memeriksa data di database...";
-    mcDbBadge.textContent = "Checking...";
-    mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-700";
+    if (mcStatusMsg) mcStatusMsg.textContent = "Memeriksa data di database...";
+    if (mcDbBadge) {
+      mcDbBadge.textContent = "Checking...";
+      mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-700";
+    }
 
     try {
       const snap = await getDoc(doc(db, "monthly_compass", monthKey));
       if (snap.exists()) {
         const saved = { monthKey, ...snap.data() };
         populateMcEditor(saved);
-        mcDbBadge.textContent = saved.published === false ? "Saved (Draft)" : "Published in DB";
-        mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800";
-        mcStatusMsg.textContent = `Data The Monthly Compass untuk ${monthKey} sudah ada di database dan dimuat ke editor.`;
+        if (mcDbBadge) {
+          mcDbBadge.textContent = saved.published === false ? "Saved (Draft)" : "Published in DB";
+          mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800";
+        }
+        if (mcStatusMsg) mcStatusMsg.textContent = `Data The Monthly Compass untuk ${monthKey} sudah ada di database dan dimuat ke editor.`;
         return;
       }
 
       toggleVisibility(mcEditorContainer, false);
-      mcDbBadge.textContent = "Not Yet in DB";
-      mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
-      mcStatusMsg.textContent = `Data The Monthly Compass untuk ${monthKey} belum ada di database.`;
+      if (mcDbBadge) {
+        mcDbBadge.textContent = "Not Yet in DB";
+        mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
+      }
+      if (mcStatusMsg) mcStatusMsg.textContent = `Data The Monthly Compass untuk ${monthKey} belum ada di database.`;
 
       if (forceAskIfMissing) {
         const ok = window.confirm(
@@ -483,14 +495,15 @@ export function initMediaPublicationsTab() {
 
       const draft = await buildFreshMcDraft(monthKey);
       populateMcEditor(draft);
-      mcStatusMsg.textContent = `Draf baru ${monthKey} berhasil di-generate ke editor. Silakan review/edit lalu klik Save & Publish.`;
+      if (mcStatusMsg) mcStatusMsg.textContent = `Draf baru ${monthKey} berhasil di-generate ke editor. Silakan review/edit lalu klik Save & Publish.`;
     } catch (err) {
-      mcStatusMsg.textContent = `Gagal memuat ${monthKey}: ${err.message}`;
+      if (mcStatusMsg) mcStatusMsg.textContent = `Gagal memuat ${monthKey}: ${err.message}`;
     }
   }
 
   // --- ANNUAL ANCHOR HELPERS ---
   function renderAaMonthsEditor(months = []) {
+    if (!aaMonthsEditor) return;
     aaMonthsEditor.innerHTML = months
       .map(
         (m, idx) => `
@@ -544,30 +557,31 @@ export function initMediaPublicationsTab() {
 
     return {
       year: yearStr,
-      annualTitle: aaTitle.value.trim(),
-      subtitle: aaSubtitle.value.trim(),
-      prologue: aaPrologue.value.trim(),
-      greeting: aaGreeting.value.trim() || "Shalom,",
-      welcome: aaWelcome.value.trim(),
+      annualTitle: (aaTitle?.value || "").trim(),
+      subtitle: (aaSubtitle?.value || "").trim(),
+      prologue: (aaPrologue?.value || "").trim(),
+      greeting: (aaGreeting?.value || "").trim() || "Shalom,",
+      welcome: (aaWelcome?.value || "").trim(),
       months,
-      annualReflection: aaReflection.value.trim(),
-      closing: aaClosing.value.trim() || "Kiranya Tuhan Yesus memberkati.",
-      published: Boolean(aaPublishedCheck.checked)
+      annualReflection: (aaReflection?.value || "").trim(),
+      closing: (aaClosing?.value || "").trim() || "Kiranya Tuhan Yesus memberkati.",
+      published: Boolean(aaPublishedCheck?.checked)
     };
   }
 
   function populateAaEditor(data) {
     currentAaData = data;
     toggleVisibility(aaEditorContainer, true);
-    aaPublishedCheck.checked = data.published !== false;
-    aaTitle.value = data.annualTitle || "";
-    aaSubtitle.value = data.subtitle || "";
-    aaPrologue.value = data.prologue || "";
-    aaGreeting.value = data.greeting || "Shalom,";
-    aaWelcome.value = data.welcome || "";
+    if (aaPublishedCheck) aaPublishedCheck.checked = data.published !== false;
+    setFieldValue(aaTitle, data.annualTitle || "");
+    setFieldValue(aaSubtitle, data.subtitle || "");
+    setFieldValue(aaPrologue, data.prologue || "");
+    setFieldValue(aaGreeting, data.greeting || "Shalom,");
+    setFieldValue(aaWelcome, data.welcome || "");
     renderAaMonthsEditor(data.months || []);
-    aaReflection.value = data.annualReflection || "";
-    aaClosing.value = data.closing || "Kiranya Tuhan Yesus memberkati.";
+    setFieldValue(aaReflection, data.annualReflection || "");
+    setFieldValue(aaClosing, data.closing || "Kiranya Tuhan Yesus memberkati.");
+    toggleVisibility(aaEditorContainer, true);
   }
 
   function buildFreshAaDraft(yearStr) {
@@ -579,25 +593,31 @@ export function initMediaPublicationsTab() {
 
   async function handleSelectAaYear(yearStr, forceAskIfMissing = true) {
     if (!yearStr) return;
-    aaStatusMsg.textContent = "Memeriksa data di database...";
-    aaDbBadge.textContent = "Checking...";
-    aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-700";
+    if (aaStatusMsg) aaStatusMsg.textContent = "Memeriksa data di database...";
+    if (aaDbBadge) {
+      aaDbBadge.textContent = "Checking...";
+      aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-700";
+    }
 
     try {
       const snap = await getDoc(doc(db, "annual_anchors", yearStr));
       if (snap.exists()) {
         const saved = { year: yearStr, ...snap.data() };
         populateAaEditor(saved);
-        aaDbBadge.textContent = saved.published === false ? "Saved (Draft)" : "Published in DB";
-        aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800";
-        aaStatusMsg.textContent = `Data The Annual Anchor tahun ${yearStr} sudah ada di database dan dimuat ke editor.`;
+        if (aaDbBadge) {
+          aaDbBadge.textContent = saved.published === false ? "Saved (Draft)" : "Published in DB";
+          aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800";
+        }
+        if (aaStatusMsg) aaStatusMsg.textContent = `Data The Annual Anchor tahun ${yearStr} sudah ada di database dan dimuat ke editor.`;
         return;
       }
 
       toggleVisibility(aaEditorContainer, false);
-      aaDbBadge.textContent = "Not Yet in DB";
-      aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
-      aaStatusMsg.textContent = `Data The Annual Anchor tahun ${yearStr} belum ada di database.`;
+      if (aaDbBadge) {
+        aaDbBadge.textContent = "Not Yet in DB";
+        aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900";
+      }
+      if (aaStatusMsg) aaStatusMsg.textContent = `Data The Annual Anchor tahun ${yearStr} belum ada di database.`;
 
       if (forceAskIfMissing) {
         const ok = window.confirm(
@@ -608,18 +628,18 @@ export function initMediaPublicationsTab() {
 
       const draft = buildFreshAaDraft(yearStr);
       populateAaEditor(draft);
-      aaStatusMsg.textContent = `Draf baru tahun ${yearStr} berhasil di-generate ke editor. Silakan review/edit lalu klik Save & Publish.`;
+      if (aaStatusMsg) aaStatusMsg.textContent = `Draf baru tahun ${yearStr} berhasil di-generate ke editor. Silakan review/edit lalu klik Save & Publish.`;
     } catch (err) {
-      aaStatusMsg.textContent = `Gagal memuat tahun ${yearStr}: ${err.message}`;
+      if (aaStatusMsg) aaStatusMsg.textContent = `Gagal memuat tahun ${yearStr}: ${err.message}`;
     }
   }
 
   // --- EVENT BINDINGS ---
-  mcMonthSelect.addEventListener("change", () => {
+  mcMonthSelect?.addEventListener("change", () => {
     handleSelectMcMonth(mcMonthSelect.value, true);
   });
 
-  mcSyncRosterBtn.addEventListener("click", async () => {
+  mcSyncRosterBtn?.addEventListener("click", async () => {
     const monthKey = mcMonthSelect.value;
     if (!monthKey) return;
     const currentState = currentMcData ? collectMcEditorState() : await buildFreshMcDraft(monthKey);
@@ -632,10 +652,10 @@ export function initMediaPublicationsTab() {
       return w;
     });
     populateMcEditor({ ...currentState, weeks: updatedWeeks });
-    mcStatusMsg.textContent = "Nama pembicara disinkronkan dari Sunday Roster (tetap bisa di-edit manual sebelum Save & Publish).";
+    if (mcStatusMsg) mcStatusMsg.textContent = "Nama pembicara disinkronkan dari Sunday Roster (tetap bisa di-edit manual sebelum Save & Publish).";
   });
 
-  mcRegenerateBtn.addEventListener("click", async () => {
+  mcRegenerateBtn?.addEventListener("click", async () => {
     const monthKey = mcMonthSelect.value;
     if (!monthKey) return;
     const ok = window.confirm(
@@ -644,10 +664,10 @@ export function initMediaPublicationsTab() {
     if (!ok) return;
     const fresh = await buildFreshMcDraft(monthKey);
     populateMcEditor(fresh);
-    mcStatusMsg.textContent = `Draf ${monthKey} telah di-generate ulang ke editor. Klik Save & Publish untuk menyimpan ke database.`;
+    if (mcStatusMsg) mcStatusMsg.textContent = `Draf ${monthKey} telah di-generate ulang ke editor. Klik Save & Publish untuk menyimpan ke database.`;
   });
 
-  mcPublishBtn.addEventListener("click", async () => {
+  mcPublishBtn?.addEventListener("click", async () => {
     const monthKey = mcMonthSelect.value;
     if (!monthKey) return;
     const payload = collectMcEditorState();
@@ -661,19 +681,21 @@ export function initMediaPublicationsTab() {
         { merge: true }
       );
       currentMcData = payload;
-      mcDbBadge.textContent = payload.published ? "Published in DB" : "Saved (Draft)";
-      mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800";
-      mcStatusMsg.textContent = `Berhasil disimpan ke database (monthly_compass/${monthKey}).`;
+      if (mcDbBadge) {
+        mcDbBadge.textContent = payload.published ? "Published in DB" : "Saved (Draft)";
+        mcDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800";
+      }
+      if (mcStatusMsg) mcStatusMsg.textContent = `Berhasil disimpan ke database (monthly_compass/${monthKey}).`;
     } catch (err) {
-      mcStatusMsg.textContent = `Gagal menyimpan: ${err.message}`;
+      if (mcStatusMsg) mcStatusMsg.textContent = `Gagal menyimpan: ${err.message}`;
     }
   });
 
-  aaYearSelect.addEventListener("change", () => {
+  aaYearSelect?.addEventListener("change", () => {
     handleSelectAaYear(aaYearSelect.value, true);
   });
 
-  aaRegenerateBtn.addEventListener("click", () => {
+  aaRegenerateBtn?.addEventListener("click", () => {
     const yearStr = aaYearSelect.value;
     if (!yearStr) return;
     const ok = window.confirm(
@@ -682,10 +704,10 @@ export function initMediaPublicationsTab() {
     if (!ok) return;
     const fresh = buildFreshAaDraft(yearStr);
     populateAaEditor(fresh);
-    aaStatusMsg.textContent = `Draf tahun ${yearStr} telah di-generate ulang ke editor. Klik Save & Publish untuk menyimpan ke database.`;
+    if (aaStatusMsg) aaStatusMsg.textContent = `Draf tahun ${yearStr} telah di-generate ulang ke editor. Klik Save & Publish untuk menyimpan ke database.`;
   });
 
-  aaPublishBtn.addEventListener("click", async () => {
+  aaPublishBtn?.addEventListener("click", async () => {
     const yearStr = aaYearSelect.value;
     if (!yearStr) return;
     const payload = collectAaEditorState();
@@ -699,11 +721,13 @@ export function initMediaPublicationsTab() {
         { merge: true }
       );
       currentAaData = payload;
-      aaDbBadge.textContent = payload.published ? "Published in DB" : "Saved (Draft)";
-      aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800";
-      aaStatusMsg.textContent = `Berhasil disimpan ke database (annual_anchors/${yearStr}).`;
+      if (aaDbBadge) {
+        aaDbBadge.textContent = payload.published ? "Published in DB" : "Saved (Draft)";
+        aaDbBadge.className = "inline-block px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800";
+      }
+      if (aaStatusMsg) aaStatusMsg.textContent = `Berhasil disimpan ke database (annual_anchors/${yearStr}).`;
     } catch (err) {
-      aaStatusMsg.textContent = `Gagal menyimpan: ${err.message}`;
+      if (aaStatusMsg) aaStatusMsg.textContent = `Gagal menyimpan: ${err.message}`;
     }
   });
 
@@ -730,18 +754,20 @@ export function initMediaPublicationsTab() {
         .filter(k => /^\d{4}-\d{2}$/.test(k))
         .sort();
 
-      mcMonthSelect.innerHTML = sortedMonths
-        .map(k => {
-          const [y, m] = k.split("-");
-          return `<option value="${k}">${MONTH_NAMES_ID[m] || m} ${y} (${k})</option>`;
-        })
-        .join("");
+      if (mcMonthSelect) {
+        mcMonthSelect.innerHTML = sortedMonths
+          .map(k => {
+            const [y, m] = k.split("-");
+            return `<option value="${k}">${MONTH_NAMES_ID[m] || m} ${y} (${k})</option>`;
+          })
+          .join("");
 
-      const defaultMonth = sortedMonths.includes("2026-11")
-        ? "2026-11"
-        : sortedMonths[sortedMonths.length - 1] || "2026-11";
-      mcMonthSelect.value = defaultMonth;
-      await handleSelectMcMonth(defaultMonth, false);
+        const defaultMonth = sortedMonths.includes("2026-11")
+          ? "2026-11"
+          : sortedMonths[sortedMonths.length - 1] || "2026-11";
+        mcMonthSelect.value = defaultMonth;
+        await handleSelectMcMonth(defaultMonth, false);
+      }
 
       const yearsSet = new Set([
         ...sortedMonths.map(k => k.slice(0, 4)),
@@ -750,16 +776,18 @@ export function initMediaPublicationsTab() {
       ]);
       const sortedYears = [...yearsSet].filter(y => /^\d{4}$/.test(y)).sort();
 
-      aaYearSelect.innerHTML = sortedYears
-        .map(y => `<option value="${y}">${y}</option>`)
-        .join("");
+      if (aaYearSelect) {
+        aaYearSelect.innerHTML = sortedYears
+          .map(y => `<option value="${y}">${y}</option>`)
+          .join("");
 
-      const defaultYear = sortedYears.includes("2026") ? "2026" : sortedYears[0];
-      aaYearSelect.value = defaultYear;
-      await handleSelectAaYear(defaultYear, false);
+        const defaultYear = sortedYears.includes("2026") ? "2026" : sortedYears[0];
+        aaYearSelect.value = defaultYear;
+        await handleSelectAaYear(defaultYear, false);
+      }
     } catch (err) {
-      mcStatusMsg.textContent = `Gagal memuat daftar bulan/tahun: ${err.message}`;
-      aaStatusMsg.textContent = `Gagal memuat daftar tahun: ${err.message}`;
+      if (mcStatusMsg) mcStatusMsg.textContent = `Gagal memuat daftar bulan/tahun: ${err.message}`;
+      if (aaStatusMsg) aaStatusMsg.textContent = `Gagal memuat daftar tahun: ${err.message}`;
     }
   }
 
