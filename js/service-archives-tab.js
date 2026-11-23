@@ -22,6 +22,13 @@ const OFFICIAL_TAB_PANELS = new Set([
   "panel-departments"
 ]);
 
+const PROTECTED_ARCHIVE_SUBPANELS = new Set([
+  "archive-subpanel-sunday-archive",
+  "archive-subpanel-monthly-compass",
+  "archive-subpanel-annual-anchor",
+  "archive-subpanel-editors-insight"
+]);
+
 let archiveState = {
   items: [],
   activeSubtab: "sunday-archive",
@@ -81,9 +88,20 @@ function getItemYM(item) {
   return match ? match[1] : "";
 }
 
+function isProtectedArchiveNode(el) {
+  if (!el) return false;
+  if (el.id === "panel-archives" || PROTECTED_ARCHIVE_SUBPANELS.has(el.id)) {
+    return true;
+  }
+  return Boolean(
+    el.closest(
+      "#archive-subpanel-sunday-archive, #archive-subpanel-monthly-compass, #archive-subpanel-annual-anchor, #archive-subpanel-editors-insight"
+    )
+  );
+}
+
 /**
- * Menghilangkan blok "Annual Theme" sampai "Save Monthly Theme"
- * (hanya untuk newsletter & website, bukan kurikulum)
+ * Menghilangkan blok kurikulum lama di luar tab-panel resmi dan di luar subpanel arsip/publikasi
  */
 function removeUnwantedCurriculumBlocks() {
   const panel = document.getElementById("panel-archives");
@@ -91,12 +109,8 @@ function removeUnwantedCurriculumBlocks() {
   if (!mainEl) return;
 
   const keywords = [
-    "annual theme",
     "weekly curriculum",
-    "monthly theme",
     "smart paste monthly bundle",
-    "save monthly theme",
-    "save annual theme",
     "save month & all weeks",
     "send to monthly compass"
   ];
@@ -104,7 +118,7 @@ function removeUnwantedCurriculumBlocks() {
   // 1. Bersihkan elemen di dalam <main> yang bukan tab-panel resmi
   Array.from(mainEl.children).forEach(child => {
     if (OFFICIAL_TAB_PANELS.has(child.id)) return;
-    if (child.contains(panel)) return;
+    if (panel && child.contains(panel)) return;
     const txt = (child.textContent || "").toLowerCase();
     if (keywords.some(k => txt.includes(k))) {
       child.classList.add("hidden");
@@ -112,18 +126,10 @@ function removeUnwantedCurriculumBlocks() {
     }
   });
 
-  // 2. Bersihkan elemen non-arsip di dalam #panel-archives jika ada
+  // 2. Bersihkan elemen non-arsip di dalam #panel-archives tanpa menyentuh subpanel resmi
   if (panel) {
     panel.querySelectorAll("div, section, form").forEach(el => {
-      if (
-        el.id === "panel-archives" ||
-        el.id === "archive-subpanel-sunday-archive" ||
-        el.id === "archive-subpanel-editors-insight" ||
-        el.closest("#archive-subpanel-sunday-archive") ||
-        el.closest("#archive-subpanel-editors-insight")
-      ) {
-        return;
-      }
+      if (isProtectedArchiveNode(el)) return;
       const txt = (el.textContent || "").toLowerCase();
       if (keywords.some(k => txt.includes(k))) {
         el.classList.add("hidden");
@@ -198,8 +204,10 @@ function resetForm() {
   if (pubInput) pubInput.checked = true;
 }
 
-function switchArchiveSubtab(subtabKey) {
+function switchArchiveSubtab(subtabKey, { refreshData = true } = {}) {
+  if (!subtabKey) return;
   archiveState.activeSubtab = subtabKey;
+
   document.querySelectorAll(".archive-subtab").forEach(btn => {
     const active = btn.dataset.archiveSubtab === subtabKey;
     btn.className = active
@@ -208,8 +216,12 @@ function switchArchiveSubtab(subtabKey) {
   });
 
   document.querySelectorAll(".archive-subpanel").forEach(panel => {
-    panel.classList.toggle("hidden", panel.id !== `archive-subpanel-${subtabKey}`);
+    const isTarget = panel.id === `archive-subpanel-${subtabKey}`;
+    panel.classList.toggle("hidden", !isTarget);
+    panel.style.display = isTarget ? "block" : "none";
   });
+
+  if (!refreshData) return;
 
   if (subtabKey === "editors-insight") {
     refreshEditorsInsights();
@@ -349,7 +361,7 @@ function openEditFormByKey(rawKey) {
     return;
   }
 
-  switchArchiveSubtab("sunday-archive");
+  switchArchiveSubtab("sunday-archive", { refreshData: false });
 
   const heading = document.getElementById("sa-tab-form-title");
   if (heading) heading.textContent = `✏️ Edit Sunday Service Archive (${item.service_date || item.id})`;
@@ -459,13 +471,21 @@ export function initMediaServicesTab() {
     listEl.parentElement.insertBefore(msgBar, listEl);
   }
 
-  switchArchiveSubtab(archiveState.activeSubtab || "sunday-archive");
+  const initiallyActiveSubtab =
+    document.querySelector(".archive-subtab.bg-slate-900")?.dataset.archiveSubtab ||
+    archiveState.activeSubtab ||
+    "sunday-archive";
+  switchArchiveSubtab(initiallyActiveSubtab, { refreshData: false });
 
   document.getElementById("nav-archives")?.addEventListener("click", () => {
     initEditorInsightTab();
     removeUnwantedCurriculumBlocks();
     archiveState.pageIndex = 0;
-    switchArchiveSubtab(archiveState.activeSubtab || "sunday-archive");
+    const currentSub =
+      document.querySelector(".archive-subtab.bg-slate-900")?.dataset.archiveSubtab ||
+      archiveState.activeSubtab ||
+      "sunday-archive";
+    switchArchiveSubtab(currentSub, { refreshData: true });
   });
 
   document.getElementById("sa-tab-prev-page")?.addEventListener("click", () => {
@@ -494,7 +514,7 @@ export function initMediaServicesTab() {
   document.getElementById("panel-archives")?.addEventListener("click", (e) => {
     const subBtn = e.target.closest(".archive-subtab");
     if (subBtn && subBtn.dataset.archiveSubtab) {
-      switchArchiveSubtab(subBtn.dataset.archiveSubtab);
+      switchArchiveSubtab(subBtn.dataset.archiveSubtab, { refreshData: true });
     }
   });
 
