@@ -19,6 +19,66 @@ import {
 
 const COLLECTION_MONTHLY = "monthly_themes";
 const COLLECTION_WEEKLY = "weekly_insights";
+const COLLECTION_DJ_CLASSES = "dj_classes";
+
+export const DJ_CLASSES_DEFAULT = [
+  {
+    class_key: "come",
+    class_name: "Come",
+    order: 1,
+    tagline: "Fondasi iman, keselamatan, perjanjian, dan kebebasan dalam Kristus",
+    description: "Kelas awal perjalanan pemuridan (Discipleship Journey) untuk membangun dasar iman yang kokoh.",
+    chapters: [
+      { chapter_no: 1, title: "Keselamatan", summary: "", notes: "" },
+      { chapter_no: 2, title: "Keselamatan dan Transformasi Kehidupan", summary: "", notes: "" },
+      { chapter_no: 3, title: "Baptisan Air", summary: "", notes: "" },
+      { chapter_no: 4, title: "Roh Kudus", summary: "", notes: "" },
+      { chapter_no: 5, title: "Setiap Hari Bersama Kristus", summary: "", notes: "" },
+      { chapter_no: 6, title: "Ikatan Perjanjian dalam Gereja Lokal", summary: "", notes: "" },
+      { chapter_no: 7, title: "Karya Salib", summary: "", notes: "" },
+      { chapter_no: 8, title: "Pelayanan Pelepasan", summary: "", notes: "" }
+    ]
+  },
+  {
+    class_key: "grow",
+    class_name: "Grow",
+    order: 2,
+    tagline: "Bertumbuh dalam kedewasaan rohani, Firman, dan karakter Kristus",
+    description: "Kelas lanjutan setelah Come untuk membentuk kedewasaan rohani dan ritme pertumbuhan murid.",
+    chapters: [
+      { chapter_no: 1, title: "Bertumbuh dalam Firman dan Doa", summary: "", notes: "" },
+      { chapter_no: 2, title: "Buah Roh dan Pembentukan Karakter", summary: "", notes: "" },
+      { chapter_no: 3, title: "Memahami Kehendak dan Pimpinan Tuhan", summary: "", notes: "" },
+      { chapter_no: 4, title: "Menghadapi Ujian dan Musim Pertumbuhan", summary: "", notes: "" }
+    ]
+  },
+  {
+    class_key: "serve",
+    class_name: "Serve",
+    order: 3,
+    tagline: "Menemukan panggilan, karunia rohani, dan melayani sebagai tubuh Kristus",
+    description: "Kelas pembekalan untuk melayani dengan hati hamba, integritas, dan karunia yang Tuhan percayakan.",
+    chapters: [
+      { chapter_no: 1, title: "Hati Hamba dan Panggilan Melayani", summary: "", notes: "" },
+      { chapter_no: 2, title: "Mengenal Karunia Rohani dan Peran Pelayanan", summary: "", notes: "" },
+      { chapter_no: 3, title: "Penatalayanan, Integritas, dan Kerja Sama Tim", summary: "", notes: "" },
+      { chapter_no: 4, title: "Melayani di Gereja Lokal dan Komunitas", summary: "", notes: "" }
+    ]
+  },
+  {
+    class_key: "lead",
+    class_name: "Lead",
+    order: 4,
+    tagline: "Kepemimpinan rohani, penggembalaan, dan multiplikasi murid",
+    description: "Kelas pendalaman bagi murid yang dipersiapkan memimpin, menggembala, dan melahirkan pemimpin baru.",
+    chapters: [
+      { chapter_no: 1, title: "Hakikat Kepemimpinan Rohani yang Melayani", summary: "", notes: "" },
+      { chapter_no: 2, title: "Menggembala dan Membimbing Pertumbuhan Orang Lain", summary: "", notes: "" },
+      { chapter_no: 3, title: "Menjaga Visi, Budaya Sehat, dan Akuntabilitas", summary: "", notes: "" },
+      { chapter_no: 4, title: "Multiplikasi Murid dan Regenerasi Kepemimpinan", summary: "", notes: "" }
+    ]
+  }
+];
 
 export const MONTHLY_THEMES_2026 = [
   {
@@ -533,11 +593,30 @@ export async function seedNovDec2026WeeklyGuidelines() {
   return targetWeeks.length;
 }
 
+export async function seedDefaultDJClasses() {
+  const batch = writeBatch(db);
+  DJ_CLASSES_DEFAULT.forEach(cls => {
+    batch.set(
+      doc(db, COLLECTION_DJ_CLASSES, cls.class_key),
+      {
+        ...cls,
+        updated_at: serverTimestamp()
+      },
+      { merge: true }
+    );
+  });
+  await batch.commit();
+  return DJ_CLASSES_DEFAULT.length;
+}
+
 let currState = {
   monthlyItems: [],
   weeklyItems: [],
   dailyReflections: [],
+  djClasses: [],
   activeSubtab: "monthly",
+  activeDjClass: "come",
+  editingChapterIdx: null,
   yearFilter: "ALL",
   weeklyMonthFilter: "ALL",
   reflectionMonthFilter: "2026-12",
@@ -580,7 +659,16 @@ function setReflectionStatus(msg, isError = false) {
     : "text-[11px] font-semibold text-emerald-700";
 }
 
-function ensureDailyReflectionTabUI() {
+function setDjClassStatus(msg, isError = false) {
+  const el = document.getElementById("curr-dj-status");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = isError
+    ? "text-[11px] font-semibold text-red-600"
+    : "text-[11px] font-semibold text-emerald-700";
+}
+
+function ensureCurriculumTabsAndPanelsUI() {
   const panel = document.getElementById("panel-curriculum");
   if (!panel) return;
 
@@ -589,116 +677,193 @@ function ensureDailyReflectionTabUI() {
     Array.from(panel.querySelectorAll(".curr-subtab")).pop();
 
   if (weeklyTabBtn && !panel.querySelector('.curr-subtab[data-curr-subtab="daily-reflection"]')) {
-    const tabBtn = document.createElement("button");
-    tabBtn.type = "button";
-    tabBtn.dataset.currSubtab = "daily-reflection";
-    tabBtn.className = "curr-subtab bg-slate-100 text-slate-700 hover:bg-slate-200 px-3.5 py-2 rounded-lg text-xs font-semibold";
-    tabBtn.textContent = "📖 Daily Reflection";
-    weeklyTabBtn.insertAdjacentElement("afterend", tabBtn);
+    const refTabBtn = document.createElement("button");
+    refTabBtn.type = "button";
+    refTabBtn.dataset.currSubtab = "daily-reflection";
+    refTabBtn.className = "curr-subtab bg-slate-100 text-slate-700 hover:bg-slate-200 px-3.5 py-2 rounded-lg text-xs font-semibold";
+    refTabBtn.textContent = "📖 Daily Reflection";
+    weeklyTabBtn.insertAdjacentElement("afterend", refTabBtn);
   }
 
-  if (document.getElementById("curr-subpanel-daily-reflection")) return;
+  const refTabAnchor = panel.querySelector('.curr-subtab[data-curr-subtab="daily-reflection"]') || weeklyTabBtn;
+  if (refTabAnchor && !panel.querySelector('.curr-subtab[data-curr-subtab="dj-class"]')) {
+    const djTabBtn = document.createElement("button");
+    djTabBtn.type = "button";
+    djTabBtn.dataset.currSubtab = "dj-class";
+    djTabBtn.className = "curr-subtab bg-slate-100 text-slate-700 hover:bg-slate-200 px-3.5 py-2 rounded-lg text-xs font-semibold";
+    djTabBtn.textContent = "🎓 DJ Class";
+    refTabAnchor.insertAdjacentElement("afterend", djTabBtn);
+  }
 
-  const subpanel = document.createElement("div");
-  subpanel.id = "curr-subpanel-daily-reflection";
-  subpanel.className = "curr-subpanel hidden space-y-4 mt-3";
-  subpanel.innerHTML = `
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 class="font-bold text-sm text-slate-900">📖 Daily Reflection Manager (Single, Bulk & Query)</h3>
-          <p class="text-[11px] text-slate-500">Tambah/edit satu-persatu maupun bulk (termasuk data s/d 31 Desember 2026), query lihat, dan hapus.</p>
+  if (!document.getElementById("curr-subpanel-daily-reflection")) {
+    const refPanel = document.createElement("div");
+    refPanel.id = "curr-subpanel-daily-reflection";
+    refPanel.className = "curr-subpanel hidden space-y-4 mt-3";
+    refPanel.innerHTML = `
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 class="font-bold text-sm text-slate-900">📖 Daily Reflection Manager (Single, Bulk & Query)</h3>
+            <p class="text-[11px] text-slate-500">Tambah/edit satu-persatu maupun bulk (termasuk data s/d 31 Desember 2026), query lihat, dan hapus.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" id="curr-ref-seed-novdec-btn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-xs">
+              ⚡ Seed Nov 20–Dec 31, 2026
+            </button>
+            <span id="curr-ref-status" class="text-[11px] font-semibold text-emerald-700"></span>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <button type="button" id="curr-ref-seed-novdec-btn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-xs">
-            ⚡ Seed Nov 20–Dec 31, 2026
-          </button>
-          <span id="curr-ref-status" class="text-[11px] font-semibold text-emerald-700"></span>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+          <form id="form-curr-reflection" class="space-y-2.5 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200 text-xs">
+            <div class="flex items-center justify-between">
+              <h4 id="curr-ref-form-title" class="font-bold text-slate-900">➕ Single Entry / Edit Reflection</h4>
+              <button type="button" id="curr-ref-reset-btn" class="text-[11px] text-slate-600 hover:underline">Reset</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label class="font-semibold text-slate-600">Date (YYYY-MM-DD)</label>
+                <input type="date" id="curr-ref-date" required class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+              </div>
+              <div>
+                <label class="font-semibold text-slate-600">Scripture / Verse</label>
+                <input type="text" id="curr-ref-verse" placeholder="e.g., Kejadian 50:24 & Mazmur 116:12 (TB)" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+              </div>
+            </div>
+            <div>
+              <label class="font-semibold text-slate-600">Title</label>
+              <input type="text" id="curr-ref-title" required placeholder="Judul refleksi harian" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+            </div>
+            <div>
+              <label class="font-semibold text-slate-600">Reflection Text</label>
+              <textarea id="curr-ref-body" rows="4" required placeholder="Isi refleksi harian..." class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white"></textarea>
+            </div>
+            <div>
+              <label class="font-semibold text-slate-600">Prayer (Optional)</label>
+              <input type="text" id="curr-ref-prayer" placeholder="Pokok doa penutup" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+            </div>
+            <button type="submit" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs">
+              💾 Save Daily Reflection
+            </button>
+          </form>
+
+          <div class="space-y-2.5 bg-amber-50/50 p-3.5 rounded-xl border border-amber-200 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <h4 class="font-bold text-slate-900">⚡ Bulk Import / Batch Update (s/d 31 Des 2026)</h4>
+              <button type="button" id="curr-ref-sample-btn" class="text-[11px] font-semibold text-amber-900 hover:underline">Isi Contoh Format</button>
+            </div>
+            <p class="text-[11px] text-slate-600 leading-relaxed">
+              Mendukung <strong>JSON Array</strong> (<code>[{"date":"2026-12-31","title":"...","scripture":"...","reflection":"...","prayer":"..."}]</code>) atau blok baris dimulai tanggal <code>YYYY-MM-DD | Judul</code>.
+            </p>
+            <textarea id="curr-ref-bulk-input" rows="8" placeholder='[{"date":"2026-12-31","title":"...","scripture":"...","reflection":"...","prayer":"..."}]' class="w-full px-2.5 py-2 border border-amber-300 rounded-lg font-mono text-[11px] bg-white"></textarea>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" id="curr-ref-bulk-save-btn" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs">
+                🚀 Save Bulk Reflections
+              </button>
+              <button type="button" id="curr-ref-bulk-clear-btn" class="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-lg text-xs">
+                Clear
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-        <!-- Single Entry Form -->
-        <form id="form-curr-reflection" class="space-y-2.5 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200 text-xs">
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h4 class="font-bold text-sm text-slate-900">🔎 Query & Daftar Daily Reflections</h4>
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <select id="curr-ref-month-filter" class="px-2.5 py-1.5 border rounded-lg bg-white text-xs font-semibold">
+              <option value="ALL">Semua Periode</option>
+              <option value="2026-11">November 2026</option>
+              <option value="2026-12" selected>December 2026 (s/d 31 Des)</option>
+              <option value="2027-01">January 2027</option>
+            </select>
+            <input type="search" id="curr-ref-search" placeholder="Cari tanggal, judul, ayat, teks..." class="px-2.5 py-1.5 border rounded-lg bg-white text-xs w-52" />
+            <button type="button" id="curr-ref-refresh-btn" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-lg text-xs">
+              ↻ Refresh
+            </button>
+          </div>
+        </div>
+        <div id="curr-ref-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      </div>
+    `;
+    panel.appendChild(refPanel);
+  }
+
+  if (!document.getElementById("curr-subpanel-dj-class")) {
+    const djPanel = document.createElement("div");
+    djPanel.id = "curr-subpanel-dj-class";
+    djPanel.className = "curr-subpanel hidden space-y-4 mt-3";
+    djPanel.innerHTML = `
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 class="font-bold text-sm text-slate-900">🎓 Discipleship Journey (DJ) Classes</h3>
+            <p class="text-[11px] text-slate-500">4 kelas setara dalam kurikulum Discipleship Journey: <strong>Come</strong>, <strong>Grow</strong>, <strong>Serve</strong>, dan <strong>Lead</strong>.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" id="curr-dj-seed-btn" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs">
+              ⚡ Seed Default 4 DJ Classes
+            </button>
+            <span id="curr-dj-status" class="text-[11px] font-semibold text-emerald-700"></span>
+          </div>
+        </div>
+
+        <!-- 4 Equal Class Selector Cards -->
+        <div id="curr-dj-class-tabs" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1"></div>
+      </div>
+
+      <!-- Active Class Header & Chapters -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Left 2 cols: Class Overview + Chapter List -->
+        <div class="lg:col-span-2 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+          <div class="border-b border-slate-100 pb-3 space-y-1">
+            <div class="flex items-center justify-between gap-2">
+              <span id="curr-dj-active-badge" class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">CLASS • COME</span>
+              <span id="curr-dj-chapter-count" class="text-[11px] font-semibold text-slate-500">0 Chapters</span>
+            </div>
+            <h4 id="curr-dj-active-title" class="font-bold text-base text-slate-900">Come</h4>
+            <p id="curr-dj-active-tagline" class="text-xs font-medium text-amber-800"></p>
+            <p id="curr-dj-active-desc" class="text-xs text-slate-600 leading-relaxed"></p>
+          </div>
+
+          <div id="curr-dj-chapters-list" class="space-y-2"></div>
+        </div>
+
+        <!-- Right 1 col: Add / Edit Chapter Form -->
+        <form id="form-curr-dj-chapter" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 text-xs h-fit">
           <div class="flex items-center justify-between">
-            <h4 id="curr-ref-form-title" class="font-bold text-slate-900">➕ Single Entry / Edit Reflection</h4>
-            <button type="button" id="curr-ref-reset-btn" class="text-[11px] text-slate-600 hover:underline">Reset</button>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <label class="font-semibold text-slate-600">Date (YYYY-MM-DD)</label>
-              <input type="date" id="curr-ref-date" required class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
-            </div>
-            <div>
-              <label class="font-semibold text-slate-600">Scripture / Verse</label>
-              <input type="text" id="curr-ref-verse" placeholder="e.g., Kejadian 50:24 & Mazmur 116:12 (TB)" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
-            </div>
+            <h4 id="curr-dj-form-title" class="font-bold text-slate-900">➕ Add / Edit Chapter</h4>
+            <button type="button" id="curr-dj-chapter-reset-btn" class="text-[11px] text-slate-600 hover:underline">Reset</button>
           </div>
           <div>
-            <label class="font-semibold text-slate-600">Title</label>
-            <input type="text" id="curr-ref-title" required placeholder="Judul refleksi harian" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+            <label class="font-semibold text-slate-600">Chapter No.</label>
+            <input type="number" min="1" id="curr-dj-chap-no" required class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
           </div>
           <div>
-            <label class="font-semibold text-slate-600">Reflection Text</label>
-            <textarea id="curr-ref-body" rows="4" required placeholder="Isi refleksi harian..." class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white"></textarea>
+            <label class="font-semibold text-slate-600">Chapter / Bab Name</label>
+            <input type="text" id="curr-dj-chap-title" required placeholder="Nama bab / chapter" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
           </div>
           <div>
-            <label class="font-semibold text-slate-600">Prayer (Optional)</label>
-            <input type="text" id="curr-ref-prayer" placeholder="Pokok doa penutup" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+            <label class="font-semibold text-slate-600">Ringkasan / Focus (Optional)</label>
+            <textarea id="curr-dj-chap-summary" rows="3" placeholder="Ringkasan pokok bab..." class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white"></textarea>
           </div>
-          <button type="submit" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs">
-            💾 Save Daily Reflection
+          <div>
+            <label class="font-semibold text-slate-600">Catatan / Ayat Kunci (Optional)</label>
+            <input type="text" id="curr-dj-chap-notes" placeholder="Catatan atau referensi ayat" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+          </div>
+          <button type="submit" class="w-full px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs">
+            💾 Save Chapter to Class
           </button>
         </form>
-
-        <!-- Bulk Entry Form -->
-        <div class="space-y-2.5 bg-amber-50/50 p-3.5 rounded-xl border border-amber-200 text-xs">
-          <div class="flex items-center justify-between gap-2">
-            <h4 class="font-bold text-slate-900">⚡ Bulk Import / Batch Update (s/d 31 Des 2026)</h4>
-            <button type="button" id="curr-ref-sample-btn" class="text-[11px] font-semibold text-amber-900 hover:underline">Isi Contoh Format</button>
-          </div>
-          <p class="text-[11px] text-slate-600 leading-relaxed">
-            Mendukung <strong>JSON Array</strong> (<code>[{"date":"2026-12-31","title":"...","scripture":"...","reflection":"...","prayer":"..."}]</code>) atau blok baris dimulai tanggal <code>YYYY-MM-DD | Judul</code>.
-          </p>
-          <textarea id="curr-ref-bulk-input" rows="8" placeholder='[{"date":"2026-12-31","title":"...","scripture":"...","reflection":"...","prayer":"..."}]' class="w-full px-2.5 py-2 border border-amber-300 rounded-lg font-mono text-[11px] bg-white"></textarea>
-          <div class="flex flex-wrap items-center gap-2">
-            <button type="button" id="curr-ref-bulk-save-btn" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs">
-              🚀 Save Bulk Reflections
-            </button>
-            <button type="button" id="curr-ref-bulk-clear-btn" class="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-lg text-xs">
-              Clear
-            </button>
-          </div>
-        </div>
       </div>
-    </div>
-
-    <!-- Query / Filter & List -->
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h4 class="font-bold text-sm text-slate-900">🔎 Query & Daftar Daily Reflections</h4>
-        <div class="flex flex-wrap items-center gap-2 text-xs">
-          <select id="curr-ref-month-filter" class="px-2.5 py-1.5 border rounded-lg bg-white text-xs font-semibold">
-            <option value="ALL">Semua Periode</option>
-            <option value="2026-11">November 2026</option>
-            <option value="2026-12" selected>December 2026 (s/d 31 Des)</option>
-            <option value="2027-01">January 2027</option>
-          </select>
-          <input type="search" id="curr-ref-search" placeholder="Cari tanggal, judul, ayat, teks..." class="px-2.5 py-1.5 border rounded-lg bg-white text-xs w-52" />
-          <button type="button" id="curr-ref-refresh-btn" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-lg text-xs">
-            ↻ Refresh
-          </button>
-        </div>
-      </div>
-      <div id="curr-ref-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-    </div>
-  `;
-
-  panel.appendChild(subpanel);
+    `;
+    panel.appendChild(djPanel);
+  }
 }
 
 function switchCurrSubtab(subtab) {
-  ensureDailyReflectionTabUI();
+  ensureCurriculumTabsAndPanelsUI();
   const target = subtab || "monthly";
   currState.activeSubtab = target;
   document.querySelectorAll(".curr-subtab").forEach(btn => {
@@ -711,6 +876,138 @@ function switchCurrSubtab(subtab) {
   document.querySelectorAll(".curr-subpanel").forEach(panel => {
     panel.classList.toggle("hidden", panel.id !== `curr-subpanel-${target}`);
   });
+}
+
+function getCombinedDJClassesPool() {
+  const map = new Map();
+  DJ_CLASSES_DEFAULT.forEach(cls => {
+    map.set(cls.class_key, {
+      ...cls,
+      chapters: cls.chapters.map((ch, idx) => ({
+        ...ch,
+        chapter_no: ch.chapter_no || idx + 1
+      }))
+    });
+  });
+
+  currState.djClasses.forEach(cls => {
+    const key = String(cls.class_key || cls.id || "").toLowerCase();
+    if (!key) return;
+    const base = map.get(key) || {
+      class_key: key,
+      class_name: cls.class_name || key.toUpperCase(),
+      order: cls.order || 99,
+      tagline: "",
+      description: "",
+      chapters: []
+    };
+    const mergedChapters = Array.isArray(cls.chapters) ? cls.chapters : base.chapters;
+    map.set(key, {
+      ...base,
+      ...cls,
+      class_key: key,
+      chapters: mergedChapters
+        .map((ch, idx) => ({
+          chapter_no: Number(ch.chapter_no) || idx + 1,
+          title: String(ch.title || "").trim(),
+          summary: String(ch.summary || "").trim(),
+          notes: String(ch.notes || "").trim()
+        }))
+        .filter(ch => ch.title)
+        .sort((a, b) => a.chapter_no - b.chapter_no)
+    });
+  });
+
+  return Array.from(map.values()).sort((a, b) => (a.order || 99) - (b.order || 99));
+}
+
+function resetDjChapterForm() {
+  currState.editingChapterIdx = null;
+  const heading = document.getElementById("curr-dj-form-title");
+  if (heading) heading.textContent = "➕ Add / Edit Chapter";
+  const activeCls = getCombinedDJClassesPool().find(c => c.class_key === currState.activeDjClass);
+  const nextNo = (activeCls?.chapters?.length || 0) + 1;
+  const noEl = document.getElementById("curr-dj-chap-no");
+  if (noEl) noEl.value = String(nextNo);
+  ["curr-dj-chap-title", "curr-dj-chap-summary", "curr-dj-chap-notes"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+}
+
+function renderDJClasses() {
+  ensureCurriculumTabsAndPanelsUI();
+  const tabsEl = document.getElementById("curr-dj-class-tabs");
+  const listEl = document.getElementById("curr-dj-chapters-list");
+  if (!tabsEl || !listEl) return;
+
+  const classes = getCombinedDJClassesPool();
+  if (!classes.some(c => c.class_key === currState.activeDjClass)) {
+    currState.activeDjClass = classes[0]?.class_key || "come";
+  }
+
+  tabsEl.innerHTML = classes.map(cls => {
+    const isSelected = cls.class_key === currState.activeDjClass;
+    const chapCount = (cls.chapters || []).length;
+    return `
+      <button type="button" data-dj-select="${esc(cls.class_key)}" class="text-left p-3 rounded-xl border transition ${
+        isSelected
+          ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+          : "bg-slate-50 hover:bg-slate-100 text-slate-900 border-slate-200"
+      }">
+        <div class="flex items-center justify-between gap-1">
+          <span class="font-bold text-sm">${esc(cls.class_name)}</span>
+          <span class="font-mono text-[10px] px-1.5 py-0.5 rounded ${
+            isSelected ? "bg-amber-400 text-slate-950 font-bold" : "bg-white text-slate-700 border border-slate-200"
+          }">${chapCount} Bab</span>
+        </div>
+        <p class="text-[11px] mt-1 line-clamp-2 ${isSelected ? "text-slate-300" : "text-slate-500"}">${esc(cls.tagline || "")}</p>
+      </button>
+    `;
+  }).join("");
+
+  const activeCls = classes.find(c => c.class_key === currState.activeDjClass) || classes[0];
+  if (!activeCls) return;
+
+  document.getElementById("curr-dj-active-badge").textContent = `CLASS • ${String(activeCls.class_name || "").toUpperCase()}`;
+  document.getElementById("curr-dj-chapter-count").textContent = `${(activeCls.chapters || []).length} Chapters`;
+  document.getElementById("curr-dj-active-title").textContent = activeCls.class_name;
+  document.getElementById("curr-dj-active-tagline").textContent = activeCls.tagline || "";
+  document.getElementById("curr-dj-active-desc").textContent = activeCls.description || "";
+
+  if (currState.editingChapterIdx === null) {
+    const noEl = document.getElementById("curr-dj-chap-no");
+    if (noEl && !noEl.dataset.userEdited) {
+      noEl.value = String((activeCls.chapters || []).length + 1);
+    }
+  }
+
+  const chapters = activeCls.chapters || [];
+  if (chapters.length === 0) {
+    listEl.innerHTML = `
+      <div class="p-5 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500">
+        Belum ada bab/chapter di kelas <strong>${esc(activeCls.class_name)}</strong>. Tambahkan melalui form di samping.
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = chapters.map((ch, idx) => `
+    <div class="p-3 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 flex items-start justify-between gap-3 text-xs">
+      <div class="space-y-0.5">
+        <div class="flex items-center gap-2">
+          <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">BAB ${esc(ch.chapter_no || idx + 1)}</span>
+          <h5 class="font-bold text-sm text-slate-900">${esc(ch.title)}</h5>
+        </div>
+        ${ch.summary ? `<p class="text-slate-600 leading-relaxed pt-0.5">${esc(ch.summary)}</p>` : ""}
+        ${ch.notes ? `<p class="text-[11px] text-amber-800 font-medium">📌 ${esc(ch.notes)}</p>` : ""}
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button type="button" data-dj-chap-action="edit" data-chap-idx="${idx}" class="text-blue-600 hover:underline font-semibold">Edit</button>
+        <button type="button" data-dj-chap-action="delete" data-chap-idx="${idx}" class="text-red-600 hover:underline font-semibold">Delete</button>
+      </div>
+    </div>
+  `).join("");
 }
 
 function resetMonthlyForm() {
@@ -1002,16 +1299,18 @@ function renderDailyReflectionsList() {
 }
 
 export async function refreshCurriculumData() {
-  ensureDailyReflectionTabUI();
+  ensureCurriculumTabsAndPanelsUI();
   try {
-    const [mSnap, wSnap, refList] = await Promise.all([
+    const [mSnap, wSnap, refList, djSnap] = await Promise.all([
       getDocs(collection(db, COLLECTION_MONTHLY)),
       getDocs(collection(db, COLLECTION_WEEKLY)),
-      getDailyReflections().catch(() => [])
+      getDailyReflections().catch(() => []),
+      getDocs(collection(db, COLLECTION_DJ_CLASSES)).catch(() => null)
     ]);
 
     currState.monthlyItems = mSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     currState.weeklyItems = wSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    currState.djClasses = djSnap ? djSnap.docs.map(d => ({ id: d.id, ...d.data() })) : [];
     currState.dailyReflections = refList.map(item => {
       const dateKey = String(item.reflection_date || item.devotion_date || item.id || "").slice(0, 10);
       return {
@@ -1029,6 +1328,7 @@ export async function refreshCurriculumData() {
   renderMonthlyThemes();
   renderWeeklyThemes();
   renderDailyReflectionsList();
+  renderDJClasses();
 }
 
 export async function seed2026MonthlyThemes() {
@@ -1057,7 +1357,7 @@ export async function seed2027FullCurriculum() {
 }
 
 export async function initCurriculumTab() {
-  ensureDailyReflectionTabUI();
+  ensureCurriculumTabsAndPanelsUI();
   switchCurrSubtab(currState.activeSubtab);
 
   if (currState.bound) {
@@ -1073,6 +1373,134 @@ export async function initCurriculumTab() {
     }
   });
 
+  // DJ Class interactions
+  document.getElementById("curr-dj-class-tabs")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-dj-select]");
+    if (!btn) return;
+    currState.activeDjClass = btn.dataset.djSelect;
+    currState.editingChapterIdx = null;
+    const noEl = document.getElementById("curr-dj-chap-no");
+    if (noEl) delete noEl.dataset.userEdited;
+    resetDjChapterForm();
+    renderDJClasses();
+  });
+
+  document.getElementById("curr-dj-seed-btn")?.addEventListener("click", async () => {
+    try {
+      setDjClassStatus("Seeding 4 DJ Classes (Come, Grow, Serve, Lead)...");
+      const count = await seedDefaultDJClasses();
+      await refreshCurriculumData();
+      setDjClassStatus(`${count} kelas DJ (Come, Grow, Serve, Lead) tersimpan!`);
+    } catch (err) {
+      setDjClassStatus("Gagal seed DJ Class: " + (err?.message || err), true);
+    }
+  });
+
+  document.getElementById("curr-dj-chap-no")?.addEventListener("input", (e) => {
+    e.currentTarget.dataset.userEdited = "1";
+  });
+
+  document.getElementById("curr-dj-chapter-reset-btn")?.addEventListener("click", () => {
+    const noEl = document.getElementById("curr-dj-chap-no");
+    if (noEl) delete noEl.dataset.userEdited;
+    resetDjChapterForm();
+    setDjClassStatus("");
+  });
+
+  document.getElementById("curr-dj-chapters-list")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-dj-chap-action]");
+    if (!btn) return;
+    const idx = Number(btn.dataset.chapIdx);
+    const activeCls = getCombinedDJClassesPool().find(c => c.class_key === currState.activeDjClass);
+    if (!activeCls || Number.isNaN(idx)) return;
+    const chapters = [...(activeCls.chapters || [])];
+    const targetChap = chapters[idx];
+    if (!targetChap) return;
+
+    if (btn.dataset.djChapAction === "edit") {
+      currState.editingChapterIdx = idx;
+      document.getElementById("curr-dj-form-title").textContent = `✏️ Edit Bab (${activeCls.class_name})`;
+      document.getElementById("curr-dj-chap-no").value = String(targetChap.chapter_no || idx + 1);
+      document.getElementById("curr-dj-chap-title").value = targetChap.title || "";
+      document.getElementById("curr-dj-chap-summary").value = targetChap.summary || "";
+      document.getElementById("curr-dj-chap-notes").value = targetChap.notes || "";
+      setDjClassStatus(`Editing Bab ${targetChap.chapter_no || idx + 1}`);
+    }
+
+    if (btn.dataset.djChapAction === "delete") {
+      if (!confirm(`Hapus bab "${targetChap.title}" dari kelas ${activeCls.class_name}?`)) return;
+      chapters.splice(idx, 1);
+      try {
+        setDjClassStatus("Deleting chapter...");
+        await setDoc(
+          doc(db, COLLECTION_DJ_CLASSES, activeCls.class_key),
+          {
+            class_key: activeCls.class_key,
+            class_name: activeCls.class_name,
+            order: activeCls.order || 99,
+            tagline: activeCls.tagline || "",
+            description: activeCls.description || "",
+            chapters,
+            updated_at: serverTimestamp()
+          },
+          { merge: true }
+        );
+        resetDjChapterForm();
+        await refreshCurriculumData();
+        setDjClassStatus(`Deleted "${targetChap.title}"`);
+      } catch (err) {
+        setDjClassStatus("Gagal hapus bab: " + (err?.message || err), true);
+      }
+    }
+  });
+
+  document.getElementById("form-curr-dj-chapter")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const activeCls = getCombinedDJClassesPool().find(c => c.class_key === currState.activeDjClass);
+    if (!activeCls) return;
+
+    const chapters = [...(activeCls.chapters || [])];
+    const chapData = {
+      chapter_no: Number(document.getElementById("curr-dj-chap-no").value) || chapters.length + 1,
+      title: document.getElementById("curr-dj-chap-title").value.trim(),
+      summary: document.getElementById("curr-dj-chap-summary").value.trim(),
+      notes: document.getElementById("curr-dj-chap-notes").value.trim()
+    };
+    if (!chapData.title) return;
+
+    if (currState.editingChapterIdx !== null && chapters[currState.editingChapterIdx]) {
+      chapters[currState.editingChapterIdx] = chapData;
+    } else {
+      chapters.push(chapData);
+    }
+    chapters.sort((a, b) => a.chapter_no - b.chapter_no);
+
+    try {
+      setDjClassStatus(`Saving to ${activeCls.class_name}...`);
+      await setDoc(
+        doc(db, COLLECTION_DJ_CLASSES, activeCls.class_key),
+        {
+          class_key: activeCls.class_key,
+          class_name: activeCls.class_name,
+          order: activeCls.order || 99,
+          tagline: activeCls.tagline || "",
+          description: activeCls.description || "",
+          chapters,
+          updated_at: serverTimestamp()
+        },
+        { merge: true }
+      );
+      const noEl = document.getElementById("curr-dj-chap-no");
+      if (noEl) delete noEl.dataset.userEdited;
+      resetDjChapterForm();
+      await refreshCurriculumData();
+      setDjClassStatus(`Saved "${chapData.title}" in ${activeCls.class_name}!`);
+    } catch (err) {
+      setDjClassStatus("Gagal menyimpan bab: " + (err?.message || err), true);
+    }
+  });
+
+  // Monthly & Weekly seed/filter/form handlers
   document.getElementById("curr-seed-2026-btn")?.addEventListener("click", async () => {
     try {
       await seed2026MonthlyThemes();
