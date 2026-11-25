@@ -29,53 +29,59 @@ export const DJ_CLASSES_DEFAULT = [
     tagline: "Fondasi iman, keselamatan, perjanjian, dan kebebasan dalam Kristus",
     description: "Kelas awal perjalanan pemuridan (Discipleship Journey) untuk membangun dasar iman yang kokoh.",
     chapters: [
-      { chapter_no: 1, title: "Keselamatan", summary: "", notes: "" },
-      { chapter_no: 2, title: "Keselamatan dan Transformasi Kehidupan", summary: "", notes: "" },
-      { chapter_no: 3, title: "Baptisan Air", summary: "", notes: "" },
-      { chapter_no: 4, title: "Roh Kudus", summary: "", notes: "" },
-      { chapter_no: 5, title: "Setiap Hari Bersama Kristus", summary: "", notes: "" },
-      { chapter_no: 6, title: "Ikatan Perjanjian dalam Gereja Lokal", summary: "", notes: "" },
-      { chapter_no: 7, title: "Karya Salib", summary: "", notes: "" },
-      { chapter_no: 8, title: "Pelayanan Pelepasan", summary: "", notes: "" }
+      { chapter_no: 1, title: "Keselamatan", page: "", summary: "", notes: "" },
+      { chapter_no: 2, title: "Keselamatan dan Transformasi Kehidupan", page: "", summary: "", notes: "" },
+      { chapter_no: 3, title: "Baptisan Air", page: "", summary: "", notes: "" },
+      { chapter_no: 4, title: "Roh Kudus", page: "", summary: "", notes: "" },
+      { chapter_no: 5, title: "Setiap Hari Bersama Kristus", page: "", summary: "", notes: "" },
+      { chapter_no: 6, title: "Ikatan Perjanjian dalam Gereja Lokal", page: "", summary: "", notes: "" },
+      { chapter_no: 7, title: "Karya Salib", page: "", summary: "", notes: "" },
+      { chapter_no: 8, title: "Pelayanan Pelepasan", page: "", summary: "", notes: "" }
     ]
   },
   {
     class_key: "grow",
     class_name: "Grow",
     order: 2,
-    tagline: "Bertumbuh dalam kedewasaan rohani, Firman, dan karakter Kristus",
-    description: "Kelas lanjutan setelah Come untuk membentuk kedewasaan rohani dan ritme pertumbuhan murid.",
+    tagline: "Visi, misi, DNA/nilai utama IFGF, dan pertumbuhan dalam tempat perlindungan & pertumbuhan",
+    description: "Kelas lanjutan Discipleship Journey untuk memahami identitas, visi-misi, nilai utama, dan pertumbuhan rohani dalam IFGF.",
     chapters: [
-      { chapter_no: 1, title: "Bertumbuh dalam Firman dan Doa", summary: "", notes: "" },
-      { chapter_no: 2, title: "Buah Roh dan Pembentukan Karakter", summary: "", notes: "" },
-      { chapter_no: 3, title: "Memahami Kehendak dan Pimpinan Tuhan", summary: "", notes: "" },
-      { chapter_no: 4, title: "Menghadapi Ujian dan Musim Pertumbuhan", summary: "", notes: "" }
+      { chapter_no: 1, title: "Pernyataan Misi IFGF", page: "", summary: "", notes: "" },
+      { chapter_no: 2, title: "Pernyataan Visi IFGF (1)", page: "", summary: "", notes: "" },
+      { chapter_no: 3, title: "Pernyataan Visi IFGF (2)", page: "", summary: "", notes: "" },
+      { chapter_no: 4, title: "Dna Dan Nilai-Nilai Utama IFGF", page: "", summary: "", notes: "" },
+      { chapter_no: 5, title: "Tempat Perlindungan", page: "", summary: "", notes: "" },
+      { chapter_no: 6, title: "Tempat Pertumbuhan", page: "", summary: "", notes: "" }
     ]
   },
   {
     class_key: "serve",
     class_name: "Serve",
     order: 3,
-    tagline: "Menemukan panggilan, karunia rohani, dan melayani sebagai tubuh Kristus",
-    description: "Kelas pembekalan untuk melayani dengan hati hamba, integritas, dan karunia yang Tuhan percayakan.",
+    tagline: "Hubungan, hati pelayanan, relawan, potensi, relevansi, dan pelayanan berdampak",
+    description: "Kelas pembekalan Discipleship Journey untuk melayani melalui hubungan yang sehat, potensi diri, dan dampak nyata.",
     chapters: [
-      { chapter_no: 1, title: "Hati Hamba dan Panggilan Melayani", summary: "", notes: "" },
-      { chapter_no: 2, title: "Mengenal Karunia Rohani dan Peran Pelayanan", summary: "", notes: "" },
-      { chapter_no: 3, title: "Penatalayanan, Integritas, dan Kerja Sama Tim", summary: "", notes: "" },
-      { chapter_no: 4, title: "Melayani di Gereja Lokal dan Komunitas", summary: "", notes: "" }
+      { chapter_no: 1, title: "Arti Sebuah Hubungan", page: "4", summary: "", notes: "Hal. 4" },
+      { chapter_no: 2, title: "Arti Sebuah Pelayanan", page: "9", summary: "", notes: "Hal. 9" },
+      { chapter_no: 3, title: "Keindahan Relawan", page: "15", summary: "", notes: "Hal. 15" },
+      { chapter_no: 4, title: "Melayani dengan Potensi Anda", page: "21", summary: "", notes: "Hal. 21" },
+      { chapter_no: 5, title: "Melayani Secara Relevan", page: "28", summary: "", notes: "Hal. 28" },
+      { chapter_no: 6, title: "Pelayanan yang Membawa Dampak", page: "33", summary: "", notes: "Hal. 33" }
     ]
   },
   {
     class_key: "lead",
     class_name: "Lead",
     order: 4,
-    tagline: "Kepemimpinan rohani, penggembalaan, dan multiplikasi murid",
-    description: "Kelas pendalaman bagi murid yang dipersiapkan memimpin, menggembala, dan melahirkan pemimpin baru.",
+    tagline: "Undangan istimewa, penginjilan one-to-one, memimpin & memultiplikasi iCare, serta mengatasi tantangan",
+    description: "Kelas pendalaman Discipleship Journey untuk menjangkau jiwa, memimpin dan memultiplikasi iCare, serta menghadapi konflik/tantangan.",
     chapters: [
-      { chapter_no: 1, title: "Hakikat Kepemimpinan Rohani yang Melayani", summary: "", notes: "" },
-      { chapter_no: 2, title: "Menggembala dan Membimbing Pertumbuhan Orang Lain", summary: "", notes: "" },
-      { chapter_no: 3, title: "Menjaga Visi, Budaya Sehat, dan Akuntabilitas", summary: "", notes: "" },
-      { chapter_no: 4, title: "Multiplikasi Murid dan Regenerasi Kepemimpinan", summary: "", notes: "" }
+      { chapter_no: 1, title: "Undangan Istimewa", page: "4", summary: "", notes: "Hal. 4" },
+      { chapter_no: 2, title: "Penginjilan One To One – 1", page: "10", summary: "", notes: "Hal. 10" },
+      { chapter_no: 3, title: "Penginjilan One To One – 2", page: "22", summary: "", notes: "Hal. 22" },
+      { chapter_no: 4, title: "Memimpin ICare Anda", page: "26", summary: "", notes: "Hal. 26" },
+      { chapter_no: 5, title: "Multiplikasi ICare", page: "36", summary: "", notes: "Hal. 36" },
+      { chapter_no: 6, title: "Mengatasi Konflik dan Tantangan Dalam Icare", page: "", summary: "", notes: "" }
     ]
   }
 ];
@@ -809,13 +815,10 @@ function ensureCurriculumTabsAndPanelsUI() {
           </div>
         </div>
 
-        <!-- 4 Equal Class Selector Cards -->
         <div id="curr-dj-class-tabs" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1"></div>
       </div>
 
-      <!-- Active Class Header & Chapters -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <!-- Left 2 cols: Class Overview + Chapter List -->
         <div class="lg:col-span-2 bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
           <div class="border-b border-slate-100 pb-3 space-y-1">
             <div class="flex items-center justify-between gap-2">
@@ -830,15 +833,20 @@ function ensureCurriculumTabsAndPanelsUI() {
           <div id="curr-dj-chapters-list" class="space-y-2"></div>
         </div>
 
-        <!-- Right 1 col: Add / Edit Chapter Form -->
         <form id="form-curr-dj-chapter" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 text-xs h-fit">
           <div class="flex items-center justify-between">
             <h4 id="curr-dj-form-title" class="font-bold text-slate-900">➕ Add / Edit Chapter</h4>
             <button type="button" id="curr-dj-chapter-reset-btn" class="text-[11px] text-slate-600 hover:underline">Reset</button>
           </div>
-          <div>
-            <label class="font-semibold text-slate-600">Chapter No.</label>
-            <input type="number" min="1" id="curr-dj-chap-no" required class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="font-semibold text-slate-600">Chapter / Bab No.</label>
+              <input type="number" min="1" id="curr-dj-chap-no" required class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+            </div>
+            <div>
+              <label class="font-semibold text-slate-600">Halaman (Optional)</label>
+              <input type="text" id="curr-dj-chap-page" placeholder="e.g., 4" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+            </div>
           </div>
           <div>
             <label class="font-semibold text-slate-600">Chapter / Bab Name</label>
@@ -885,7 +893,8 @@ function getCombinedDJClassesPool() {
       ...cls,
       chapters: cls.chapters.map((ch, idx) => ({
         ...ch,
-        chapter_no: ch.chapter_no || idx + 1
+        chapter_no: ch.chapter_no || idx + 1,
+        page: ch.page || ""
       }))
     });
   });
@@ -910,6 +919,7 @@ function getCombinedDJClassesPool() {
         .map((ch, idx) => ({
           chapter_no: Number(ch.chapter_no) || idx + 1,
           title: String(ch.title || "").trim(),
+          page: String(ch.page || "").trim(),
           summary: String(ch.summary || "").trim(),
           notes: String(ch.notes || "").trim()
         }))
@@ -929,7 +939,7 @@ function resetDjChapterForm() {
   const nextNo = (activeCls?.chapters?.length || 0) + 1;
   const noEl = document.getElementById("curr-dj-chap-no");
   if (noEl) noEl.value = String(nextNo);
-  ["curr-dj-chap-title", "curr-dj-chap-summary", "curr-dj-chap-notes"].forEach(id => {
+  ["curr-dj-chap-page", "curr-dj-chap-title", "curr-dj-chap-summary", "curr-dj-chap-notes"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
@@ -995,9 +1005,10 @@ function renderDJClasses() {
   listEl.innerHTML = chapters.map((ch, idx) => `
     <div class="p-3 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 flex items-start justify-between gap-3 text-xs">
       <div class="space-y-0.5">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">BAB ${esc(ch.chapter_no || idx + 1)}</span>
           <h5 class="font-bold text-sm text-slate-900">${esc(ch.title)}</h5>
+          ${ch.page ? `<span class="px-1.5 py-0.5 bg-amber-50 text-amber-900 border border-amber-200 rounded text-[10px] font-semibold">Hal. ${esc(ch.page)}</span>` : ""}
         </div>
         ${ch.summary ? `<p class="text-slate-600 leading-relaxed pt-0.5">${esc(ch.summary)}</p>` : ""}
         ${ch.notes ? `<p class="text-[11px] text-amber-800 font-medium">📌 ${esc(ch.notes)}</p>` : ""}
@@ -1373,7 +1384,6 @@ export async function initCurriculumTab() {
     }
   });
 
-  // DJ Class interactions
   document.getElementById("curr-dj-class-tabs")?.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-dj-select]");
     if (!btn) return;
@@ -1390,7 +1400,7 @@ export async function initCurriculumTab() {
       setDjClassStatus("Seeding 4 DJ Classes (Come, Grow, Serve, Lead)...");
       const count = await seedDefaultDJClasses();
       await refreshCurriculumData();
-      setDjClassStatus(`${count} kelas DJ (Come, Grow, Serve, Lead) tersimpan!`);
+      setDjClassStatus(`${count} kelas DJ (Come, Grow, Serve, Lead) tersimpan ke Firestore!`);
     } catch (err) {
       setDjClassStatus("Gagal seed DJ Class: " + (err?.message || err), true);
     }
@@ -1421,6 +1431,7 @@ export async function initCurriculumTab() {
       currState.editingChapterIdx = idx;
       document.getElementById("curr-dj-form-title").textContent = `✏️ Edit Bab (${activeCls.class_name})`;
       document.getElementById("curr-dj-chap-no").value = String(targetChap.chapter_no || idx + 1);
+      document.getElementById("curr-dj-chap-page").value = targetChap.page || "";
       document.getElementById("curr-dj-chap-title").value = targetChap.title || "";
       document.getElementById("curr-dj-chap-summary").value = targetChap.summary || "";
       document.getElementById("curr-dj-chap-notes").value = targetChap.notes || "";
@@ -1462,6 +1473,7 @@ export async function initCurriculumTab() {
     const chapters = [...(activeCls.chapters || [])];
     const chapData = {
       chapter_no: Number(document.getElementById("curr-dj-chap-no").value) || chapters.length + 1,
+      page: document.getElementById("curr-dj-chap-page").value.trim(),
       title: document.getElementById("curr-dj-chap-title").value.trim(),
       summary: document.getElementById("curr-dj-chap-summary").value.trim(),
       notes: document.getElementById("curr-dj-chap-notes").value.trim()
@@ -1500,7 +1512,6 @@ export async function initCurriculumTab() {
     }
   });
 
-  // Monthly & Weekly seed/filter/form handlers
   document.getElementById("curr-seed-2026-btn")?.addEventListener("click", async () => {
     try {
       await seed2026MonthlyThemes();
