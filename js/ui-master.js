@@ -245,25 +245,56 @@ function renderDisciplesList() {
 
 function ensureDiscipleDetailFieldsUI() {
   const form = document.getElementById("form-disciple");
-  if (!form || document.getElementById("disciple-detail-fields-wrapper")) return;
+  if (!form) return;
+
+  const modal = document.getElementById("modal-disciple");
+  if (modal) {
+    modal.classList.remove("overflow-hidden");
+    modal.classList.add("overflow-y-auto", "p-4");
+  }
+
+  form.classList.add("min-w-0", "max-w-full", "overflow-x-hidden");
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.classList.remove("w-full");
+    submitBtn.classList.add(
+      "whitespace-nowrap",
+      "shrink-0",
+      "px-4",
+      "py-2",
+      "bg-slate-900",
+      "hover:bg-slate-800",
+      "text-white",
+      "font-semibold",
+      "rounded-lg",
+      "text-xs"
+    );
+  }
+
+  form.querySelectorAll("button").forEach(btn => {
+    btn.classList.add("whitespace-nowrap", "shrink-0");
+  });
+
+  if (document.getElementById("disciple-detail-fields-wrapper")) return;
 
   const wrapper = document.createElement("div");
   wrapper.id = "disciple-detail-fields-wrapper";
-  wrapper.className = "space-y-3 pt-3 mt-3 border-t border-slate-200 text-xs";
+  wrapper.className = "space-y-3 pt-3 mt-3 border-t border-slate-200 text-xs min-w-0 w-full";
   wrapper.innerHTML = `
     <p class="font-bold text-[11px] uppercase tracking-wider text-slate-500">Personal & Contact Details</p>
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-      <div>
-        <label class="font-semibold text-slate-600">Member ID</label>
-        <input type="text" id="disciple-member-id" placeholder="e.g., M-001" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 min-w-0">
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Member ID</label>
+        <input type="text" id="disciple-member-id" placeholder="e.g., M-001" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">Nick Name</label>
-        <input type="text" id="disciple-nickname" placeholder="Nama panggilan" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Nick Name</label>
+        <input type="text" id="disciple-nickname" placeholder="Nama panggilan" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">Gender</label>
-        <select id="disciple-gender" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white">
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Gender</label>
+        <select id="disciple-gender" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white">
           <option value="">— Select —</option>
           <option value="Male">Male</option>
           <option value="Female">Female</option>
@@ -271,86 +302,85 @@ function ensureDiscipleDetailFieldsUI() {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-      <div>
-        <label class="font-semibold text-slate-600">Place of Birth</label>
-        <input type="text" id="disciple-pob" placeholder="Kota / tempat lahir" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 min-w-0">
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Place of Birth</label>
+        <input type="text" id="disciple-pob" placeholder="Kota / tempat lahir" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">Date of Birth</label>
-        <input type="text" id="disciple-dob" placeholder="YYYY-MM-DD atau DD/MM/YYYY" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Date of Birth</label>
+        <input type="text" id="disciple-dob" placeholder="YYYY-MM-DD atau DD/MM/YYYY" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">Status in New Zealand</label>
-        <input type="text" id="disciple-nz-status" placeholder="Citizen / Resident / Visa" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Status in New Zealand</label>
+        <input type="text" id="disciple-nz-status" placeholder="Citizen / Resident / Visa" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-      <div>
-        <label class="font-semibold text-slate-600">Institution / Company</label>
-        <input type="text" id="disciple-institution" placeholder="Kampus / perusahaan / pekerjaan" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Institution / Company</label>
+        <input type="text" id="disciple-institution" placeholder="Kampus / perusahaan / pekerjaan" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">Home Address</label>
-        <input type="text" id="disciple-address" placeholder="Alamat lengkap / kota" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Home Address</label>
+        <input type="text" id="disciple-address" placeholder="Alamat lengkap / kota" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
     </div>
 
     <p class="font-bold text-[11px] uppercase tracking-wider text-slate-500 pt-1">Family, iCare & Ministry</p>
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-      <div>
-        <label class="font-semibold text-slate-600">Marital Status</label>
-        <input type="text" id="disciple-marital-status" placeholder="Single / Married / ..." class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 min-w-0">
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Marital Status</label>
+        <input type="text" id="disciple-marital-status" placeholder="Single / Married / ..." class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">Spouse Name</label>
-        <input type="text" id="disciple-spouse-name" placeholder="Nama pasangan" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Spouse Name</label>
+        <input type="text" id="disciple-spouse-name" placeholder="Nama pasangan" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">Joined an iCare</label>
-        <input type="text" id="disciple-in-icare" placeholder="Yes / No / Nama iCare" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Joined an iCare</label>
+        <input type="text" id="disciple-in-icare" placeholder="Yes / No / Nama iCare" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-      <div>
-        <label class="font-semibold text-slate-600">Children Names</label>
-        <input type="text" id="disciple-children-names" placeholder="Nama anak-anak (pisahkan koma)" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Children Names</label>
+        <input type="text" id="disciple-children-names" placeholder="Nama anak-anak (pisahkan koma)" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">Ministry Interests</label>
-        <input type="text" id="disciple-ministry-interests" placeholder="Worship, Multimedia, Usher, ..." class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Ministry Interests</label>
+        <input type="text" id="disciple-ministry-interests" placeholder="Worship, Multimedia, Usher, ..." class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
     </div>
 
     <p class="font-bold text-[11px] uppercase tracking-wider text-slate-500 pt-1">DJ Progress & Pastoral Notes</p>
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-      <div>
-        <label class="font-semibold text-slate-600">DJ 1: Come</label>
-        <input type="text" id="disciple-dj-come" placeholder="Not Started / In Progress / Completed" class="w-full px-2 py-1 border rounded-lg mt-1 bg-white" />
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 min-w-0">
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">DJ 1: Come</label>
+        <input type="text" id="disciple-dj-come" placeholder="Not Started / In Progress / Completed" class="w-full min-w-0 px-2 py-1 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">DJ 2: Grow</label>
-        <input type="text" id="disciple-dj-grow" placeholder="Not Started / In Progress / Completed" class="w-full px-2 py-1 border rounded-lg mt-1 bg-white" />
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">DJ 2: Grow</label>
+        <input type="text" id="disciple-dj-grow" placeholder="Not Started / In Progress / Completed" class="w-full min-w-0 px-2 py-1 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">DJ 3: Serve</label>
-        <input type="text" id="disciple-dj-serve" placeholder="Not Started / In Progress / Completed" class="w-full px-2 py-1 border rounded-lg mt-1 bg-white" />
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">DJ 3: Serve</label>
+        <input type="text" id="disciple-dj-serve" placeholder="Not Started / In Progress / Completed" class="w-full min-w-0 px-2 py-1 border rounded-lg mt-1 bg-white" />
       </div>
-      <div>
-        <label class="font-semibold text-slate-600">DJ 4: Lead</label>
-        <input type="text" id="disciple-dj-lead" placeholder="Not Started / In Progress / Completed" class="w-full px-2 py-1 border rounded-lg mt-1 bg-white" />
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">DJ 4: Lead</label>
+        <input type="text" id="disciple-dj-lead" placeholder="Not Started / In Progress / Completed" class="w-full min-w-0 px-2 py-1 border rounded-lg mt-1 bg-white" />
       </div>
     </div>
 
-    <div>
-      <label class="font-semibold text-slate-600">How Can We Help / Pastoral Notes</label>
-      <textarea id="disciple-pastoral-notes" rows="2" placeholder="Catatan pastoral, pokok doa, atau bantuan yang dibutuhkan..." class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white"></textarea>
+    <div class="min-w-0">
+      <label class="block font-semibold text-slate-600">How Can We Help / Pastoral Notes</label>
+      <textarea id="disciple-pastoral-notes" rows="2" placeholder="Catatan pastoral, pokok doa, atau bantuan yang dibutuhkan..." class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white"></textarea>
     </div>
   `;
 
-  const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) {
     submitBtn.insertAdjacentElement("beforebegin", wrapper);
   } else {
