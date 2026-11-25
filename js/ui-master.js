@@ -27,6 +27,7 @@ let masterState = {
 
 export async function initMasterApp(userProfile) {
   masterState.currentUser = userProfile;
+  ensureDiscipleDetailFieldsUI();
   bindMasterEvents();
   await reloadMasterData();
 }
@@ -203,26 +204,167 @@ function renderDisciplesList() {
     if (!q) return true;
     return (
       (d.full_name || "").toLowerCase().includes(q) ||
+      (d.nick_name || "").toLowerCase().includes(q) ||
       (d.email || "").toLowerCase().includes(q) ||
+      (d.phone || "").toLowerCase().includes(q) ||
+      (d.address || "").toLowerCase().includes(q) ||
+      (d.spouse_name || "").toLowerCase().includes(q) ||
+      (d.children_names || "").toLowerCase().includes(q) ||
       (d.member_id || "").toLowerCase().includes(q)
     );
   });
 
   if (badge) badge.textContent = `${filtered.length} disciples`;
 
-  container.innerHTML = filtered.map(d => `
-    <div class="bg-white p-3.5 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-      <div>
-        <p class="font-bold text-sm text-slate-900">${d.full_name || "Unnamed"}</p>
-        <p class="text-xs text-slate-500">${d.email || "No email"} • ${d.phone || "No phone"} • <span class="font-semibold">${d.status || "Active"}</span></p>
+  container.innerHTML = filtered.map(d => {
+    const familyInfo = [
+      d.spouse_name ? `Spouse: ${d.spouse_name}` : "",
+      d.children_names ? `Children: ${d.children_names}` : "",
+      d.address ? `Addr: ${d.address}` : ""
+    ].filter(Boolean).join(" • ");
+
+    return `
+      <div class="bg-white p-3.5 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div class="space-y-0.5">
+          <p class="font-bold text-sm text-slate-900">
+            ${d.full_name || "Unnamed"}
+            ${d.nick_name ? `<span class="text-xs font-normal text-slate-500">(${d.nick_name})</span>` : ""}
+          </p>
+          <p class="text-xs text-slate-500">${d.email || "No email"} • ${d.phone || "No phone"} • <span class="font-semibold">${d.status || "Active"}</span></p>
+          ${familyInfo ? `<p class="text-[11px] text-slate-600">${familyInfo}</p>` : ""}
+        </div>
+        <button
+          type="button"
+          onclick="window.editDiscipleModal('${d.id}')"
+          class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 self-start sm:self-center shrink-0"
+        >Edit</button>
       </div>
-      <button
-        type="button"
-        onclick="window.editDiscipleModal('${d.id}')"
-        class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 self-start sm:self-center"
-      >Edit</button>
+    `;
+  }).join("");
+}
+
+function ensureDiscipleDetailFieldsUI() {
+  const form = document.getElementById("form-disciple");
+  if (!form || document.getElementById("disciple-detail-fields-wrapper")) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.id = "disciple-detail-fields-wrapper";
+  wrapper.className = "space-y-3 pt-3 mt-3 border-t border-slate-200 text-xs";
+  wrapper.innerHTML = `
+    <p class="font-bold text-[11px] uppercase tracking-wider text-slate-500">Personal & Contact Details</p>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      <div>
+        <label class="font-semibold text-slate-600">Member ID</label>
+        <input type="text" id="disciple-member-id" placeholder="e.g., M-001" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">Nick Name</label>
+        <input type="text" id="disciple-nickname" placeholder="Nama panggilan" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">Gender</label>
+        <select id="disciple-gender" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white">
+          <option value="">— Select —</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+        </select>
+      </div>
     </div>
-  `).join("");
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      <div>
+        <label class="font-semibold text-slate-600">Place of Birth</label>
+        <input type="text" id="disciple-pob" placeholder="Kota / tempat lahir" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">Date of Birth</label>
+        <input type="text" id="disciple-dob" placeholder="YYYY-MM-DD atau DD/MM/YYYY" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">Status in New Zealand</label>
+        <input type="text" id="disciple-nz-status" placeholder="Citizen / Resident / Visa" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+      <div>
+        <label class="font-semibold text-slate-600">Institution / Company</label>
+        <input type="text" id="disciple-institution" placeholder="Kampus / perusahaan / pekerjaan" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">Home Address</label>
+        <input type="text" id="disciple-address" placeholder="Alamat lengkap / kota" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+    </div>
+
+    <p class="font-bold text-[11px] uppercase tracking-wider text-slate-500 pt-1">Family, iCare & Ministry</p>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      <div>
+        <label class="font-semibold text-slate-600">Marital Status</label>
+        <input type="text" id="disciple-marital-status" placeholder="Single / Married / ..." class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">Spouse Name</label>
+        <input type="text" id="disciple-spouse-name" placeholder="Nama pasangan" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">Joined an iCare</label>
+        <input type="text" id="disciple-in-icare" placeholder="Yes / No / Nama iCare" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+      <div>
+        <label class="font-semibold text-slate-600">Children Names</label>
+        <input type="text" id="disciple-children-names" placeholder="Nama anak-anak (pisahkan koma)" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">Ministry Interests</label>
+        <input type="text" id="disciple-ministry-interests" placeholder="Worship, Multimedia, Usher, ..." class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+      </div>
+    </div>
+
+    <p class="font-bold text-[11px] uppercase tracking-wider text-slate-500 pt-1">DJ Progress & Pastoral Notes</p>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div>
+        <label class="font-semibold text-slate-600">DJ 1: Come</label>
+        <input type="text" id="disciple-dj-come" placeholder="Not Started / In Progress / Completed" class="w-full px-2 py-1 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">DJ 2: Grow</label>
+        <input type="text" id="disciple-dj-grow" placeholder="Not Started / In Progress / Completed" class="w-full px-2 py-1 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">DJ 3: Serve</label>
+        <input type="text" id="disciple-dj-serve" placeholder="Not Started / In Progress / Completed" class="w-full px-2 py-1 border rounded-lg mt-1 bg-white" />
+      </div>
+      <div>
+        <label class="font-semibold text-slate-600">DJ 4: Lead</label>
+        <input type="text" id="disciple-dj-lead" placeholder="Not Started / In Progress / Completed" class="w-full px-2 py-1 border rounded-lg mt-1 bg-white" />
+      </div>
+    </div>
+
+    <div>
+      <label class="font-semibold text-slate-600">How Can We Help / Pastoral Notes</label>
+      <textarea id="disciple-pastoral-notes" rows="2" placeholder="Catatan pastoral, pokok doa, atau bantuan yang dibutuhkan..." class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white"></textarea>
+    </div>
+  `;
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.insertAdjacentElement("beforebegin", wrapper);
+  } else {
+    form.appendChild(wrapper);
+  }
+}
+
+function setFieldVal(id, value = "") {
+  const el = document.getElementById(id);
+  if (el) el.value = value ?? "";
+}
+
+function getFieldVal(id) {
+  return (document.getElementById(id)?.value || "").trim();
 }
 
 function bindMasterEvents() {
@@ -346,17 +488,45 @@ function bindMasterEvents() {
 
   document.getElementById("form-disciple")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const id = document.getElementById("disciple-id").value || null;
+    ensureDiscipleDetailFieldsUI();
+    const id = getFieldVal("disciple-id") || null;
+    const existing = id ? masterState.disciples.find(x => x.id === id) : null;
+
+    const rawInterests = getFieldVal("disciple-ministry-interests")
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
+
     await saveDisciple(id, {
-      full_name: document.getElementById("disciple-name").value.trim(),
-      email: document.getElementById("disciple-email").value.trim(),
-      phone: document.getElementById("disciple-phone").value.trim(),
-      status: document.getElementById("disciple-status").value,
-      system_role: document.getElementById("disciple-sysrole").value,
-      dj_traffic_light: document.getElementById("disciple-djlight").value,
+      member_id: getFieldVal("disciple-member-id"),
+      full_name: getFieldVal("disciple-name"),
+      nick_name: getFieldVal("disciple-nickname"),
+      gender: getFieldVal("disciple-gender"),
+      place_of_birth: getFieldVal("disciple-pob"),
+      date_of_birth: getFieldVal("disciple-dob"),
+      nz_status: getFieldVal("disciple-nz-status"),
+      institution: getFieldVal("disciple-institution"),
+      email: getFieldVal("disciple-email"),
+      phone: getFieldVal("disciple-phone"),
+      address: getFieldVal("disciple-address"),
+      marital_status: getFieldVal("disciple-marital-status"),
+      spouse_name: getFieldVal("disciple-spouse-name"),
+      children_names: getFieldVal("disciple-children-names"),
+      in_icare: getFieldVal("disciple-in-icare"),
+      ministry_interests: rawInterests,
+      pastoral_notes: getFieldVal("disciple-pastoral-notes"),
+      status: getFieldVal("disciple-status") || "Active",
+      system_role: getFieldVal("disciple-sysrole") || "member",
+      dj_traffic_light: getFieldVal("disciple-djlight") || "red",
+      dj_progress: {
+        come: getFieldVal("disciple-dj-come") || existing?.dj_progress?.come || "Not Started",
+        grow: getFieldVal("disciple-dj-grow") || existing?.dj_progress?.grow || "Not Started",
+        serve: getFieldVal("disciple-dj-serve") || existing?.dj_progress?.serve || "Not Started",
+        lead: getFieldVal("disciple-dj-lead") || existing?.dj_progress?.lead || "Not Started"
+      },
       baptism_info: {
-        is_baptized: document.getElementById("disciple-baptized").checked,
-        baptism_date: document.getElementById("disciple-baptism-date").value || ""
+        is_baptized: Boolean(document.getElementById("disciple-baptized")?.checked),
+        baptism_date: getFieldVal("disciple-baptism-date")
       }
     });
     document.getElementById("modal-disciple").classList.add("hidden");
@@ -402,24 +572,58 @@ window.toggleDeptActive = async (id, currentActive) => {
 };
 
 window.openNewDiscipleModal = () => {
+  ensureDiscipleDetailFieldsUI();
   document.getElementById("modal-disciple-title").textContent = "Add New Disciple";
   document.getElementById("form-disciple").reset();
-  document.getElementById("disciple-id").value = "";
+  setFieldVal("disciple-id", "");
+  setFieldVal("disciple-dj-come", "Not Started");
+  setFieldVal("disciple-dj-grow", "Not Started");
+  setFieldVal("disciple-dj-serve", "Not Started");
+  setFieldVal("disciple-dj-lead", "Not Started");
   document.getElementById("modal-disciple").classList.remove("hidden");
 };
 
 window.editDiscipleModal = (id) => {
   const d = masterState.disciples.find(x => x.id === id);
   if (!d) return;
+  ensureDiscipleDetailFieldsUI();
+
+  const interestsStr = Array.isArray(d.ministry_interests)
+    ? d.ministry_interests.join(", ")
+    : (d.ministry_interests || "");
+
   document.getElementById("modal-disciple-title").textContent = "Edit Disciple";
-  document.getElementById("disciple-id").value = d.id;
-  document.getElementById("disciple-name").value = d.full_name || "";
-  document.getElementById("disciple-email").value = d.email || "";
-  document.getElementById("disciple-phone").value = d.phone || "";
-  document.getElementById("disciple-status").value = d.status || "Active";
-  document.getElementById("disciple-sysrole").value = d.system_role || "member";
-  document.getElementById("disciple-djlight").value = d.dj_traffic_light || "red";
-  document.getElementById("disciple-baptized").checked = Boolean(d.baptism_info?.is_baptized);
-  document.getElementById("disciple-baptism-date").value = d.baptism_info?.baptism_date || "";
+  setFieldVal("disciple-id", d.id);
+  setFieldVal("disciple-name", d.full_name || "");
+  setFieldVal("disciple-email", d.email || "");
+  setFieldVal("disciple-phone", d.phone || "");
+  setFieldVal("disciple-status", d.status || "Active");
+  setFieldVal("disciple-sysrole", d.system_role || "member");
+  setFieldVal("disciple-djlight", d.dj_traffic_light || "red");
+
+  const baptEl = document.getElementById("disciple-baptized");
+  if (baptEl) baptEl.checked = Boolean(d.baptism_info?.is_baptized);
+  setFieldVal("disciple-baptism-date", d.baptism_info?.baptism_date || "");
+
+  setFieldVal("disciple-member-id", d.member_id || "");
+  setFieldVal("disciple-nickname", d.nick_name || "");
+  setFieldVal("disciple-gender", d.gender || "");
+  setFieldVal("disciple-pob", d.place_of_birth || "");
+  setFieldVal("disciple-dob", d.date_of_birth || "");
+  setFieldVal("disciple-nz-status", d.nz_status || "");
+  setFieldVal("disciple-institution", d.institution || "");
+  setFieldVal("disciple-address", d.address || "");
+  setFieldVal("disciple-marital-status", d.marital_status || "");
+  setFieldVal("disciple-spouse-name", d.spouse_name || "");
+  setFieldVal("disciple-children-names", d.children_names || "");
+  setFieldVal("disciple-in-icare", d.in_icare || "");
+  setFieldVal("disciple-ministry-interests", interestsStr);
+  setFieldVal("disciple-pastoral-notes", d.pastoral_notes || "");
+
+  setFieldVal("disciple-dj-come", d.dj_progress?.come || "Not Started");
+  setFieldVal("disciple-dj-grow", d.dj_progress?.grow || "Not Started");
+  setFieldVal("disciple-dj-serve", d.dj_progress?.serve || "Not Started");
+  setFieldVal("disciple-dj-lead", d.dj_progress?.lead || "Not Started");
+
   document.getElementById("modal-disciple").classList.remove("hidden");
 };
