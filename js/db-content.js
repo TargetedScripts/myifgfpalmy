@@ -7,6 +7,7 @@ import {
   addDoc,
   setDoc,
   deleteDoc,
+  writeBatch,
   query,
   orderBy,
   serverTimestamp
@@ -255,7 +256,6 @@ export function parseMonthlyThemeRawText(rawText = "", fallbackMeta = {}) {
   return monthData;
 }
 
-// --- CURRICULUM TO COMPASS, EDITOR & DAILY REFLECTION DRAFTS ---
 export function buildCompassDraftFromCurriculum(monthObj = {}, weeksInMonth = []) {
   const yearlyTheme = monthObj.yearly_theme || "ALIGN IN PURPOSE — Exodus";
   const monthKey = monthObj.month_key || "2027-01";
@@ -707,11 +707,12 @@ export async function getDailyReflections() {
   if (devSnap) {
     devSnap.docs.forEach(d => {
       const data = d.data();
-      const dateKey = data.reflection_date || data.devotion_date || d.id;
+      const dateKey = String(data.reflection_date || data.devotion_date || d.id || "").trim();
       byDate.set(dateKey, {
         id: d.id,
         ...data,
-        reflection_date: dateKey
+        reflection_date: dateKey,
+        devotion_date: data.devotion_date || dateKey
       });
     });
   }
@@ -719,11 +720,12 @@ export async function getDailyReflections() {
   if (refSnap) {
     refSnap.docs.forEach(d => {
       const data = d.data();
-      const dateKey = data.reflection_date || data.devotion_date || d.id;
+      const dateKey = String(data.reflection_date || data.devotion_date || d.id || "").trim();
       byDate.set(dateKey, {
         id: d.id,
         ...data,
-        reflection_date: dateKey
+        reflection_date: dateKey,
+        devotion_date: data.devotion_date || dateKey
       });
     });
   }
@@ -734,12 +736,12 @@ export async function getDailyReflections() {
 }
 
 export async function saveDailyReflection(id, data) {
-  const dateKey = data.reflection_date || data.devotion_date || id;
-  const docId = id || dateKey || undefined;
+  const dateKey = (data.reflection_date || data.devotion_date || id || "").trim();
+  const docId = (id || dateKey) || undefined;
   const payload = {
     ...data,
-    reflection_date: dateKey || "",
-    devotion_date: dateKey || "",
+    reflection_date: dateKey,
+    devotion_date: dateKey,
     status: data.status || "Published",
     updated_at: serverTimestamp()
   };
@@ -751,6 +753,49 @@ export async function saveDailyReflection(id, data) {
     payload.created_at = serverTimestamp();
     await addDoc(collection(db, "daily_reflections"), payload);
   }
+}
+
+export async function saveBulkDailyReflections(entries = []) {
+  const valid = entries
+    .map(item => {
+      const dateKey = String(item.reflection_date || item.devotion_date || item.date || item.id || "").trim();
+      return {
+        dateKey,
+        title: String(item.title || "").trim(),
+        scripture: String(item.scripture || item.verse || "").trim(),
+        reflection: String(item.reflection || item.body || "").trim(),
+        prayer: String(item.prayer || "").trim(),
+        status: item.status || "Published"
+      };
+    })
+    .filter(x => /^\d{4}-\d{2}-\d{2}$/.test(x.dateKey) && (x.title || x.reflection));
+
+  if (valid.length === 0) return 0;
+
+  const batch = writeBatch(db);
+  valid.forEach(item => {
+    const docPayload = {
+      reflection_date: item.dateKey,
+      devotion_date: item.dateKey,
+      title: item.title || `Daily Reflection (${item.dateKey})`,
+      scripture: item.scripture,
+      reflection: item.reflection,
+      prayer: item.prayer,
+      status: item.status,
+      updated_at: serverTimestamp()
+    };
+    batch.set(doc(db, "daily_reflections", item.dateKey), docPayload, { merge: true });
+    batch.set(doc(db, "daily_devotions", item.dateKey), docPayload, { merge: true });
+  });
+
+  await batch.commit();
+  return valid.length;
+}
+
+export async function deleteDailyReflection(id) {
+  if (!id) return;
+  await deleteDoc(doc(db, "daily_reflections", id)).catch(() => {});
+  await deleteDoc(doc(db, "daily_devotions", id)).catch(() => {});
 }
 
 export const getDailyDevotions = getDailyReflections;
