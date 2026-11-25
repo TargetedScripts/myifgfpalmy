@@ -9,11 +9,15 @@ import {
   writeBatch,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getDailyReflections,
+  saveDailyReflection,
+  deleteContentItem,
+  seedNov20toDec31Reflections
+} from "./db-content.js";
 
 const COLLECTION_MONTHLY = "monthly_themes";
 const COLLECTION_WEEKLY = "weekly_insights";
-const COLLECTION_DAILY_REFLECTIONS = "daily_reflections";
-const COLLECTION_DAILY_DEVOTIONS_LEGACY = "daily_devotions";
 
 export const MONTHLY_THEMES_2026 = [
   {
@@ -602,9 +606,14 @@ function ensureDailyReflectionTabUI() {
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 class="font-bold text-sm text-slate-900">📖 Daily Reflection Manager (Single, Bulk & Query)</h3>
-          <p class="text-[11px] text-slate-500">Kelola refleksi harian satu-persatu maupun bulk (termasuk data s/d 31 Desember 2026), query lihat, dan hapus.</p>
+          <p class="text-[11px] text-slate-500">Kelola refleksi harian satu-persatu maupun bulk (termasuk seed/update s/d 31 Desember 2026), query lihat, dan hapus.</p>
         </div>
-        <span id="curr-ref-status" class="text-[11px] font-semibold text-emerald-700"></span>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" id="curr-ref-seed-nov-dec-btn" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs">
+            ⚡ Seed Nov 20–Dec 31, 2026
+          </button>
+          <span id="curr-ref-status" class="text-[11px] font-semibold text-emerald-700"></span>
+        </div>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
@@ -621,7 +630,7 @@ function ensureDailyReflectionTabUI() {
             </div>
             <div>
               <label class="font-semibold text-slate-600">Scripture / Verse</label>
-              <input type="text" id="curr-ref-verse" placeholder="e.g., Kejadian 41:50-52" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+              <input type="text" id="curr-ref-verse" placeholder="e.g., Kejadian 50:24 & Mazmur 116:12 (TB)" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
             </div>
           </div>
           <div>
@@ -648,9 +657,9 @@ function ensureDailyReflectionTabUI() {
             <button type="button" id="curr-ref-sample-btn" class="text-[11px] font-semibold text-amber-900 hover:underline">Isi Contoh Format</button>
           </div>
           <p class="text-[11px] text-slate-600 leading-relaxed">
-            Mendukung <strong>JSON Array</strong> (<code>[{"date":"2026-12-01","title":"...","scripture":"...","reflection":"...","prayer":"..."}]</code>) atau blok tanggal dimulai baris <code>YYYY-MM-DD</code>.
+            Mendukung <strong>JSON Array</strong> (<code>[{"date":"2026-12-31","title":"...","scripture":"...","reflection":"...","prayer":"..."}]</code>) atau blok tanggal dimulai baris <code>YYYY-MM-DD</code>.
           </p>
-          <textarea id="curr-ref-bulk-input" rows="8" placeholder='[{"date":"2026-12-01","title":"...","scripture":"...","reflection":"..."}]' class="w-full px-2.5 py-2 border border-amber-300 rounded-lg font-mono text-[11px] bg-white"></textarea>
+          <textarea id="curr-ref-bulk-input" rows="8" placeholder='[{"date":"2026-12-31","title":"...","scripture":"...","reflection":"..."}]' class="w-full px-2.5 py-2 border border-amber-300 rounded-lg font-mono text-[11px] bg-white"></textarea>
           <div class="flex flex-wrap items-center gap-2">
             <button type="button" id="curr-ref-bulk-save-btn" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs">
               🚀 Save Bulk Reflections
@@ -764,7 +773,7 @@ function parseBulkReflectionsInput(rawText) {
     if (!Array.isArray(parsed)) throw new Error("JSON bulk harus berupa array [...]");
     return parsed
       .map(item => ({
-        date: String(item.reflection_date || item.devotion_date || item.date || item.id || "").trim(),
+        date: String(item.reflection_date || item.devotion_date || item.date || item.id || "").trim().slice(0, 10),
         title: String(item.title || "").trim(),
         scripture: String(item.scripture || item.verse || "").trim(),
         reflection: String(item.reflection || item.body || "").trim(),
@@ -773,7 +782,6 @@ function parseBulkReflectionsInput(rawText) {
       .filter(x => /^\d{4}-\d{2}-\d{2}$/.test(x.date) && (x.title || x.reflection));
   }
 
-  // Format blok baris demi baris: dimulai baris tanggal YYYY-MM-DD
   const lines = trimmed.split(/\r?\n/);
   const entries = [];
   let current = null;
@@ -995,42 +1003,26 @@ function renderDailyReflectionsList() {
 export async function refreshCurriculumData() {
   ensureDailyReflectionTabUI();
   try {
-    const [mSnap, wSnap, refSnap, devSnap] = await Promise.all([
+    const [mSnap, wSnap, refList] = await Promise.all([
       getDocs(collection(db, COLLECTION_MONTHLY)),
       getDocs(collection(db, COLLECTION_WEEKLY)),
-      getDocs(collection(db, COLLECTION_DAILY_REFLECTIONS)).catch(() => ({ docs: [] })),
-      getDocs(collection(db, COLLECTION_DAILY_DEVOTIONS_LEGACY)).catch(() => ({ docs: [] }))
+      getDailyReflections().catch(() => [])
     ]);
 
     currState.monthlyItems = mSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     currState.weeklyItems = wSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-    const mergedReflections = new Map();
-    devSnap.docs.forEach(d => {
-      const data = d.data();
-      const dateKey = String(data.reflection_date || data.devotion_date || d.id).slice(0, 10);
-      mergedReflections.set(d.id, {
-        id: d.id,
+    currState.dailyReflections = refList.map(item => {
+      const dateKey = String(item.reflection_date || item.devotion_date || item.id || "").slice(0, 10);
+      return {
+        ...item,
+        id: item.id || dateKey,
         dateKey,
-        title: data.title || "",
-        scripture: data.scripture || data.verse || "",
-        reflection: data.reflection || data.body || "",
-        prayer: data.prayer || ""
-      });
+        title: item.title || "",
+        scripture: item.scripture || item.verse || "",
+        reflection: item.reflection || item.body || "",
+        prayer: item.prayer || ""
+      };
     });
-    refSnap.docs.forEach(d => {
-      const data = d.data();
-      const dateKey = String(data.reflection_date || data.devotion_date || d.id).slice(0, 10);
-      mergedReflections.set(d.id, {
-        id: d.id,
-        dateKey,
-        title: data.title || "",
-        scripture: data.scripture || data.verse || "",
-        reflection: data.reflection || data.body || "",
-        prayer: data.prayer || ""
-      });
-    });
-    currState.dailyReflections = Array.from(mergedReflections.values());
   } catch (err) {
     console.warn("Using local curriculum fallback:", err);
   }
@@ -1042,351 +1034,3 @@ export async function refreshCurriculumData() {
 export async function seed2026MonthlyThemes() {
   setCurrStatus("Seeding 2026 monthly themes...");
   const batch = writeBatch(db);
-  for (const item of MONTHLY_THEMES_2026) {
-    batch.set(
-      doc(db, COLLECTION_MONTHLY, item.month_key),
-      {
-        ...item,
-        updated_at: serverTimestamp()
-      },
-      { merge: true }
-    );
-  }
-  await batch.commit();
-  await refreshCurriculumData();
-  setCurrStatus("12 Monthly Themes 2026 (Jan–Dec) tersimpan!");
-}
-
-export async function seed2027FullCurriculum() {
-  setCurrStatus("Seeding 2027 monthly themes & weekly insights...");
-  const res = await seed2027Curriculum();
-  await refreshCurriculumData();
-  setCurrStatus(`Seed 2027 sukses: ${res.months} bulan & ${res.weeks} minggu tersimpan!`);
-}
-
-export async function initCurriculumTab() {
-  ensureDailyReflectionTabUI();
-  switchCurrSubtab(currState.activeSubtab);
-
-  if (currState.bound) {
-    await refreshCurriculumData();
-    return;
-  }
-  currState.bound = true;
-
-  document.getElementById("panel-curriculum")?.addEventListener("click", (e) => {
-    const subBtn = e.target.closest(".curr-subtab");
-    if (subBtn && subBtn.dataset.currSubtab) {
-      switchCurrSubtab(subBtn.dataset.currSubtab);
-    }
-  });
-
-  document.getElementById("curr-seed-2026-btn")?.addEventListener("click", async () => {
-    try {
-      await seed2026MonthlyThemes();
-    } catch (err) {
-      setCurrStatus("Gagal seed 2026: " + (err?.message || err), true);
-    }
-  });
-
-  document.getElementById("curr-seed-2027-btn")?.addEventListener("click", async () => {
-    try {
-      await seed2027FullCurriculum();
-    } catch (err) {
-      setCurrStatus("Gagal seed 2027: " + (err?.message || err), true);
-    }
-  });
-
-  document.getElementById("curr-seed-nov-dec-btn")?.addEventListener("click", async () => {
-    try {
-      setWeeklyStatus("Seeding Nov & Dec 2026 weekly guidelines...");
-      const count = await seedNovDec2026WeeklyGuidelines();
-      await refreshCurriculumData();
-      setWeeklyStatus(`${count} minggu guideline (Nov & Dec 2026) tersimpan!`);
-    } catch (err) {
-      setWeeklyStatus("Gagal seed Nov–Dec: " + (err?.message || err), true);
-    }
-  });
-
-  document.getElementById("curr-year-filter")?.addEventListener("change", renderMonthlyThemes);
-  document.getElementById("curr-weekly-month-filter")?.addEventListener("change", renderWeeklyThemes);
-  document.getElementById("curr-ref-month-filter")?.addEventListener("change", renderDailyReflectionsList);
-  document.getElementById("curr-ref-search")?.addEventListener("input", renderDailyReflectionsList);
-  document.getElementById("curr-ref-refresh-btn")?.addEventListener("click", async () => {
-    setReflectionStatus("Refreshing...");
-    await refreshCurriculumData();
-    setReflectionStatus(`Loaded ${currState.dailyReflections.length} entries`);
-  });
-
-  document.getElementById("curr-reset-btn")?.addEventListener("click", () => {
-    resetMonthlyForm();
-    setCurrStatus("");
-  });
-
-  document.getElementById("curr-weekly-reset-btn")?.addEventListener("click", () => {
-    resetWeeklyForm();
-    setWeeklyStatus("");
-  });
-
-  document.getElementById("curr-ref-reset-btn")?.addEventListener("click", () => {
-    resetReflectionForm();
-    setReflectionStatus("");
-  });
-
-  document.getElementById("curr-ref-sample-btn")?.addEventListener("click", () => {
-    const sampleArea = document.getElementById("curr-ref-bulk-input");
-    if (!sampleArea) return;
-    sampleArea.value = JSON.stringify([
-      {
-        date: "2026-12-30",
-        title: "Menutup Tahun dalam Keberbuahan",
-        scripture: "Kejadian 41:50-52",
-        reflection: "Tuhan memampukan kita tetap berbuah di tengah segala musim.",
-        prayer: "Tuhan, ajar kami mengakhiri tahun ini dengan syukur dan iman."
-      },
-      {
-        date: "2026-12-31",
-        title: "Bersyukur atas Penyertaan Sepanjang 2026",
-        scripture: "Kejadian 41:56",
-        reflection: "Setiap langkah sepanjang 2026 menjadi bukti kesetiaan Tuhan.",
-        prayer: "Bapa, pimpin kami masuk ke tahun 2027 dengan tujuan yang jelas."
-      }
-    ], null, 2);
-  });
-
-  document.getElementById("curr-ref-bulk-clear-btn")?.addEventListener("click", () => {
-    const area = document.getElementById("curr-ref-bulk-input");
-    if (area) area.value = "";
-    setReflectionStatus("");
-  });
-
-  document.getElementById("curr-ref-bulk-save-btn")?.addEventListener("click", async () => {
-    const raw = document.getElementById("curr-ref-bulk-input")?.value || "";
-    try {
-      const entries = parseBulkReflectionsInput(raw);
-      if (entries.length === 0) {
-        setReflectionStatus("Tidak ada data valid (pastikan tanggal YYYY-MM-DD & teks refleksi terisi).", true);
-        return;
-      }
-      setReflectionStatus(`Saving ${entries.length} reflections...`);
-      const batch = writeBatch(db);
-      entries.forEach(entry => {
-        batch.set(
-          doc(db, COLLECTION_DAILY_REFLECTIONS, entry.date),
-          {
-            reflection_date: entry.date,
-            title: entry.title,
-            scripture: entry.scripture,
-            reflection: entry.reflection,
-            prayer: entry.prayer,
-            status: "Published",
-            updated_at: serverTimestamp()
-          },
-          { merge: true }
-        );
-      });
-      await batch.commit();
-      await refreshCurriculumData();
-      setReflectionStatus(`Berhasil menyimpan ${entries.length} daily reflections!`);
-    } catch (err) {
-      setReflectionStatus("Gagal bulk save: " + (err?.message || err), true);
-    }
-  });
-
-  document.getElementById("form-curr-reflection")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const refDate = document.getElementById("curr-ref-date").value.trim();
-    if (!refDate) return;
-
-    const payload = {
-      reflection_date: refDate,
-      title: document.getElementById("curr-ref-title").value.trim(),
-      scripture: document.getElementById("curr-ref-verse").value.trim(),
-      reflection: document.getElementById("curr-ref-body").value.trim(),
-      prayer: document.getElementById("curr-ref-prayer").value.trim(),
-      status: "Published",
-      updated_at: serverTimestamp()
-    };
-
-    try {
-      setReflectionStatus("Saving...");
-      await setDoc(doc(db, COLLECTION_DAILY_REFLECTIONS, refDate), payload, { merge: true });
-      resetReflectionForm();
-      await refreshCurriculumData();
-      setReflectionStatus(`Saved ${refDate}!`);
-    } catch (err) {
-      setReflectionStatus("Gagal menyimpan: " + (err?.message || err), true);
-    }
-  });
-
-  document.getElementById("curr-ref-list")?.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-curr-action]");
-    if (!btn) return;
-    const id = btn.dataset.currKey || "";
-    const item = currState.dailyReflections.find(x => x.id === id);
-
-    if (btn.dataset.currAction === "edit-reflection" && item) {
-      document.getElementById("curr-ref-form-title").textContent = `✏️ Edit Reflection (${item.dateKey || id})`;
-      document.getElementById("curr-ref-date").value = item.dateKey || "";
-      document.getElementById("curr-ref-verse").value = item.scripture || "";
-      document.getElementById("curr-ref-title").value = item.title || "";
-      document.getElementById("curr-ref-body").value = item.reflection || "";
-      document.getElementById("curr-ref-prayer").value = item.prayer || "";
-      setReflectionStatus(`Editing ${item.dateKey || id}`);
-    }
-
-    if (btn.dataset.currAction === "delete-reflection" && id) {
-      if (!confirm(`Hapus daily reflection ${item?.dateKey || id}?`)) return;
-      try {
-        await deleteDoc(doc(db, COLLECTION_DAILY_REFLECTIONS, id)).catch(() => {});
-        await deleteDoc(doc(db, COLLECTION_DAILY_DEVOTIONS_LEGACY, id)).catch(() => {});
-        await refreshCurriculumData();
-        setReflectionStatus(`Deleted ${item?.dateKey || id}`);
-      } catch (err) {
-        setReflectionStatus("Gagal hapus: " + (err?.message || err), true);
-      }
-    }
-  });
-
-  document.getElementById("curr-monthly-list")?.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-curr-action]");
-    if (!btn) return;
-    const key = btn.dataset.currKey || "";
-    const item = getCombinedMonthlyPool().find(x => (x.month_key || x.id) === key);
-
-    if (btn.dataset.currAction === "edit-monthly" && item) {
-      document.getElementById("curr-form-title").textContent = `✏️ Edit Monthly Theme (${key})`;
-      document.getElementById("curr-month-key").value = item.month_key || key;
-      document.getElementById("curr-month-name").value = item.month_name || "";
-      document.getElementById("curr-phase").value = item.phase || "";
-      document.getElementById("curr-title").value = item.title || "";
-      document.getElementById("curr-subtitle").value = item.subtitle || "";
-      document.getElementById("curr-passages").value = item.passages || "";
-      document.getElementById("curr-scripture").value = item.scripture || "";
-      document.getElementById("curr-synopsis").value = item.synopsis || "";
-      document.getElementById("curr-topic").value = item.topic || item.pillar || "";
-      document.getElementById("curr-keyword").value = item.keyword || "";
-      document.getElementById("curr-events").value = item.notable_events || "";
-      document.getElementById("curr-preacher-guide").value = item.preacher_guide || "";
-      setCurrStatus(`Editing ${key}`);
-    }
-
-    if (btn.dataset.currAction === "delete-monthly" && key) {
-      if (!confirm(`Hapus tema bulanan ${key} dari Firestore?`)) return;
-      try {
-        await deleteDoc(doc(db, COLLECTION_MONTHLY, key));
-        await refreshCurriculumData();
-        setCurrStatus(`Deleted ${key}`);
-      } catch (err) {
-        setCurrStatus("Gagal hapus: " + (err?.message || err), true);
-      }
-    }
-  });
-
-  document.getElementById("curr-weekly-list")?.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-curr-action]");
-    if (!btn) return;
-    const key = btn.dataset.currKey || "";
-    const item = getCombinedWeeklyPool().find(x => (x.service_date || x.id) === key);
-
-    if (btn.dataset.currAction === "edit-weekly" && item) {
-      document.getElementById("curr-weekly-form-title").textContent = `✏️ Edit Weekly Guideline (${key})`;
-      document.getElementById("wk-guide-date").value = item.service_date || key;
-      document.getElementById("wk-guide-month").value = item.month_key || key.slice(0, 7);
-      document.getElementById("wk-guide-label").value = item.week_label || "";
-      document.getElementById("wk-guide-speaker").value = item.speaker_guideline || item.speaker || "";
-      document.getElementById("wk-guide-monthly-focus").value = item.monthly_focus || "";
-      document.getElementById("wk-guide-flow").value = item.flow_position || "";
-      document.getElementById("wk-guide-title").value = item.title || "";
-      document.getElementById("wk-guide-verse").value = item.key_verse || "";
-      document.getElementById("wk-guide-reading").value = item.scripture_reading || "";
-      document.getElementById("wk-guide-connection").value = item.connection_to_monthly || "";
-      document.getElementById("wk-guide-winning").value = item.winning_point || "";
-      setWeeklyStatus(`Editing ${key}`);
-    }
-
-    if (btn.dataset.currAction === "delete-weekly" && key) {
-      if (!confirm(`Hapus guideline mingguan ${key} dari Firestore?`)) return;
-      try {
-        await deleteDoc(doc(db, COLLECTION_WEEKLY, key));
-        await refreshCurriculumData();
-        setWeeklyStatus(`Deleted ${key}`);
-      } catch (err) {
-        setWeeklyStatus("Gagal hapus: " + (err?.message || err), true);
-      }
-    }
-  });
-
-  document.getElementById("form-curr-monthly")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const monthKey = document.getElementById("curr-month-key").value.trim();
-    if (!monthKey) return;
-
-    const is2027 = monthKey.startsWith("2027-");
-    const payload = {
-      month_key: monthKey,
-      month_name: document.getElementById("curr-month-name").value.trim(),
-      phase: document.getElementById("curr-phase").value.trim() || (is2027 ? "2027 • ALIGN IN PURPOSE" : "2026 • GENESIS"),
-      annual_theme: is2027 ? "Align in Purpose" : "Align in Promise",
-      book: is2027 ? "Keluaran" : "Genesis",
-      title: document.getElementById("curr-title").value.trim(),
-      subtitle: document.getElementById("curr-subtitle").value.trim(),
-      passages: document.getElementById("curr-passages").value.trim(),
-      scripture: document.getElementById("curr-scripture").value.trim(),
-      synopsis: document.getElementById("curr-synopsis").value.trim(),
-      topic: document.getElementById("curr-topic").value.trim(),
-      keyword: document.getElementById("curr-keyword").value.trim(),
-      notable_events: document.getElementById("curr-events").value.trim(),
-      preacher_guide: document.getElementById("curr-preacher-guide").value.trim(),
-      status: "Published",
-      updated_at: serverTimestamp()
-    };
-
-    try {
-      setCurrStatus("Saving...");
-      await setDoc(doc(db, COLLECTION_MONTHLY, monthKey), payload, { merge: true });
-      resetMonthlyForm();
-      await refreshCurriculumData();
-      setCurrStatus(`Saved ${monthKey}!`);
-    } catch (err) {
-      setCurrStatus("Gagal menyimpan: " + (err?.message || err), true);
-    }
-  });
-
-  document.getElementById("form-curr-weekly")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const serviceDate = document.getElementById("wk-guide-date").value.trim();
-    if (!serviceDate) return;
-
-    const monthKey = document.getElementById("wk-guide-month").value.trim() || serviceDate.slice(0, 7);
-    const speakerVal = document.getElementById("wk-guide-speaker").value.trim();
-    const payload = {
-      service_date: serviceDate,
-      month_key: monthKey,
-      week_label: document.getElementById("wk-guide-label").value.trim(),
-      speaker_guideline: speakerVal,
-      speaker: speakerVal,
-      monthly_focus: document.getElementById("wk-guide-monthly-focus").value.trim(),
-      flow_position: document.getElementById("wk-guide-flow").value.trim(),
-      title: document.getElementById("wk-guide-title").value.trim(),
-      key_verse: document.getElementById("wk-guide-verse").value.trim(),
-      scripture_reading: document.getElementById("wk-guide-reading").value.trim(),
-      connection_to_monthly: document.getElementById("wk-guide-connection").value.trim(),
-      winning_point: document.getElementById("wk-guide-winning").value.trim(),
-      status: "Published",
-      updated_at: serverTimestamp()
-    };
-
-    try {
-      setWeeklyStatus("Saving...");
-      await setDoc(doc(db, COLLECTION_WEEKLY, serviceDate), payload, { merge: true });
-      resetWeeklyForm();
-      await refreshCurriculumData();
-      setWeeklyStatus(`Saved ${serviceDate}!`);
-    } catch (err) {
-      setWeeklyStatus("Gagal menyimpan: " + (err?.message || err), true);
-    }
-  });
-
-  await refreshCurriculumData();
-}
