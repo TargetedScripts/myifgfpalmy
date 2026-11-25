@@ -12,6 +12,8 @@ import {
 
 const COLLECTION_MONTHLY = "monthly_themes";
 const COLLECTION_WEEKLY = "weekly_insights";
+const COLLECTION_DAILY_REFLECTIONS = "daily_reflections";
+const COLLECTION_DAILY_DEVOTIONS_LEGACY = "daily_devotions";
 
 export const MONTHLY_THEMES_2026 = [
   {
@@ -236,7 +238,6 @@ export const MONTHS_2027 = [
 ];
 
 export const WEEKLY_THEMES_GUIDELINES = [
-  // NOVEMBER 2026 (DREAMS AND VISIONS)
   {
     service_date: "2026-11-01",
     month_key: "2026-11",
@@ -307,8 +308,6 @@ export const WEEKLY_THEMES_GUIDELINES = [
     winning_point: "Yusuf tidak menimbun gandum untuk dirinya sendiri. Dia mengelola kelimpahan untuk menyelamatkan Mesir dan seluruh dunia dari kelaparan. Inilah puncak mimpi Yusuf: bukan sekadar sukses pribadi, tapi menjadi berkat bagi banyak orang. Kesuksesanmu bukan hanya untukmu. Tuhan memberkatimu agar kamu menjadi berkat.",
     status: "Published"
   },
-
-  // DESEMBER 2026 (LIVING IN ABUNDANCE)
   {
     service_date: "2026-12-06",
     month_key: "2026-12",
@@ -365,8 +364,6 @@ export const WEEKLY_THEMES_GUIDELINES = [
     winning_point: "Kristus mengosongkan diri-Nya agar kita dipenuhi dengan kasih karunia. Di Hari Natal ini, puncak dari kelimpahan kita adalah menjadi saksi dan saluran kasih-Nya bagi keluarga, kota, dan bangsa.",
     status: "Published"
   },
-
-  // JANUARI 2027 (BEGIN TO SEE / KELUARAN 1–2)
   {
     service_date: "2027-01-03",
     month_key: "2027-01",
@@ -441,7 +438,7 @@ export const WEEKLY_THEMES_GUIDELINES = [
 
 function getSundaysOf2027() {
   const sundays = [];
-  const d = new Date(Date.UTC(2027, 0, 3)); // Sunday, 3 Jan 2027
+  const d = new Date(Date.UTC(2027, 0, 3));
   while (d.getUTCFullYear() === 2027) {
     sundays.push(d.toISOString().slice(0, 10));
     d.setUTCDate(d.getUTCDate() + 7);
@@ -534,9 +531,12 @@ export async function seedNovDec2026WeeklyGuidelines() {
 let currState = {
   monthlyItems: [],
   weeklyItems: [],
+  dailyReflections: [],
   activeSubtab: "monthly",
   yearFilter: "ALL",
   weeklyMonthFilter: "ALL",
+  reflectionMonthFilter: "2026-12",
+  reflectionSearch: "",
   bound: false
 };
 
@@ -566,7 +566,129 @@ function setWeeklyStatus(msg, isError = false) {
     : "text-[11px] font-semibold text-emerald-700";
 }
 
+function setReflectionStatus(msg, isError = false) {
+  const el = document.getElementById("curr-ref-status");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = isError
+    ? "text-[11px] font-semibold text-red-600"
+    : "text-[11px] font-semibold text-emerald-700";
+}
+
+function ensureDailyReflectionTabUI() {
+  const panel = document.getElementById("panel-curriculum");
+  if (!panel) return;
+
+  const weeklyTabBtn =
+    panel.querySelector('.curr-subtab[data-curr-subtab="weekly"]') ||
+    Array.from(panel.querySelectorAll(".curr-subtab")).pop();
+
+  if (weeklyTabBtn && !panel.querySelector('.curr-subtab[data-curr-subtab="daily-reflection"]')) {
+    const tabBtn = document.createElement("button");
+    tabBtn.type = "button";
+    tabBtn.dataset.currSubtab = "daily-reflection";
+    tabBtn.className = "curr-subtab bg-slate-100 text-slate-700 hover:bg-slate-200 px-3.5 py-2 rounded-lg text-xs font-semibold";
+    tabBtn.textContent = "📖 Daily Reflection";
+    weeklyTabBtn.insertAdjacentElement("afterend", tabBtn);
+  }
+
+  if (document.getElementById("curr-subpanel-daily-reflection")) return;
+
+  const subpanel = document.createElement("div");
+  subpanel.id = "curr-subpanel-daily-reflection";
+  subpanel.className = "curr-subpanel hidden space-y-4 mt-3";
+  subpanel.innerHTML = `
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 class="font-bold text-sm text-slate-900">📖 Daily Reflection Manager (Single, Bulk & Query)</h3>
+          <p class="text-[11px] text-slate-500">Kelola refleksi harian satu-persatu maupun bulk (termasuk data s/d 31 Desember 2026), query lihat, dan hapus.</p>
+        </div>
+        <span id="curr-ref-status" class="text-[11px] font-semibold text-emerald-700"></span>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+        <!-- Single Entry Form -->
+        <form id="form-curr-reflection" class="space-y-2.5 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200 text-xs">
+          <div class="flex items-center justify-between">
+            <h4 id="curr-ref-form-title" class="font-bold text-slate-900">➕ Single Entry / Edit Reflection</h4>
+            <button type="button" id="curr-ref-reset-btn" class="text-[11px] text-slate-600 hover:underline">Reset</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label class="font-semibold text-slate-600">Date (YYYY-MM-DD)</label>
+              <input type="date" id="curr-ref-date" required class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+            </div>
+            <div>
+              <label class="font-semibold text-slate-600">Scripture / Verse</label>
+              <input type="text" id="curr-ref-verse" placeholder="e.g., Kejadian 41:50-52" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+            </div>
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Title</label>
+            <input type="text" id="curr-ref-title" required placeholder="Judul refleksi harian" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Reflection Text</label>
+            <textarea id="curr-ref-body" rows="4" required placeholder="Isi refleksi harian..." class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white"></textarea>
+          </div>
+          <div>
+            <label class="font-semibold text-slate-600">Prayer (Optional)</label>
+            <input type="text" id="curr-ref-prayer" placeholder="Pokok doa penutup" class="w-full px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
+          </div>
+          <button type="submit" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs">
+            💾 Save Daily Reflection
+          </button>
+        </form>
+
+        <!-- Bulk Entry Form -->
+        <div class="space-y-2.5 bg-amber-50/50 p-3.5 rounded-xl border border-amber-200 text-xs">
+          <div class="flex items-center justify-between gap-2">
+            <h4 class="font-bold text-slate-900">⚡ Bulk Import / Batch Update (s/d 31 Des 2026)</h4>
+            <button type="button" id="curr-ref-sample-btn" class="text-[11px] font-semibold text-amber-900 hover:underline">Isi Contoh Format</button>
+          </div>
+          <p class="text-[11px] text-slate-600 leading-relaxed">
+            Mendukung <strong>JSON Array</strong> (<code>[{"date":"2026-12-01","title":"...","scripture":"...","reflection":"...","prayer":"..."}]</code>) atau blok tanggal dimulai baris <code>YYYY-MM-DD</code>.
+          </p>
+          <textarea id="curr-ref-bulk-input" rows="8" placeholder='[{"date":"2026-12-01","title":"...","scripture":"...","reflection":"..."}]' class="w-full px-2.5 py-2 border border-amber-300 rounded-lg font-mono text-[11px] bg-white"></textarea>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="curr-ref-bulk-save-btn" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs">
+              🚀 Save Bulk Reflections
+            </button>
+            <button type="button" id="curr-ref-bulk-clear-btn" class="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-lg text-xs">
+              Clear
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Query / Filter & List -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h4 class="font-bold text-sm text-slate-900">🔎 Query & Daftar Daily Reflections</h4>
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <select id="curr-ref-month-filter" class="px-2.5 py-1.5 border rounded-lg bg-white text-xs font-semibold">
+            <option value="ALL">Semua Periode</option>
+            <option value="2026-11">November 2026</option>
+            <option value="2026-12" selected>December 2026 (s/d 31 Des)</option>
+            <option value="2027-01">January 2027</option>
+          </select>
+          <input type="search" id="curr-ref-search" placeholder="Cari tanggal, judul, ayat, teks..." class="px-2.5 py-1.5 border rounded-lg bg-white text-xs w-52" />
+          <button type="button" id="curr-ref-refresh-btn" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-lg text-xs">
+            ↻ Refresh
+          </button>
+        </div>
+      </div>
+      <div id="curr-ref-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </div>
+  `;
+
+  panel.appendChild(subpanel);
+}
+
 function switchCurrSubtab(subtab) {
+  ensureDailyReflectionTabUI();
   const target = subtab || "monthly";
   currState.activeSubtab = target;
   document.querySelectorAll(".curr-subtab").forEach(btn => {
@@ -622,6 +744,71 @@ function resetWeeklyForm() {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
+}
+
+function resetReflectionForm() {
+  const heading = document.getElementById("curr-ref-form-title");
+  if (heading) heading.textContent = "➕ Single Entry / Edit Reflection";
+  ["curr-ref-date", "curr-ref-verse", "curr-ref-title", "curr-ref-body", "curr-ref-prayer"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+}
+
+function parseBulkReflectionsInput(rawText) {
+  const trimmed = String(rawText || "").trim();
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith("[")) {
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed)) throw new Error("JSON bulk harus berupa array [...]");
+    return parsed
+      .map(item => ({
+        date: String(item.reflection_date || item.devotion_date || item.date || item.id || "").trim(),
+        title: String(item.title || "").trim(),
+        scripture: String(item.scripture || item.verse || "").trim(),
+        reflection: String(item.reflection || item.body || "").trim(),
+        prayer: String(item.prayer || "").trim()
+      }))
+      .filter(x => /^\d{4}-\d{2}-\d{2}$/.test(x.date) && (x.title || x.reflection));
+  }
+
+  // Format blok baris demi baris: dimulai baris tanggal YYYY-MM-DD
+  const lines = trimmed.split(/\r?\n/);
+  const entries = [];
+  let current = null;
+
+  for (const line of lines) {
+    const dateMatch = line.trim().match(/^(\d{4}-\d{2}-\d{2})(?:\s*\|\s*(.*))?$/);
+    if (dateMatch) {
+      if (current) entries.push(current);
+      current = {
+        date: dateMatch[1],
+        title: (dateMatch[2] || "").trim(),
+        scripture: "",
+        reflection: "",
+        prayer: ""
+      };
+      continue;
+    }
+    if (!current) continue;
+    if (/^ayat\s*:/i.test(line.trim())) {
+      current.scripture = line.trim().replace(/^ayat\s*:\s*/i, "").trim();
+    } else if (/^doa\s*:/i.test(line.trim())) {
+      current.prayer = line.trim().replace(/^doa\s*:\s*/i, "").trim();
+    } else {
+      current.reflection = current.reflection ? `${current.reflection}\n${line}` : line;
+    }
+  }
+  if (current) entries.push(current);
+
+  return entries
+    .map(e => ({
+      ...e,
+      title: e.title || `Refleksi ${e.date}`,
+      reflection: e.reflection.trim()
+    }))
+    .filter(e => /^\d{4}-\d{2}-\d{2}$/.test(e.date) && e.reflection);
 }
 
 function getCombinedMonthlyPool() {
@@ -758,19 +945,98 @@ function renderWeeklyThemes() {
   }).join("");
 }
 
+function renderDailyReflectionsList() {
+  const listEl = document.getElementById("curr-ref-list");
+  if (!listEl) return;
+
+  const monthFilter = document.getElementById("curr-ref-month-filter")?.value || currState.reflectionMonthFilter || "ALL";
+  const search = (document.getElementById("curr-ref-search")?.value || currState.reflectionSearch || "").trim().toLowerCase();
+  currState.reflectionMonthFilter = monthFilter;
+  currState.reflectionSearch = search;
+
+  const items = [...currState.dailyReflections]
+    .sort((a, b) => String(a.dateKey || "").localeCompare(String(b.dateKey || "")))
+    .filter(item => {
+      if (monthFilter !== "ALL" && !String(item.dateKey || "").startsWith(monthFilter)) return false;
+      if (!search) return true;
+      return [item.dateKey, item.title, item.scripture, item.reflection, item.prayer]
+        .filter(Boolean)
+        .some(v => String(v).toLowerCase().includes(search));
+    });
+
+  if (items.length === 0) {
+    listEl.innerHTML = `
+      <div class="p-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500 col-span-full">
+        Tidak ada Daily Reflection untuk filter <strong>${esc(monthFilter)}</strong>${search ? ` dengan kata kunci "<strong>${esc(search)}</strong>"` : ""}.
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = items.map(item => `
+    <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-1.5 text-xs">
+      <div class="flex items-start justify-between gap-2">
+        <div>
+          <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">${esc(item.dateKey || item.id)}</span>
+          ${item.scripture ? `<span class="ml-1.5 font-semibold text-amber-800">${esc(item.scripture)}</span>` : ""}
+          <h5 class="font-bold text-sm text-slate-900 mt-1">${esc(item.title || "")}</h5>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button type="button" data-curr-action="edit-reflection" data-curr-key="${esc(item.id)}" class="text-blue-600 hover:underline font-semibold">Edit</button>
+          <button type="button" data-curr-action="delete-reflection" data-curr-key="${esc(item.id)}" class="text-red-600 hover:underline font-semibold">Delete</button>
+        </div>
+      </div>
+      <p class="text-slate-700 whitespace-pre-line leading-relaxed">${esc(item.reflection || "")}</p>
+      ${item.prayer ? `<p class="text-[11px] italic text-slate-600 pt-1 border-t border-slate-100">🙏 ${esc(item.prayer)}</p>` : ""}
+    </div>
+  `).join("");
+}
+
 export async function refreshCurriculumData() {
+  ensureDailyReflectionTabUI();
   try {
-    const [mSnap, wSnap] = await Promise.all([
+    const [mSnap, wSnap, refSnap, devSnap] = await Promise.all([
       getDocs(collection(db, COLLECTION_MONTHLY)),
-      getDocs(collection(db, COLLECTION_WEEKLY))
+      getDocs(collection(db, COLLECTION_WEEKLY)),
+      getDocs(collection(db, COLLECTION_DAILY_REFLECTIONS)).catch(() => ({ docs: [] })),
+      getDocs(collection(db, COLLECTION_DAILY_DEVOTIONS_LEGACY)).catch(() => ({ docs: [] }))
     ]);
+
     currState.monthlyItems = mSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     currState.weeklyItems = wSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const mergedReflections = new Map();
+    devSnap.docs.forEach(d => {
+      const data = d.data();
+      const dateKey = String(data.reflection_date || data.devotion_date || d.id).slice(0, 10);
+      mergedReflections.set(d.id, {
+        id: d.id,
+        dateKey,
+        title: data.title || "",
+        scripture: data.scripture || data.verse || "",
+        reflection: data.reflection || data.body || "",
+        prayer: data.prayer || ""
+      });
+    });
+    refSnap.docs.forEach(d => {
+      const data = d.data();
+      const dateKey = String(data.reflection_date || data.devotion_date || d.id).slice(0, 10);
+      mergedReflections.set(d.id, {
+        id: d.id,
+        dateKey,
+        title: data.title || "",
+        scripture: data.scripture || data.verse || "",
+        reflection: data.reflection || data.body || "",
+        prayer: data.prayer || ""
+      });
+    });
+    currState.dailyReflections = Array.from(mergedReflections.values());
   } catch (err) {
     console.warn("Using local curriculum fallback:", err);
   }
   renderMonthlyThemes();
   renderWeeklyThemes();
+  renderDailyReflectionsList();
 }
 
 export async function seed2026MonthlyThemes() {
@@ -799,6 +1065,7 @@ export async function seed2027FullCurriculum() {
 }
 
 export async function initCurriculumTab() {
+  ensureDailyReflectionTabUI();
   switchCurrSubtab(currState.activeSubtab);
 
   if (currState.bound) {
@@ -843,6 +1110,13 @@ export async function initCurriculumTab() {
 
   document.getElementById("curr-year-filter")?.addEventListener("change", renderMonthlyThemes);
   document.getElementById("curr-weekly-month-filter")?.addEventListener("change", renderWeeklyThemes);
+  document.getElementById("curr-ref-month-filter")?.addEventListener("change", renderDailyReflectionsList);
+  document.getElementById("curr-ref-search")?.addEventListener("input", renderDailyReflectionsList);
+  document.getElementById("curr-ref-refresh-btn")?.addEventListener("click", async () => {
+    setReflectionStatus("Refreshing...");
+    await refreshCurriculumData();
+    setReflectionStatus(`Loaded ${currState.dailyReflections.length} entries`);
+  });
 
   document.getElementById("curr-reset-btn")?.addEventListener("click", () => {
     resetMonthlyForm();
@@ -852,6 +1126,126 @@ export async function initCurriculumTab() {
   document.getElementById("curr-weekly-reset-btn")?.addEventListener("click", () => {
     resetWeeklyForm();
     setWeeklyStatus("");
+  });
+
+  document.getElementById("curr-ref-reset-btn")?.addEventListener("click", () => {
+    resetReflectionForm();
+    setReflectionStatus("");
+  });
+
+  document.getElementById("curr-ref-sample-btn")?.addEventListener("click", () => {
+    const sampleArea = document.getElementById("curr-ref-bulk-input");
+    if (!sampleArea) return;
+    sampleArea.value = JSON.stringify([
+      {
+        date: "2026-12-30",
+        title: "Menutup Tahun dalam Keberbuahan",
+        scripture: "Kejadian 41:50-52",
+        reflection: "Tuhan memampukan kita tetap berbuah di tengah segala musim.",
+        prayer: "Tuhan, ajar kami mengakhiri tahun ini dengan syukur dan iman."
+      },
+      {
+        date: "2026-12-31",
+        title: "Bersyukur atas Penyertaan Sepanjang 2026",
+        scripture: "Kejadian 41:56",
+        reflection: "Setiap langkah sepanjang 2026 menjadi bukti kesetiaan Tuhan.",
+        prayer: "Bapa, pimpin kami masuk ke tahun 2027 dengan tujuan yang jelas."
+      }
+    ], null, 2);
+  });
+
+  document.getElementById("curr-ref-bulk-clear-btn")?.addEventListener("click", () => {
+    const area = document.getElementById("curr-ref-bulk-input");
+    if (area) area.value = "";
+    setReflectionStatus("");
+  });
+
+  document.getElementById("curr-ref-bulk-save-btn")?.addEventListener("click", async () => {
+    const raw = document.getElementById("curr-ref-bulk-input")?.value || "";
+    try {
+      const entries = parseBulkReflectionsInput(raw);
+      if (entries.length === 0) {
+        setReflectionStatus("Tidak ada data valid (pastikan tanggal YYYY-MM-DD & teks refleksi terisi).", true);
+        return;
+      }
+      setReflectionStatus(`Saving ${entries.length} reflections...`);
+      const batch = writeBatch(db);
+      entries.forEach(entry => {
+        batch.set(
+          doc(db, COLLECTION_DAILY_REFLECTIONS, entry.date),
+          {
+            reflection_date: entry.date,
+            title: entry.title,
+            scripture: entry.scripture,
+            reflection: entry.reflection,
+            prayer: entry.prayer,
+            status: "Published",
+            updated_at: serverTimestamp()
+          },
+          { merge: true }
+        );
+      });
+      await batch.commit();
+      await refreshCurriculumData();
+      setReflectionStatus(`Berhasil menyimpan ${entries.length} daily reflections!`);
+    } catch (err) {
+      setReflectionStatus("Gagal bulk save: " + (err?.message || err), true);
+    }
+  });
+
+  document.getElementById("form-curr-reflection")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const refDate = document.getElementById("curr-ref-date").value.trim();
+    if (!refDate) return;
+
+    const payload = {
+      reflection_date: refDate,
+      title: document.getElementById("curr-ref-title").value.trim(),
+      scripture: document.getElementById("curr-ref-verse").value.trim(),
+      reflection: document.getElementById("curr-ref-body").value.trim(),
+      prayer: document.getElementById("curr-ref-prayer").value.trim(),
+      status: "Published",
+      updated_at: serverTimestamp()
+    };
+
+    try {
+      setReflectionStatus("Saving...");
+      await setDoc(doc(db, COLLECTION_DAILY_REFLECTIONS, refDate), payload, { merge: true });
+      resetReflectionForm();
+      await refreshCurriculumData();
+      setReflectionStatus(`Saved ${refDate}!`);
+    } catch (err) {
+      setReflectionStatus("Gagal menyimpan: " + (err?.message || err), true);
+    }
+  });
+
+  document.getElementById("curr-ref-list")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-curr-action]");
+    if (!btn) return;
+    const id = btn.dataset.currKey || "";
+    const item = currState.dailyReflections.find(x => x.id === id);
+
+    if (btn.dataset.currAction === "edit-reflection" && item) {
+      document.getElementById("curr-ref-form-title").textContent = `✏️ Edit Reflection (${item.dateKey || id})`;
+      document.getElementById("curr-ref-date").value = item.dateKey || "";
+      document.getElementById("curr-ref-verse").value = item.scripture || "";
+      document.getElementById("curr-ref-title").value = item.title || "";
+      document.getElementById("curr-ref-body").value = item.reflection || "";
+      document.getElementById("curr-ref-prayer").value = item.prayer || "";
+      setReflectionStatus(`Editing ${item.dateKey || id}`);
+    }
+
+    if (btn.dataset.currAction === "delete-reflection" && id) {
+      if (!confirm(`Hapus daily reflection ${item?.dateKey || id}?`)) return;
+      try {
+        await deleteDoc(doc(db, COLLECTION_DAILY_REFLECTIONS, id)).catch(() => {});
+        await deleteDoc(doc(db, COLLECTION_DAILY_DEVOTIONS_LEGACY, id)).catch(() => {});
+        await refreshCurriculumData();
+        setReflectionStatus(`Deleted ${item?.dateKey || id}`);
+      } catch (err) {
+        setReflectionStatus("Gagal hapus: " + (err?.message || err), true);
+      }
+    }
   });
 
   document.getElementById("curr-monthly-list")?.addEventListener("click", async (e) => {
