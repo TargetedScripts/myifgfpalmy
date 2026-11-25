@@ -110,7 +110,7 @@ export async function saveDisciple(id, data) {
     updated_at: serverTimestamp()
   };
   if (id) {
-    await updateDoc(doc(db, "disciples", id), payload);
+    await setDoc(doc(db, "disciples", id), payload, { merge: true });
   } else {
     payload.created_at = serverTimestamp();
     await addDoc(collection(db, "disciples"), payload);
@@ -252,11 +252,11 @@ export async function importDisciplesFromCSV(csvText) {
   for (const [, record] of mergedRecords) {
     const existing = record.email ? byEmail.get(record.email) : null;
     if (existing) {
-      await updateDoc(doc(db, "disciples", existing.id), {
+      await setDoc(doc(db, "disciples", existing.id), {
         ...record,
         system_role: existing.system_role || "member",
         updated_at: serverTimestamp()
-      });
+      }, { merge: true });
       updatedCount++;
     } else {
       await addDoc(collection(db, "disciples"), {
