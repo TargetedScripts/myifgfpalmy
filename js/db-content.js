@@ -793,9 +793,23 @@ export async function saveBulkDailyReflections(entries = []) {
 }
 
 export async function deleteDailyReflection(id) {
-  if (!id) return;
-  await deleteDoc(doc(db, "daily_reflections", id)).catch(() => {});
-  await deleteDoc(doc(db, "daily_devotions", id)).catch(() => {});
+  const targetId = String(id || "").trim();
+  if (!targetId) return;
+
+  const delWithTimeout = (colName) =>
+    Promise.race([
+      deleteDoc(doc(db, colName, targetId)),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout deleting from ${colName}`)), 8000)
+      )
+    ]).catch(err => {
+      console.warn(`deleteDailyReflection (${colName}/${targetId}):`, err);
+    });
+
+  await Promise.allSettled([
+    delWithTimeout("daily_reflections"),
+    delWithTimeout("daily_devotions")
+  ]);
 }
 
 export const getDailyDevotions = getDailyReflections;
