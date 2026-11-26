@@ -35,14 +35,26 @@ export async function saveSundayAttendance(serviceDate, payload) {
   }, { merge: true });
 }
 
-// --- 2. DJ DISCIPLESHIP PROGRESS (SYNCED WITH dj_stages & dj_progress) ---
-export async function updateDiscipleDJStages(discipleId, djStages, existingProgress = {}) {
+// --- 2. DJ DISCIPLESHIP PROGRESS (SYNCED WITH dj_stages, dj_progress & optional dates) ---
+export async function updateDiscipleDJStages(
+  discipleId,
+  djStages,
+  existingProgress = {},
+  completionDates = {}
+) {
   const keys = ["come", "grow", "serve", "lead"];
+  const normalizedDates = {
+    come: String(completionDates?.come || "").trim(),
+    grow: String(completionDates?.grow || "").trim(),
+    serve: String(completionDates?.serve || "").trim(),
+    lead: String(completionDates?.lead || "").trim()
+  };
+
   const normalizedStages = {
-    come: Boolean(djStages.come),
-    grow: Boolean(djStages.grow),
-    serve: Boolean(djStages.serve),
-    lead: Boolean(djStages.lead)
+    come: Boolean(djStages.come) || Boolean(normalizedDates.come),
+    grow: Boolean(djStages.grow) || Boolean(normalizedDates.grow),
+    serve: Boolean(djStages.serve) || Boolean(normalizedDates.serve),
+    lead: Boolean(djStages.lead) || Boolean(normalizedDates.lead)
   };
 
   const syncedProgress = {};
@@ -68,11 +80,17 @@ export async function updateDiscipleDJStages(discipleId, djStages, existingProgr
   await updateDoc(doc(db, "disciples", discipleId), {
     dj_stages: normalizedStages,
     dj_progress: syncedProgress,
+    dj_completion_dates: normalizedDates,
     dj_traffic_light: trafficLight,
     updated_at: serverTimestamp()
   });
 
-  return { trafficLight, djStages: normalizedStages, djProgress: syncedProgress };
+  return {
+    trafficLight,
+    djStages: normalizedStages,
+    djProgress: syncedProgress,
+    djCompletionDates: normalizedDates
+  };
 }
 
 // --- 3. ICARE GROUPS ---
