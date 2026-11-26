@@ -15,6 +15,8 @@ import {
   deleteNewcomer
 } from "./db-care.js";
 
+const DJ_STAGES_KEYS = ["come", "grow", "serve", "lead"];
+
 let careState = {
   disciples: [],
   insights: [],
@@ -62,8 +64,29 @@ function resolveDiscipleDJStages(d) {
   };
 }
 
+function resolveDiscipleDJDates(d) {
+  const raw = d.dj_completion_dates && typeof d.dj_completion_dates === "object"
+    ? d.dj_completion_dates
+    : {};
+  return {
+    come: String(raw.come || "").trim(),
+    grow: String(raw.grow || "").trim(),
+    serve: String(raw.serve || "").trim(),
+    lead: String(raw.lead || "").trim()
+  };
+}
+
+function isICareLeaderCandidate(d) {
+  const interests = Array.isArray(d.ministry_interests) ? d.ministry_interests : [];
+  const matchesInterest = interests.some(item =>
+    String(item || "").trim().toLowerCase().includes("icare leader")
+  );
+  const matchesInIcare = String(d.in_icare || "").toLowerCase().includes("leader");
+  return matchesInterest || matchesInIcare;
+}
+
 export async function initCareModule() {
-  ensureICareMemberSelectUI();
+  ensureICareFormControlsUI();
   bindCareEvents();
   await loadCareBaseData();
 }
@@ -190,7 +213,7 @@ window.toggleDiscipleAttendance = (discipleId) => {
   renderAttendanceChecklist();
 };
 
-// --- 2. DJ PROGRESS MATRIX ---
+// --- 2. DJ PROGRESS MATRIX (WITH OPTIONAL COMPLETION DATE PER STAGE) ---
 function renderDJMatrix() {
   const tbody = document.getElementById("tbody-dj-matrix");
   if (!tbody) return;
@@ -203,6 +226,7 @@ function renderDJMatrix() {
 
   tbody.innerHTML = filtered.map(d => {
     const stages = resolveDiscipleDJStages(d);
+    const dates = resolveDiscipleDJDates(d);
     const light = (d.dj_traffic_light || "red").toLowerCase();
 
     const badge =
@@ -212,22 +236,33 @@ function renderDJMatrix() {
         ? `<span class="badge-amber px-2 py-0.5 rounded-full text-[11px] font-bold">🟠 In Progress</span>`
         : `<span class="badge-red px-2 py-0.5 rounded-full text-[11px] font-bold">🔴 Not Started</span>`;
 
-    const renderCheck = (stageKey) => `
-      <input type="checkbox" ${stages[stageKey] ? "checked" : ""}
-        onchange="window.toggleDJStage('${d.id}', '${stageKey}', this.checked)"
-        class="w-4 h-4 accent-emerald-600 cursor-pointer" />
-    `;
+    const renderStageCell = (stageKey) => {
+      const checked = Boolean(stages[stageKey]);
+      const dateVal = dates[stageKey] || "";
+      return `
+        <div class="inline-flex flex-col items-center gap-1">
+          <input type="checkbox" ${checked ? "checked" : ""}
+            onchange="window.toggleDJStage('${d.id}', '${stageKey}', this.checked)"
+            class="w-4 h-4 accent-emerald-600 cursor-pointer" />
+          <input type="date"
+            value="${dateVal}"
+            title="Optional completion date"
+            onchange="window.updateDJStageDate('${d.id}', '${stageKey}', this.value)"
+            class="w-[116px] px-1.5 py-0.5 text-[10px] font-mono border border-slate-200 rounded bg-white text-slate-700 focus:border-slate-400" />
+        </div>
+      `;
+    };
 
     return `
-      <tr class="border-b border-slate-100 hover:bg-slate-50">
+      <tr class="border-b border-slate-100 hover:bg-slate-50 align-top">
         <td class="p-3">
           <p class="font-bold text-xs text-slate-900">${d.full_name}${d.nick_name ? ` (${d.nick_name})` : ""}</p>
           <p class="text-[10px] text-slate-500">${d.member_id || ""}</p>
         </td>
-        <td class="p-3 text-center">${renderCheck("come")}</td>
-        <td class="p-3 text-center">${renderCheck("grow")}</td>
-        <td class="p-3 text-center">${renderCheck("serve")}</td>
-        <td class="p-3 text-center">${renderCheck("lead")}</td>
+        <td class="p-3 text-center">${renderStageCell("come")}</td>
+        <td class="p-3 text-center">${renderStageCell("grow")}</td>
+        <td class="p-3 text-center">${renderStageCell("serve")}</td>
+        <td class="p-3 text-center">${renderStageCell("lead")}</td>
         <td class="p-3 text-right">${badge}</td>
       </tr>
     `;
@@ -239,42 +274,127 @@ window.toggleDJStage = async (discipleId, stageKey, isChecked) => {
   if (!disciple) return;
 
   const currentStages = resolveDiscipleDJStages(disciple);
+  const currentDates = resolveDiscipleDJDates(disciple);
   const updatedStages = { ...currentStages, [stageKey]: isChecked };
-  const res = await updateDiscipleDJStages(discipleId, updatedStages, disciple.dj_progress || {});
+
+  const res = await updateDiscipleDJStages(
+    discipleId,
+    updatedStages,
+    disciple.dj_progress || {},
+    currentDates
+  );
 
   disciple.dj_stages = res.djStages;
   disciple.dj_progress = res.djProgress;
+  disciple.dj_completion_dates = res.djCompletionDates;
   disciple.dj_traffic_light = res.trafficLight;
   renderDJMatrix();
 };
 
-// --- 3. ICARE GROUPS (LINKED TO DISCIPLES) ---
-function ensureICareMemberSelectUI() {
+window.updateDJStageDate = async (discipleId, stageKey, dateStr) => {
+  const disciple = careState.disciples.find(d => d.id === discipleId);
+  if (!disciple) return;
+
+  const currentStages = resolveDiscipleDJStages(disciple);
+  const currentDates = resolveDiscipleDJDates(disciple);
+  const cleanDate = String(dateStr || "").trim();
+
+  const updatedDates = { ...currentDates, [stageKey]: cleanDate };
+  const updatedStages = {
+    ...currentStages,
+    ...(cleanDate ? { [stageKey]: true } : {})
+  };
+
+  const res = await updateDiscipleDJStages(
+    discipleId,
+    updatedStages,
+    disciple.dj_progress || {},
+    updatedDates
+  );
+
+  disciple.dj_stages = res.djStages;
+  disciple.dj_progress = res.djProgress;
+  disciple.dj_completion_dates = res.djCompletionDates;
+  disciple.dj_traffic_light = res.trafficLight;
+  renderDJMatrix();
+};
+
+// --- 3. ICARE GROUPS (LEADER FROM iCare Leader ROLE + LINKED TO DISCIPLES) ---
+function ensureICareFormControlsUI() {
   const form = document.getElementById("form-icare");
-  if (!form || document.getElementById("icare-members-wrapper")) return;
+  if (!form) return;
 
-  const hiddenId = document.createElement("input");
-  hiddenId.type = "hidden";
-  hiddenId.id = "icare-edit-id";
-  form.prepend(hiddenId);
+  if (!document.getElementById("icare-edit-id")) {
+    const hiddenId = document.createElement("input");
+    hiddenId.type = "hidden";
+    hiddenId.id = "icare-edit-id";
+    form.prepend(hiddenId);
+  }
 
-  const wrapper = document.createElement("div");
-  wrapper.id = "icare-members-wrapper";
-  wrapper.className = "space-y-1.5 pt-1";
-  wrapper.innerHTML = `
-    <label class="block text-xs font-semibold text-slate-700">iCare Members (Syncs to Disciples)</label>
-    <div id="icare-members-checklist" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-40 overflow-y-auto p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"></div>
-  `;
+  // Konversi input #icare-leader menjadi <select> jika masih <input>
+  const leaderEl = document.getElementById("icare-leader");
+  if (leaderEl && leaderEl.tagName.toLowerCase() === "input") {
+    const selectEl = document.createElement("select");
+    selectEl.id = "icare-leader";
+    selectEl.className = leaderEl.className || "w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white";
+    leaderEl.replaceWith(selectEl);
+  }
 
-  const submitBtn = form.querySelector('button[type="submit"]');
-  if (submitBtn) {
-    form.insertBefore(wrapper, submitBtn);
-  } else {
-    form.appendChild(wrapper);
+  if (!document.getElementById("icare-members-wrapper")) {
+    const wrapper = document.createElement("div");
+    wrapper.id = "icare-members-wrapper";
+    wrapper.className = "space-y-1.5 pt-1";
+    wrapper.innerHTML = `
+      <label class="block text-xs font-semibold text-slate-700">iCare Members (Syncs to Disciples)</label>
+      <div id="icare-members-checklist" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-40 overflow-y-auto p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"></div>
+    `;
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      form.insertBefore(wrapper, submitBtn);
+    } else {
+      form.appendChild(wrapper);
+    }
   }
 }
 
-function populateICareFormSelects(selectedMemberIds = []) {
+function populateICareLeaderSelect(selectedLeaderId = "", selectedLeaderName = "") {
+  const sel = document.getElementById("icare-leader");
+  if (!sel || sel.tagName.toLowerCase() !== "select") return;
+
+  const leaders = careState.disciples.filter(isICareLeaderCandidate);
+  const pool = leaders.length > 0 ? leaders : careState.disciples;
+
+  const options = [
+    `<option value="">${leaders.length > 0 ? "— Select iCare Leader —" : "— Select Leader (No iCare Leader role tagged yet) —"}</option>`
+  ];
+
+  const addedIds = new Set();
+  pool.forEach(d => {
+    addedIds.add(d.id);
+    const isSelected =
+      (selectedLeaderId && d.id === selectedLeaderId) ||
+      (!selectedLeaderId && selectedLeaderName && d.full_name.toLowerCase() === selectedLeaderName.toLowerCase());
+    options.push(
+      `<option value="${d.id}" ${isSelected ? "selected" : ""}>${d.full_name}${leaders.length > 0 ? " (iCare Leader)" : ""}</option>`
+    );
+  });
+
+  if (selectedLeaderId && !addedIds.has(selectedLeaderId)) {
+    const fallbackDisc = careState.disciples.find(d => d.id === selectedLeaderId);
+    if (fallbackDisc) {
+      options.push(`<option value="${fallbackDisc.id}" selected>${fallbackDisc.full_name}</option>`);
+    } else if (selectedLeaderName) {
+      options.push(`<option value="" selected>${selectedLeaderName}</option>`);
+    }
+  }
+
+  sel.innerHTML = options.join("");
+}
+
+function populateICareFormSelects(selectedMemberIds = [], selectedLeaderId = "", selectedLeaderName = "") {
+  populateICareLeaderSelect(selectedLeaderId, selectedLeaderName);
+
   const box = document.getElementById("icare-members-checklist");
   if (!box) return;
 
@@ -357,10 +477,9 @@ window.editICareGroup = (id) => {
   const editEl = document.getElementById("icare-edit-id");
   if (editEl) editEl.value = g.id;
   document.getElementById("icare-name").value = g.name || "";
-  document.getElementById("icare-leader").value = g.leader_name || "";
   document.getElementById("icare-schedule").value = g.schedule || "";
   document.getElementById("icare-location").value = g.location || "";
-  populateICareFormSelects(g.member_ids || []);
+  populateICareFormSelects(g.member_ids || [], g.leader_id || "", g.leader_name || "");
 };
 
 window.removeICareGroup = async (id) => {
@@ -450,6 +569,7 @@ window.promoteNewcomerToDisciple = async (id) => {
       serve: "Not Started",
       lead: "Not Started"
     },
+    dj_completion_dates: { come: "", grow: "", serve: "", lead: "" },
     in_icare: "No",
     ministry_interests: [],
     pastoral_notes: `Joined from iCorner (${n.visit_date}). ${n.notes || ""}`
@@ -508,7 +628,10 @@ function bindCareEvents() {
     e.preventDefault();
     const editId = document.getElementById("icare-edit-id")?.value.trim() || null;
     const name = document.getElementById("icare-name").value.trim();
-    const leaderName = document.getElementById("icare-leader").value.trim();
+    const leaderEl = document.getElementById("icare-leader");
+    const leaderId = leaderEl?.value || "";
+    const leaderDisciple = careState.disciples.find(d => d.id === leaderId);
+    const leaderName = leaderDisciple?.full_name || leaderEl?.selectedOptions?.[0]?.textContent?.replace(/\s*\(iCare Leader\)$/i, "").trim() || "";
     const schedule = document.getElementById("icare-schedule").value.trim();
     const location = document.getElementById("icare-location").value.trim();
     const memberIds = Array.from(
@@ -520,6 +643,7 @@ function bindCareEvents() {
     await saveICareGroup({
       id: editId,
       name,
+      leader_id: leaderId,
       leader_name: leaderName,
       schedule,
       location,
