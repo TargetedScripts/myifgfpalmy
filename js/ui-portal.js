@@ -1,4 +1,15 @@
 // js/ui-portal.js
+import { db } from "./firebase-config.js";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  setDoc,
+  deleteDoc,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import * as dbPortal from "./db-portal.js";
 import { getDailyReflections, seedNov20toDec31Reflections } from "./db-content.js";
 import { addUnavailability, deleteUnavailability } from "./db-roster.js";
@@ -6,12 +17,78 @@ import { addUnavailability, deleteUnavailability } from "./db-roster.js";
 const {
   getPublicMonthlyThemes,
   getPublicWeeklyInsights,
-  getPublicMediaGalleries,
   getMyAssignments,
   respondToAssignment,
   getMyUnavailability,
   updateMyContactProfile
 } = dbPortal;
+
+const DEFAULT_CHURCH_PROFILE = {
+  church_id: "ifgf_palmy",
+  name: "IFGF Palmerston North",
+  address: "Palmerston North, New Zealand",
+  service_day: "Sunday",
+  service_time: "4:30 PM",
+  timezone: "Pacific/Auckland",
+  website_url: "https://ifgfpalmy.org"
+};
+
+async function fetchChurchProfile() {
+  try {
+    const snap = await getDoc(doc(db, "church_profile", "ifgf_palmy"));
+    if (snap.exists()) {
+      return { ...DEFAULT_CHURCH_PROFILE, ...snap.data() };
+    }
+  } catch (err) {
+    console.warn("Using default church profile fallback:", err);
+  }
+  return { ...DEFAULT_CHURCH_PROFILE };
+}
+
+async function fetchAnnouncements() {
+  try {
+    const snap = await getDocs(collection(db, "announcements"));
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(a => a.is_active !== false)
+      .sort((a, b) => {
+        const pinDiff = (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+        if (pinDiff !== 0) return pinDiff;
+        const dateA = String(a.announcement_date || a.created_at_iso || "");
+        const dateB = String(b.announcement_date || b.created_at_iso || "");
+        return dateB.localeCompare(dateA);
+      });
+  } catch (err) {
+    console.warn("fetchAnnouncements fallback:", err);
+    return [];
+  }
+}
+
+async function fetchHubSnapshotCounts() {
+  try {
+    const [discSnap, deptSnap, roleSnap] = await Promise.all([
+      getDocs(collection(db, "disciples")).catch(() => null),
+      getDocs(collection(db, "departments")).catch(() => null),
+      getDocs(collection(db, "roles")).catch(() => null)
+    ]);
+
+    const activeDisciples = discSnap
+      ? discSnap.docs.filter(d => (d.data().status || "Active") === "Active").length
+      : 0;
+    const totalDisciples = discSnap ? discSnap.size : 0;
+    const departmentsCount = deptSnap
+      ? deptSnap.docs.filter(d => d.data().active !== false && d.data().is_active !== false).length
+      : 0;
+    const rolesCount = roleSnap
+      ? roleSnap.docs.filter(d => d.data().active !== false && d.data().is_active !== false).length
+      : 0;
+
+    return { activeDisciples, totalDisciples, departmentsCount, rolesCount };
+  } catch (err) {
+    console.warn("fetchHubSnapshotCounts fallback:", err);
+    return { activeDisciples: 0, totalDisciples: 0, departmentsCount: 0, rolesCount: 0 };
+  }
+}
 
 async function fetchPublicDailyReflections() {
   if (typeof dbPortal.getPublicDailyReflections === "function") {
@@ -27,51 +104,24 @@ async function fetchPublicDailyReflections() {
 
 let portalState = {
   profile: null,
+  churchProfile: { ...DEFAULT_CHURCH_PROFILE },
+  announcements: [],
+  snapshot: { activeDisciples: 0, totalDisciples: 0, departmentsCount: 0, rolesCount: 0 },
   months: [],
   weeks: [],
   reflections: [],
-  media: [],
   myDuties: [],
   myBlockouts: [],
-  selectedCompassMonth: ""
+  publicEventsBound: false,
+  memberEventsBound: false
 };
 
-// --- 1. PUBLIC PORTAL INITIALIZER (GUEST & LOGGED-IN) ---
-export async function initPublicPortal() {
-  try {
-    let [months, weeks, reflections, media] = await Promise.all([
-      getPublicMonthlyThemes(),
-      getPublicWeeklyInsights(),
-      fetchPublicDailyReflections(),
-      getPublicMediaGalleries()
-    ]);
-
-    if (reflections.length === 0) {
-      try {
-        await seedNov20toDec31Reflections();
-        reflections = await fetchPublicDailyReflections();
-      } catch (seedErr) {
-        console.warn("Auto-seed Daily Reflections skipped on public portal:", seedErr);
-      }
-    }
-
-    portalState.months = months;
-    portalState.weeks = weeks;
-    portalState.reflections = reflections;
-    portalState.media = media;
-
-    const todayISO = getAucklandTodayISO();
-    const currentMonthKey = todayISO.slice(0, 7);
-    const defaultMonth =
-      months.find(m => m.month_key === currentMonthKey) ||
-      months.find(m => m.month_key >= currentMonthKey) ||
-      months[0];
-    portalState.selectedCompassMonth = defaultMonth?.month_key || "";
-
-    renderPublicFeed();
-  } catch (err) {
-    console.error("Public portal load error:", err);
-  }
+function esc(str = "") {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function getAucklandTodayISO() {
@@ -83,156 +133,418 @@ function getAucklandTodayISO() {
   }).format(new Date());
 }
 
-window.selectPublicCompassMonth = (monthKey) => {
-  portalState.selectedCompassMonth = monthKey;
-  renderPublicFeed();
-};
+function canManageChurchPortal() {
+  const level = portalState.profile?.accessLevel || "";
+  return level === "super_admin" || level === "coordinator";
+}
+
+// --- 1. CHURCH PORTAL INITIALIZER (GUEST & LOGGED-IN) ---
+export async function initPublicPortal() {
+  try {
+    let [churchProfile, announcements, snapshot, months, weeks, reflections] = await Promise.all([
+      fetchChurchProfile(),
+      fetchAnnouncements(),
+      fetchHubSnapshotCounts(),
+      getPublicMonthlyThemes(),
+      getPublicWeeklyInsights(),
+      fetchPublicDailyReflections()
+    ]);
+
+    if (reflections.length === 0) {
+      try {
+        await seedNov20toDec31Reflections();
+        reflections = await fetchPublicDailyReflections();
+      } catch (seedErr) {
+        console.warn("Auto-seed Daily Reflections skipped:", seedErr);
+      }
+    }
+
+    portalState.churchProfile = churchProfile;
+    portalState.announcements = announcements;
+    portalState.snapshot = snapshot;
+    portalState.months = months;
+    portalState.weeks = weeks;
+    portalState.reflections = reflections;
+
+    bindPublicPortalEvents();
+    renderPublicFeed();
+  } catch (err) {
+    console.error("Church portal load error:", err);
+  }
+}
+
+function bindPublicPortalEvents() {
+  if (portalState.publicEventsBound) return;
+  portalState.publicEventsBound = true;
+
+  const panel = document.getElementById("panel-public");
+  if (!panel) return;
+
+  panel.addEventListener("submit", async (e) => {
+    if (e.target.id === "form-announcement") {
+      e.preventDefault();
+      if (!canManageChurchPortal()) return;
+
+      const title = document.getElementById("ann-title")?.value.trim() || "";
+      const category = document.getElementById("ann-category")?.value || "General";
+      const body = document.getElementById("ann-body")?.value.trim() || "";
+      const pinned = Boolean(document.getElementById("ann-pinned")?.checked);
+      if (!title || !body) return;
+
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+
+      try {
+        await addDoc(collection(db, "announcements"), {
+          church_id: portalState.churchProfile.church_id || "ifgf_palmy",
+          title,
+          category,
+          body,
+          pinned,
+          announcement_date: getAucklandTodayISO(),
+          author_name: portalState.profile?.displayName || "Admin",
+          is_active: true,
+          created_at: serverTimestamp()
+        });
+        e.target.reset();
+        portalState.announcements = await fetchAnnouncements();
+        renderAnnouncementBoard();
+      } catch (err) {
+        alert("Failed to post announcement: " + (err?.message || err));
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    }
+
+    if (e.target.id === "form-church-profile") {
+      e.preventDefault();
+      if (!canManageChurchPortal()) return;
+
+      const payload = {
+        church_id: "ifgf_palmy",
+        name: document.getElementById("cp-name")?.value.trim() || "IFGF Palmerston North",
+        service_day: document.getElementById("cp-day")?.value.trim() || "Sunday",
+        service_time: document.getElementById("cp-time")?.value.trim() || "4:30 PM",
+        address: document.getElementById("cp-address")?.value.trim() || "Palmerston North, New Zealand",
+        website_url: document.getElementById("cp-website")?.value.trim() || "https://ifgfpalmy.org",
+        timezone: "Pacific/Auckland",
+        updated_at: serverTimestamp()
+      };
+
+      try {
+        await setDoc(doc(db, "church_profile", "ifgf_palmy"), payload, { merge: true });
+        portalState.churchProfile = { ...portalState.churchProfile, ...payload };
+        document.getElementById("church-profile-editor")?.classList.add("hidden");
+        renderPublicFeed();
+      } catch (err) {
+        alert("Failed to save church profile: " + (err?.message || err));
+      }
+    }
+  });
+
+  panel.addEventListener("click", async (e) => {
+    const toggleProfileBtn = e.target.closest("#btn-toggle-church-profile");
+    if (toggleProfileBtn) {
+      document.getElementById("church-profile-editor")?.classList.toggle("hidden");
+      return;
+    }
+
+    const delAnnBtn = e.target.closest("button[data-delete-ann]");
+    if (delAnnBtn) {
+      if (!canManageChurchPortal()) return;
+      const annId = delAnnBtn.dataset.deleteAnn;
+      if (!annId || !confirm("Delete this announcement?")) return;
+      delAnnBtn.disabled = true;
+      try {
+        await deleteDoc(doc(db, "announcements", annId));
+        portalState.announcements = portalState.announcements.filter(a => a.id !== annId);
+        renderAnnouncementBoard();
+      } catch (err) {
+        delAnnBtn.disabled = false;
+        alert("Failed to delete announcement: " + (err?.message || err));
+      }
+      return;
+    }
+
+    const jumpBtn = e.target.closest("button[data-jump-tab]");
+    if (jumpBtn) {
+      const targetTab = jumpBtn.dataset.jumpTab;
+      const tabBtn = document.querySelector(`.tab-btn[data-tab="${targetTab}"]`);
+      if (tabBtn && !tabBtn.classList.contains("hidden")) {
+        tabBtn.click();
+      }
+    }
+  });
+}
+
+function renderAnnouncementBoard() {
+  const listEl = document.getElementById("church-announcements-list");
+  if (!listEl) return;
+
+  const isManager = canManageChurchPortal();
+  const items = portalState.announcements;
+
+  if (items.length === 0) {
+    listEl.innerHTML = `
+      <div class="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-xs text-slate-500">
+        No internal announcements posted yet.
+      </div>
+    `;
+    return;
+  }
+
+  const categoryBadge = (cat) => {
+    const c = String(cat || "General").toLowerCase();
+    if (c.includes("roster")) return "bg-blue-50 text-blue-800 border-blue-200";
+    if (c.includes("service")) return "bg-amber-50 text-amber-900 border-amber-200";
+    if (c.includes("urgent")) return "bg-red-50 text-red-800 border-red-200";
+    return "bg-slate-100 text-slate-700 border-slate-200";
+  };
+
+  listEl.innerHTML = items.map(a => `
+    <div class="p-3.5 rounded-xl border ${a.pinned ? "border-amber-300 bg-amber-50/40" : "border-slate-200 bg-white"} space-y-1.5 text-xs">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          ${a.pinned ? `<span class="px-2 py-0.5 bg-amber-400 text-slate-950 font-extrabold rounded text-[10px]">PINNED</span>` : ""}
+          <span class="px-2 py-0.5 border rounded font-semibold text-[10px] ${categoryBadge(a.category)}">${esc(a.category || "General")}</span>
+          <span class="font-mono text-[11px] text-slate-500">${esc(a.announcement_date || "")}</span>
+        </div>
+        ${isManager ? `<button type="button" data-delete-ann="${esc(a.id)}" class="text-red-600 hover:underline font-semibold shrink-0">Delete</button>` : ""}
+      </div>
+      <h4 class="font-bold text-sm text-slate-900">${esc(a.title)}</h4>
+      <p class="text-slate-700 whitespace-pre-line leading-relaxed">${esc(a.body)}</p>
+      ${a.author_name ? `<p class="text-[11px] text-slate-400">Posted by ${esc(a.author_name)}</p>` : ""}
+    </div>
+  `).join("");
+}
 
 function renderPublicFeed() {
+  const panel = document.getElementById("panel-public");
+  if (!panel) return;
+
   const todayISO = getAucklandTodayISO();
+  const currentMonthKey = todayISO.slice(0, 7);
+  const cp = portalState.churchProfile;
+  const isManager = canManageChurchPortal();
+
   const activeMonth =
-    portalState.months.find(m => m.month_key === portalState.selectedCompassMonth) ||
+    portalState.months.find(m => m.month_key === currentMonthKey) ||
+    portalState.months.find(m => m.month_key >= currentMonthKey) ||
     portalState.months[0];
 
-  const monthBox = document.getElementById("public-monthly-banner");
-  if (monthBox && activeMonth) {
-    monthBox.innerHTML = `
-      <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-        <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300">${activeMonth.phase}</span>
-        <span class="text-xs font-mono text-slate-300">${activeMonth.month_key}</span>
-      </div>
-      <h3 class="text-xl font-bold text-white">${activeMonth.title}</h3>
-      ${activeMonth.subtitle ? `<p class="text-xs text-amber-200 mt-0.5">${activeMonth.subtitle}</p>` : ""}
-      <p class="text-xs text-slate-300 mt-1.5">📖 <strong>${activeMonth.scripture}</strong> • Pillar: <span class="text-amber-300 font-semibold">${activeMonth.pillar}</span></p>
-    `;
-  }
+  const sortedWeeks = [...portalState.weeks].sort((a, b) =>
+    String(a.service_date || "").localeCompare(String(b.service_date || ""))
+  );
+  const nextService =
+    sortedWeeks.find(w => (w.service_date || "") >= todayISO) ||
+    sortedWeeks[sortedWeeks.length - 1] ||
+    null;
 
-  // Render Month Switcher + Full Monthly Compass Intro & Reflection
-  const compassContainer = document.getElementById("public-compass-detail");
-  if (compassContainer && activeMonth) {
-    const visibleMonths = portalState.months.filter(m => m.compass_intro || m.month_key >= todayISO.slice(0, 7));
-    const switcherHtml = visibleMonths.length > 1
-      ? `<div class="flex flex-wrap gap-1.5 pb-2 border-b border-slate-100">
-          ${visibleMonths.map(m => `
-            <button onclick="window.selectPublicCompassMonth('${m.month_key}')"
-              class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
-                m.month_key === activeMonth.month_key
-                  ? "bg-slate-900 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }">
-              ${m.month_key} • ${m.title}
+  const normalizedRef = portalState.reflections
+    .map(d => ({
+      ...d,
+      _date: d.reflection_date || d.devotion_date || d.id || ""
+    }))
+    .sort((a, b) => a._date.localeCompare(b._date));
+  const todayRef =
+    normalizedRef.find(d => d._date === todayISO) ||
+    normalizedRef.find(d => d._date >= todayISO) ||
+    normalizedRef[normalizedRef.length - 1] ||
+    null;
+
+  const snap = portalState.snapshot;
+
+  panel.innerHTML = `
+    <!-- COMPACT CHURCH HUB HEADER -->
+    <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-5 rounded-2xl shadow-md space-y-4">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div class="space-y-1.5">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-block text-[10px] uppercase tracking-widest px-2.5 py-1 bg-amber-500 text-slate-950 font-extrabold rounded-full">
+              ${esc(cp.name)}
+            </span>
+            <span class="text-[11px] font-mono text-slate-300 bg-white/10 px-2.5 py-0.5 rounded-full">
+              ${esc(cp.service_day)} • ${esc(cp.service_time)}
+            </span>
+          </div>
+          <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight">Church Portal & Internal Hub</h2>
+          <p class="text-xs text-slate-300">📍 ${esc(cp.address)}</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+          <a href="${esc(cp.website_url || "https://ifgfpalmy.org")}" target="_blank" rel="noopener"
+            class="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-xl text-xs font-semibold transition">
+            🌐 Public Website (ifgfpalmy.org) ↗
+          </a>
+          ${isManager ? `
+            <button type="button" id="btn-toggle-church-profile"
+              class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition">
+              ⚙️ Church Info
             </button>
-          `).join("")}
-        </div>`
-      : "";
-
-    compassContainer.innerHTML = `
-      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-        ${switcherHtml}
-        <div class="flex items-center justify-between">
-          <span class="text-[11px] font-extrabold uppercase tracking-wider text-amber-700">🎯 THE MONTHLY COMPASS • ${activeMonth.month_key}</span>
+          ` : ""}
         </div>
-        <h3 class="text-xl font-extrabold text-slate-900">${activeMonth.title}</h3>
-        ${activeMonth.subtitle ? `<p class="text-xs font-semibold text-slate-600">${activeMonth.subtitle}</p>` : ""}
-        ${activeMonth.compass_intro ? `
-          <div class="text-xs sm:text-sm text-slate-700 leading-relaxed space-y-2 pt-1">
-            <p class="font-bold text-slate-900">Shalom,</p>
-            <p>${activeMonth.compass_intro}</p>
-          </div>
-        ` : ""}
-        ${activeMonth.monthly_reflection ? `
-          <blockquote class="bg-amber-50/80 border-l-4 border-amber-500 p-4 rounded-r-xl text-xs text-slate-800 space-y-1.5">
-            <p class="font-bold text-amber-900">💡 Refleksi Bulan Ini:</p>
-            <p class="italic leading-relaxed">“${activeMonth.monthly_reflection}”</p>
-            <p class="font-semibold text-slate-700 pt-1">Kiranya Tuhan Yesus memberkati.</p>
-          </blockquote>
-        ` : ""}
       </div>
-    `;
-  }
 
-  // Pathway Perjalanan Bulan Ini
-  const monthWeeks = activeMonth
-    ? portalState.weeks.filter(w => w.month_key === activeMonth.month_key)
-    : [];
-  const displayWeeks = monthWeeks.length > 0
-    ? monthWeeks
-    : portalState.weeks.filter(w => w.service_date >= todayISO).slice(0, 4);
-
-  const weeklyContainer = document.getElementById("public-upcoming-services");
-  if (weeklyContainer) {
-    if (displayWeeks.length === 0) {
-      weeklyContainer.innerHTML = `<p class="text-xs text-slate-500">No service pathway scheduled for this month yet.</p>`;
-    } else {
-      weeklyContainer.innerHTML = displayWeeks.map((w) => {
-        const isNext = w.service_date >= todayISO &&
-          displayWeeks.find(x => x.service_date >= todayISO)?.service_date === w.service_date;
-
-        return `
-          <div class="bg-white p-4 rounded-xl border ${isNext ? "border-amber-400 ring-1 ring-amber-200" : "border-slate-200"} shadow-sm space-y-2">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-mono font-bold px-2 py-0.5 bg-slate-900 text-white rounded">${w.service_date}</span>
-                <span class="text-[11px] font-semibold text-amber-700">${isNext ? "NEXT SERVICE • " : ""}${w.week_label}</span>
-              </div>
-              ${w.speaker ? `<span class="text-[11px] font-bold px-2.5 py-0.5 bg-blue-50 text-blue-800 rounded-full">🎙️ ${w.speaker}</span>` : ""}
+      ${isManager ? `
+        <div id="church-profile-editor" class="hidden bg-slate-950/70 border border-white/15 rounded-xl p-4 text-xs">
+          <form id="form-church-profile" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 items-end">
+            <div>
+              <label class="text-slate-300 font-semibold">Church Name</label>
+              <input type="text" id="cp-name" value="${esc(cp.name)}" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white mt-1" />
             </div>
-            <h4 class="font-bold text-slate-900 text-base">${w.title}</h4>
-            <p class="text-xs text-slate-600">🔑 <strong>${w.key_verse}</strong> • Bacaan: ${w.scripture_reading}</p>
-            <p class="text-xs text-slate-700 bg-slate-50 p-3 rounded-lg leading-relaxed">${w.weekly_focus}</p>
-            ${w.diaspora_lens ? `<p class="text-[11px] text-blue-800">🌏 <strong>Lensa Diaspora:</strong> ${w.diaspora_lens}</p>` : ""}
-          </div>
-        `;
-      }).join("");
-    }
-  }
-
-  // Daily Reflection: Display ONLY TODAY (NZ)
-  const refContainer = document.getElementById("public-devotions-list");
-  if (refContainer) {
-    if (portalState.reflections.length === 0) {
-      refContainer.innerHTML = `<div class="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-500">Daily reflection will be published soon. Check back shortly!</div>`;
-    } else {
-      const normalized = portalState.reflections.map(d => ({
-        ...d,
-        _date: d.reflection_date || d.devotion_date || d.id || ""
-      }));
-      const sortedAsc = [...normalized].sort((a, b) => a._date.localeCompare(b._date));
-      const todayRef =
-        sortedAsc.find(d => d._date === todayISO) ||
-        sortedAsc.find(d => d._date >= todayISO) ||
-        sortedAsc[sortedAsc.length - 1];
-
-      refContainer.innerHTML = `
-        <div class="bg-white p-4 rounded-xl border border-amber-400 ring-1 ring-amber-200 shadow-sm space-y-2">
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-[11px] font-mono font-semibold text-slate-600">${todayRef._date}</span>
-            <span class="text-[10px] font-extrabold px-2 py-0.5 bg-amber-400 text-slate-950 rounded-full">TODAY</span>
-          </div>
-          <p class="text-[11px] font-bold text-amber-800">${todayRef.scripture}</p>
-          <h4 class="font-bold text-sm text-slate-900">${todayRef.title}</h4>
-          <p class="text-xs text-slate-700 whitespace-pre-line leading-relaxed">${todayRef.reflection}</p>
-          ${todayRef.prayer ? `<p class="text-xs italic text-slate-600 pt-1.5 border-t border-slate-100">🙏 ${todayRef.prayer}</p>` : ""}
+            <div>
+              <label class="text-slate-300 font-semibold">Service Day</label>
+              <input type="text" id="cp-day" value="${esc(cp.service_day)}" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white mt-1" />
+            </div>
+            <div>
+              <label class="text-slate-300 font-semibold">Service Time</label>
+              <input type="text" id="cp-time" value="${esc(cp.service_time)}" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white mt-1" />
+            </div>
+            <div>
+              <label class="text-slate-300 font-semibold">Address</label>
+              <input type="text" id="cp-address" value="${esc(cp.address)}" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white mt-1" />
+            </div>
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <label class="text-slate-300 font-semibold">Website URL</label>
+                <input type="url" id="cp-website" value="${esc(cp.website_url)}" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white mt-1" />
+              </div>
+              <button type="submit" class="self-end px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg">
+                Save
+              </button>
+            </div>
+          </form>
         </div>
-      `;
-    }
-  }
+      ` : ""}
+    </div>
 
-  // Media Gallery
-  const mediaContainer = document.getElementById("public-media-list");
-  if (mediaContainer) {
-    if (portalState.media.length === 0) {
-      mediaContainer.innerHTML = `<div class="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-500">No media albums posted yet.</div>`;
-    } else {
-      mediaContainer.innerHTML = portalState.media.slice(0, 4).map(m => `
-        <a href="${m.media_url}" target="_blank" rel="noopener" class="block bg-white p-3.5 rounded-xl border border-slate-200 hover:border-slate-400 transition">
-          <span class="text-[10px] px-2 py-0.5 bg-purple-50 text-purple-700 rounded font-bold">${m.category}</span>
-          <h4 class="font-bold text-sm text-slate-900 mt-1.5">${m.title}</h4>
-          <p class="text-[11px] text-slate-500 mt-0.5">${m.event_date} • Open Link ↗</p>
-        </a>
-      `).join("");
-    }
-  }
+    <!-- MAIN 1-SCREEN GRID -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <!-- LEFT 2 COLUMNS: ANNOUNCEMENT BOARD + NEXT SERVICE -->
+      <div class="lg:col-span-2 space-y-4">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <h3 class="font-bold text-sm text-slate-900">📢 Announcement Board</h3>
+              <p class="text-[11px] text-slate-500">Internal updates, roster reminders & church notices</p>
+            </div>
+            <span class="text-[11px] font-semibold text-slate-500">${portalState.announcements.length} active</span>
+          </div>
+
+          ${isManager ? `
+            <form id="form-announcement" class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 text-xs">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input type="text" id="ann-title" required placeholder="Announcement title..." class="sm:col-span-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold" />
+                <select id="ann-category" class="px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold">
+                  <option value="General">General</option>
+                  <option value="Sunday Service">Sunday Service</option>
+                  <option value="Ministry Roster">Ministry Roster</option>
+                  <option value="Urgent">Urgent</option>
+                </select>
+              </div>
+              <textarea id="ann-body" rows="2" required placeholder="Write short internal notice..." class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"></textarea>
+              <div class="flex items-center justify-between gap-2">
+                <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
+                  <input type="checkbox" id="ann-pinned" class="rounded border-slate-300" /> Pin to top
+                </label>
+                <button type="submit" class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
+                  + Post Notice
+                </button>
+              </div>
+            </form>
+          ` : ""}
+
+          <div id="church-announcements-list" class="space-y-2.5"></div>
+        </div>
+
+        <!-- NEXT SUNDAY SERVICE SNAPSHOT -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="font-bold text-sm text-slate-900">🗓️ Next Sunday Service</h3>
+            ${activeMonth ? `
+              <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                ${esc(activeMonth.month_key)} • ${esc(activeMonth.title)}
+              </span>
+            ` : ""}
+          </div>
+
+          ${nextService ? `
+            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded">${esc(nextService.service_date)}</span>
+                  <span class="font-semibold text-slate-700">${esc(cp.service_time)}</span>
+                </div>
+                ${nextService.speaker ? `<span class="font-bold px-2.5 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded-full">🎙️ ${esc(nextService.speaker)}</span>` : ""}
+              </div>
+              <h4 class="font-bold text-base text-slate-900">${esc(nextService.title)}</h4>
+              ${nextService.scripture_reading || nextService.key_verse ? `
+                <p class="text-slate-600">📖 ${esc(nextService.scripture_reading || "")}${nextService.key_verse ? ` • ${esc(nextService.key_verse)}` : ""}</p>
+              ` : ""}
+            </div>
+          ` : `
+            <p class="text-xs text-slate-500">No upcoming Sunday service scheduled yet.</p>
+          `}
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: TODAY'S REFLECTION + HUB SNAPSHOT -->
+      <div class="space-y-4">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="font-bold text-sm text-slate-900">✨ Today's Reflection</h3>
+            <span class="text-[10px] font-extrabold px-2 py-0.5 bg-amber-400 text-slate-950 rounded-full">${esc(todayRef?._date || todayISO)}</span>
+          </div>
+          ${todayRef ? `
+            <div class="space-y-1.5 text-xs">
+              ${todayRef.scripture ? `<p class="font-bold text-amber-800">${esc(todayRef.scripture)}</p>` : ""}
+              <h4 class="font-bold text-sm text-slate-900">${esc(todayRef.title)}</h4>
+              <p class="text-slate-700 line-clamp-5 leading-relaxed">${esc(todayRef.reflection)}</p>
+              <div class="pt-1 flex items-center justify-between text-[11px]">
+                <a href="${esc(cp.website_url || "https://ifgfpalmy.org")}" target="_blank" rel="noopener" class="font-semibold text-blue-700 hover:underline">
+                  Read full on website ↗
+                </a>
+                ${isManager ? `<button type="button" data-jump-tab="curriculum" class="font-semibold text-slate-700 hover:underline">Manage →</button>` : ""}
+              </div>
+            </div>
+          ` : `
+            <p class="text-xs text-slate-500">Daily reflection will be published soon.</p>
+          `}
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <h3 class="font-bold text-sm text-slate-900">📊 Ministry Hub Snapshot</h3>
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+              <p class="text-lg font-extrabold text-slate-900">${snap.activeDisciples}</p>
+              <p class="text-[10px] font-semibold text-slate-500 uppercase">Active Disciples</p>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+              <p class="text-lg font-extrabold text-slate-900">${snap.departmentsCount}</p>
+              <p class="text-[10px] font-semibold text-slate-500 uppercase">Departments</p>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+              <p class="text-lg font-extrabold text-slate-900">${snap.rolesCount}</p>
+              <p class="text-[10px] font-semibold text-slate-500 uppercase">Ministry Roles</p>
+            </div>
+          </div>
+
+          ${isManager ? `
+            <div class="grid grid-cols-2 gap-2 pt-1 text-xs">
+              <button type="button" data-jump-tab="roster" class="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl text-center">
+                📅 Sunday Roster
+              </button>
+              <button type="button" data-jump-tab="disciples" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-xl text-center">
+                Disciples (360°)
+              </button>
+            </div>
+          ` : ""}
+        </div>
+      </div>
+    </div>
+  `;
+
+  renderAnnouncementBoard();
 }
 
 // --- 2. MEMBER SELF-SERVICE PORTAL (LOGGED-IN USER) ---
@@ -240,6 +552,7 @@ export async function initMemberSelfService(profile) {
   portalState.profile = profile;
   bindMemberPortalEvents();
   await refreshMemberSelfService();
+  renderPublicFeed();
 }
 
 async function refreshMemberSelfService() {
@@ -300,7 +613,7 @@ function renderMyDuties() {
             <span class="text-xs font-bold text-slate-900">${d.role_name}</span>
             <span class="text-[11px] px-2 py-0.5 rounded-full font-semibold ${statusStyle}">${d.status}</span>
           </div>
-          ${insight ? `<p class="text-xs text-slate-500 mt-1">📖 Tema: ${insight.title}</p>` : ""}
+          ${insight ? `<p class="text-xs text-slate-500 mt-1">📖 Theme: ${insight.title}</p>` : ""}
         </div>
         <div class="flex items-center gap-2 self-end sm:self-center">
           <button onclick="window.respondMyDuty('${d.id}', 'Confirmed')" class="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg">
@@ -340,6 +653,9 @@ function renderMyBlockouts() {
 }
 
 function bindMemberPortalEvents() {
+  if (portalState.memberEventsBound) return;
+  portalState.memberEventsBound = true;
+
   document.getElementById("form-my-blockout")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const discipleDoc = portalState.profile?.discipleDoc;
