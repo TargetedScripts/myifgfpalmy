@@ -70,13 +70,8 @@ async function fetchSelectableMinistryRoles() {
   try {
     let items = [];
 
+    // 1. Cek koleksi "roles" jika ada isinya
     const roleSnap = await getDocs(collection(db, "roles"));
-    console.log(
-      "DEBUG koleksi roles:",
-      roleSnap.size,
-      roleSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-    );
-
     if (!roleSnap.empty) {
       items = roleSnap.docs
         .map(d => ({ id: d.id, ...d.data() }))
@@ -89,34 +84,47 @@ async function fetchSelectableMinistryRoles() {
         .filter(r => r._label);
     }
 
+    // 2. Jika koleksi "roles" kosong, ambil dari array apa pun di koleksi "departments"
     if (items.length === 0) {
       const deptSnap = await getDocs(collection(db, "departments"));
-      console.log(
-        "DEBUG koleksi departments:",
-        deptSnap.size,
-        deptSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-      );
-
       const seen = new Set();
+
       deptSnap.docs.forEach(d => {
         const data = d.data();
-        if (data.active === false || data.is_active === false) return;
-        const deptRoles = Array.isArray(data.roles)
-          ? data.roles
-          : Array.isArray(data.role_list)
-          ? data.role_list
-          : [];
-        deptRoles.forEach(raw => {
-          const label = typeof raw === "string" ? raw.trim() : extractRoleLabel(raw);
-          if (label && !seen.has(label.toLowerCase())) {
-            seen.add(label.toLowerCase());
-            items.push({
-              id: label,
-              _label: label,
-              _isUniversal: isUniversalSharedTask(label)
+        if (data.active === false || data.is_active === false || data.enabled === false) return;
+
+        let extractedAnyRoleFromDept = false;
+        Object.values(data).forEach(val => {
+          if (Array.isArray(val)) {
+            val.forEach(raw => {
+              const label = typeof raw === "string" ? raw.trim() : extractRoleLabel(raw);
+              if (label && !seen.has(label.toLowerCase())) {
+                seen.add(label.toLowerCase());
+                extractedAnyRoleFromDept = true;
+                items.push({
+                  id: `${d.id}_${label}`,
+                  _label: label,
+                  _isUniversal: isUniversalSharedTask(label)
+                });
+              }
             });
           }
         });
+
+        // Fallback jika dokumen department tidak punya array role, pakai nama department-nya
+        if (!extractedAnyRoleFromDept) {
+          const deptLabel = String(
+            data.department_name ?? data.name ?? data.title ?? data.label ?? ""
+          ).trim();
+          if (deptLabel && !seen.has(deptLabel.toLowerCase())) {
+            seen.add(deptLabel.toLowerCase());
+            items.push({
+              id: d.id,
+              _label: deptLabel,
+              _isUniversal: isUniversalSharedTask(deptLabel)
+            });
+          }
+        }
       });
     }
 
