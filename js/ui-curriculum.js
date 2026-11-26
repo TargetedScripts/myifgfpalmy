@@ -638,6 +638,16 @@ function esc(str = "") {
     .replace(/"/g, "&quot;");
 }
 
+function setElText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function setElValue(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.value = val ?? "";
+}
+
 function setCurrStatus(msg, isError = false) {
   const el = document.getElementById("curr-status");
   if (!el) return;
@@ -933,15 +943,12 @@ function getCombinedDJClassesPool() {
 
 function resetDjChapterForm() {
   currState.editingChapterIdx = null;
-  const heading = document.getElementById("curr-dj-form-title");
-  if (heading) heading.textContent = "➕ Add / Edit Chapter";
+  setElText("curr-dj-form-title", "➕ Add / Edit Chapter");
   const activeCls = getCombinedDJClassesPool().find(c => c.class_key === currState.activeDjClass);
   const nextNo = (activeCls?.chapters?.length || 0) + 1;
-  const noEl = document.getElementById("curr-dj-chap-no");
-  if (noEl) noEl.value = String(nextNo);
+  setElValue("curr-dj-chap-no", String(nextNo));
   ["curr-dj-chap-page", "curr-dj-chap-title", "curr-dj-chap-summary", "curr-dj-chap-notes"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = "";
+    setElValue(id, "");
   });
 }
 
@@ -979,11 +986,11 @@ function renderDJClasses() {
   const activeCls = classes.find(c => c.class_key === currState.activeDjClass) || classes[0];
   if (!activeCls) return;
 
-  document.getElementById("curr-dj-active-badge").textContent = `CLASS • ${String(activeCls.class_name || "").toUpperCase()}`;
-  document.getElementById("curr-dj-chapter-count").textContent = `${(activeCls.chapters || []).length} Chapters`;
-  document.getElementById("curr-dj-active-title").textContent = activeCls.class_name;
-  document.getElementById("curr-dj-active-tagline").textContent = activeCls.tagline || "";
-  document.getElementById("curr-dj-active-desc").textContent = activeCls.description || "";
+  setElText("curr-dj-active-badge", `CLASS • ${String(activeCls.class_name || "").toUpperCase()}`);
+  setElText("curr-dj-chapter-count", `${(activeCls.chapters || []).length} Chapters`);
+  setElText("curr-dj-active-title", activeCls.class_name);
+  setElText("curr-dj-active-tagline", activeCls.tagline || "");
+  setElText("curr-dj-active-desc", activeCls.description || "");
 
   if (currState.editingChapterIdx === null) {
     const noEl = document.getElementById("curr-dj-chap-no");
@@ -1022,8 +1029,7 @@ function renderDJClasses() {
 }
 
 function resetMonthlyForm() {
-  const heading = document.getElementById("curr-form-title");
-  if (heading) heading.textContent = "➕ Add / Edit Monthly Theme (Preacher Guideline)";
+  setElText("curr-form-title", "➕ Add / Edit Monthly Theme (Preacher Guideline)");
   [
     "curr-month-key",
     "curr-month-name",
@@ -1037,15 +1043,11 @@ function resetMonthlyForm() {
     "curr-keyword",
     "curr-events",
     "curr-preacher-guide"
-  ].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = "";
-  });
+  ].forEach(id => setElValue(id, ""));
 }
 
 function resetWeeklyForm() {
-  const heading = document.getElementById("curr-weekly-form-title");
-  if (heading) heading.textContent = "➕ Add / Edit Weekly Theme Guideline";
+  setElText("curr-weekly-form-title", "➕ Add / Edit Weekly Theme Guideline");
   [
     "wk-guide-date",
     "wk-guide-month",
@@ -1058,19 +1060,12 @@ function resetWeeklyForm() {
     "wk-guide-reading",
     "wk-guide-connection",
     "wk-guide-winning"
-  ].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = "";
-  });
+  ].forEach(id => setElValue(id, ""));
 }
 
 function resetReflectionForm() {
-  const heading = document.getElementById("curr-ref-form-title");
-  if (heading) heading.textContent = "➕ Single Entry / Edit Reflection";
-  ["curr-ref-date", "curr-ref-verse", "curr-ref-title", "curr-ref-body", "curr-ref-prayer"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = "";
-  });
+  setElText("curr-ref-form-title", "➕ Single Entry / Edit Reflection");
+  ["curr-ref-date", "curr-ref-verse", "curr-ref-title", "curr-ref-body", "curr-ref-prayer"].forEach(id => setElValue(id, ""));
 }
 
 function parseBulkReflectionsInput(rawText) {
@@ -1290,38 +1285,41 @@ function renderDailyReflectionsList() {
     return;
   }
 
-  listEl.innerHTML = items.map(item => `
-    <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-1.5 text-xs">
-      <div class="flex items-start justify-between gap-2">
-        <div>
-          <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">${esc(item.dateKey || item.id)}</span>
-          ${item.scripture ? `<span class="ml-1.5 font-semibold text-amber-800">${esc(item.scripture)}</span>` : ""}
-          <h5 class="font-bold text-sm text-slate-900 mt-1">${esc(item.title || "")}</h5>
+  listEl.innerHTML = items.map(item => {
+    const key = item.id || item.dateKey || "";
+    return `
+      <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-1.5 text-xs">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <span class="font-mono font-bold px-2 py-0.5 bg-slate-900 text-amber-400 rounded text-[10px]">${esc(item.dateKey || item.id)}</span>
+            ${item.scripture ? `<span class="ml-1.5 font-semibold text-amber-800">${esc(item.scripture)}</span>` : ""}
+            <h5 class="font-bold text-sm text-slate-900 mt-1">${esc(item.title || "")}</h5>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button type="button" data-curr-action="edit-reflection" data-curr-key="${esc(key)}" class="text-blue-600 hover:underline font-semibold">Edit</button>
+            <button type="button" data-curr-action="delete-reflection" data-curr-key="${esc(key)}" class="text-red-600 hover:underline font-semibold">Delete</button>
+          </div>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <button type="button" data-curr-action="edit-reflection" data-curr-key="${esc(item.id)}" class="text-blue-600 hover:underline font-semibold">Edit</button>
-          <button type="button" data-curr-action="delete-reflection" data-curr-key="${esc(item.id)}" class="text-red-600 hover:underline font-semibold">Delete</button>
-        </div>
+        <p class="text-slate-700 whitespace-pre-line leading-relaxed">${esc(item.reflection || "")}</p>
+        ${item.prayer ? `<p class="text-[11px] italic text-slate-600 pt-1 border-t border-slate-100">🙏 ${esc(item.prayer)}</p>` : ""}
       </div>
-      <p class="text-slate-700 whitespace-pre-line leading-relaxed">${esc(item.reflection || "")}</p>
-      ${item.prayer ? `<p class="text-[11px] italic text-slate-600 pt-1 border-t border-slate-100">🙏 ${esc(item.prayer)}</p>` : ""}
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
 export async function refreshCurriculumData() {
   ensureCurriculumTabsAndPanelsUI();
   try {
     const [mSnap, wSnap, refList, djSnap] = await Promise.all([
-      getDocs(collection(db, COLLECTION_MONTHLY)),
-      getDocs(collection(db, COLLECTION_WEEKLY)),
+      getDocs(collection(db, COLLECTION_MONTHLY)).catch(() => null),
+      getDocs(collection(db, COLLECTION_WEEKLY)).catch(() => null),
       getDailyReflections().catch(() => []),
       getDocs(collection(db, COLLECTION_DJ_CLASSES)).catch(() => null)
     ]);
 
-    currState.monthlyItems = mSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    currState.weeklyItems = wSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    currState.djClasses = djSnap ? djSnap.docs.map(d => ({ id: d.id, ...d.data() })) : [];
+    if (mSnap) currState.monthlyItems = mSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (wSnap) currState.weeklyItems = wSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (djSnap) currState.djClasses = djSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     currState.dailyReflections = refList.map(item => {
       const dateKey = String(item.reflection_date || item.devotion_date || item.id || "").slice(0, 10);
       return {
@@ -1429,12 +1427,12 @@ export async function initCurriculumTab() {
 
     if (btn.dataset.djChapAction === "edit") {
       currState.editingChapterIdx = idx;
-      document.getElementById("curr-dj-form-title").textContent = `✏️ Edit Bab (${activeCls.class_name})`;
-      document.getElementById("curr-dj-chap-no").value = String(targetChap.chapter_no || idx + 1);
-      document.getElementById("curr-dj-chap-page").value = targetChap.page || "";
-      document.getElementById("curr-dj-chap-title").value = targetChap.title || "";
-      document.getElementById("curr-dj-chap-summary").value = targetChap.summary || "";
-      document.getElementById("curr-dj-chap-notes").value = targetChap.notes || "";
+      setElText("curr-dj-form-title", `✏️ Edit Bab (${activeCls.class_name})`);
+      setElValue("curr-dj-chap-no", String(targetChap.chapter_no || idx + 1));
+      setElValue("curr-dj-chap-page", targetChap.page || "");
+      setElValue("curr-dj-chap-title", targetChap.title || "");
+      setElValue("curr-dj-chap-summary", targetChap.summary || "");
+      setElValue("curr-dj-chap-notes", targetChap.notes || "");
       setDjClassStatus(`Editing Bab ${targetChap.chapter_no || idx + 1}`);
     }
 
@@ -1645,26 +1643,44 @@ export async function initCurriculumTab() {
   document.getElementById("curr-ref-list")?.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-curr-action]");
     if (!btn) return;
-    const id = btn.dataset.currKey || "";
-    const item = currState.dailyReflections.find(x => x.id === id);
+    const key = btn.dataset.currKey || "";
+    const item = currState.dailyReflections.find(
+      x => x.id === key || x.dateKey === key
+    );
 
-    if (btn.dataset.currAction === "edit-reflection" && item) {
-      document.getElementById("curr-ref-form-title").textContent = `✏️ Edit Reflection (${item.dateKey || id})`;
-      document.getElementById("curr-ref-date").value = item.dateKey || "";
-      document.getElementById("curr-ref-verse").value = item.scripture || "";
-      document.getElementById("curr-ref-title").value = item.title || "";
-      document.getElementById("curr-ref-body").value = item.reflection || "";
-      document.getElementById("curr-ref-prayer").value = item.prayer || "";
-      setReflectionStatus(`Editing ${item.dateKey || id}`);
+    if (btn.dataset.currAction === "edit-reflection") {
+      if (!item) {
+        setReflectionStatus(`Data reflection "${key}" tidak ditemukan di state.`, true);
+        return;
+      }
+      setElText("curr-ref-form-title", `✏️ Edit Reflection (${item.dateKey || key})`);
+      setElValue("curr-ref-date", item.dateKey || "");
+      setElValue("curr-ref-verse", item.scripture || "");
+      setElValue("curr-ref-title", item.title || "");
+      setElValue("curr-ref-body", item.reflection || "");
+      setElValue("curr-ref-prayer", item.prayer || "");
+      setReflectionStatus(`Editing ${item.dateKey || key}`);
+
+      const formEl = document.getElementById("form-curr-reflection");
+      formEl?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      document.getElementById("curr-ref-title")?.focus();
+      return;
     }
 
-    if (btn.dataset.currAction === "delete-reflection" && id) {
-      if (!confirm(`Hapus daily reflection ${item?.dateKey || id}?`)) return;
+    if (btn.dataset.currAction === "delete-reflection" && key) {
+      if (!confirm(`Hapus daily reflection ${item?.dateKey || key}?`)) return;
+      btn.disabled = true;
+      btn.textContent = "Deleting...";
       try {
-        await deleteDailyReflection(id);
-        await refreshCurriculumData();
-        setReflectionStatus(`Deleted ${item?.dateKey || id}`);
+        await deleteDailyReflection(key);
+        currState.dailyReflections = currState.dailyReflections.filter(
+          x => x.id !== key && x.dateKey !== key
+        );
+        renderDailyReflectionsList();
+        setReflectionStatus(`Deleted ${item?.dateKey || key}`);
       } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "Delete";
         setReflectionStatus("Gagal hapus: " + (err?.message || err), true);
       }
     }
@@ -1677,29 +1693,33 @@ export async function initCurriculumTab() {
     const item = getCombinedMonthlyPool().find(x => (x.month_key || x.id) === key);
 
     if (btn.dataset.currAction === "edit-monthly" && item) {
-      document.getElementById("curr-form-title").textContent = `✏️ Edit Monthly Theme (${key})`;
-      document.getElementById("curr-month-key").value = item.month_key || key;
-      document.getElementById("curr-month-name").value = item.month_name || "";
-      document.getElementById("curr-phase").value = item.phase || "";
-      document.getElementById("curr-title").value = item.title || "";
-      document.getElementById("curr-subtitle").value = item.subtitle || "";
-      document.getElementById("curr-passages").value = item.passages || "";
-      document.getElementById("curr-scripture").value = item.scripture || "";
-      document.getElementById("curr-synopsis").value = item.synopsis || "";
-      document.getElementById("curr-topic").value = item.topic || item.pillar || "";
-      document.getElementById("curr-keyword").value = item.keyword || "";
-      document.getElementById("curr-events").value = item.notable_events || "";
-      document.getElementById("curr-preacher-guide").value = item.preacher_guide || "";
+      setElText("curr-form-title", `✏️ Edit Monthly Theme (${key})`);
+      setElValue("curr-month-key", item.month_key || key);
+      setElValue("curr-month-name", item.month_name || "");
+      setElValue("curr-phase", item.phase || "");
+      setElValue("curr-title", item.title || "");
+      setElValue("curr-subtitle", item.subtitle || "");
+      setElValue("curr-passages", item.passages || "");
+      setElValue("curr-scripture", item.scripture || "");
+      setElValue("curr-synopsis", item.synopsis || "");
+      setElValue("curr-topic", item.topic || item.pillar || "");
+      setElValue("curr-keyword", item.keyword || "");
+      setElValue("curr-events", item.notable_events || "");
+      setElValue("curr-preacher-guide", item.preacher_guide || "");
       setCurrStatus(`Editing ${key}`);
+      document.getElementById("form-curr-monthly")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
     if (btn.dataset.currAction === "delete-monthly" && key) {
       if (!confirm(`Hapus tema bulanan ${key} dari Firestore?`)) return;
+      btn.disabled = true;
       try {
         await deleteDoc(doc(db, COLLECTION_MONTHLY, key));
-        await refreshCurriculumData();
+        currState.monthlyItems = currState.monthlyItems.filter(x => (x.month_key || x.id) !== key);
+        renderMonthlyThemes();
         setCurrStatus(`Deleted ${key}`);
       } catch (err) {
+        btn.disabled = false;
         setCurrStatus("Gagal hapus: " + (err?.message || err), true);
       }
     }
@@ -1712,28 +1732,32 @@ export async function initCurriculumTab() {
     const item = getCombinedWeeklyPool().find(x => (x.service_date || x.id) === key);
 
     if (btn.dataset.currAction === "edit-weekly" && item) {
-      document.getElementById("curr-weekly-form-title").textContent = `✏️ Edit Weekly Guideline (${key})`;
-      document.getElementById("wk-guide-date").value = item.service_date || key;
-      document.getElementById("wk-guide-month").value = item.month_key || key.slice(0, 7);
-      document.getElementById("wk-guide-label").value = item.week_label || "";
-      document.getElementById("wk-guide-speaker").value = item.speaker_guideline || item.speaker || "";
-      document.getElementById("wk-guide-monthly-focus").value = item.monthly_focus || "";
-      document.getElementById("wk-guide-flow").value = item.flow_position || "";
-      document.getElementById("wk-guide-title").value = item.title || "";
-      document.getElementById("wk-guide-verse").value = item.key_verse || "";
-      document.getElementById("wk-guide-reading").value = item.scripture_reading || "";
-      document.getElementById("wk-guide-connection").value = item.connection_to_monthly || "";
-      document.getElementById("wk-guide-winning").value = item.winning_point || "";
+      setElText("curr-weekly-form-title", `✏️ Edit Weekly Guideline (${key})`);
+      setElValue("wk-guide-date", item.service_date || key);
+      setElValue("wk-guide-month", item.month_key || key.slice(0, 7));
+      setElValue("wk-guide-label", item.week_label || "");
+      setElValue("wk-guide-speaker", item.speaker_guideline || item.speaker || "");
+      setElValue("wk-guide-monthly-focus", item.monthly_focus || "");
+      setElValue("wk-guide-flow", item.flow_position || "");
+      setElValue("wk-guide-title", item.title || "");
+      setElValue("wk-guide-verse", item.key_verse || "");
+      setElValue("wk-guide-reading", item.scripture_reading || "");
+      setElValue("wk-guide-connection", item.connection_to_monthly || "");
+      setElValue("wk-guide-winning", item.winning_point || "");
       setWeeklyStatus(`Editing ${key}`);
+      document.getElementById("form-curr-weekly")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
     if (btn.dataset.currAction === "delete-weekly" && key) {
       if (!confirm(`Hapus guideline mingguan ${key} dari Firestore?`)) return;
+      btn.disabled = true;
       try {
         await deleteDoc(doc(db, COLLECTION_WEEKLY, key));
-        await refreshCurriculumData();
+        currState.weeklyItems = currState.weeklyItems.filter(x => (x.service_date || x.id) !== key);
+        renderWeeklyThemes();
         setWeeklyStatus(`Deleted ${key}`);
       } catch (err) {
+        btn.disabled = false;
         setWeeklyStatus("Gagal hapus: " + (err?.message || err), true);
       }
     }
