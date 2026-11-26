@@ -92,33 +92,57 @@ function getDepartmentHeadNames(dept) {
   const names = [];
   const seen = new Set();
 
+  const addName = (rawName) => {
+    const clean = String(rawName || "").trim();
+    const key = clean.toLowerCase();
+    if (clean && !seen.has(key)) {
+      seen.add(key);
+      names.push(clean);
+    }
+  };
+
+  // 1. Nama langsung pada dokumen departments (jika ada)
   const directHead = dept?.head_name ?? dept?.lead_name ?? "";
   if (directHead) {
     const parts = Array.isArray(directHead)
       ? directHead
       : String(directHead).split(/[,;\n]+/);
-    for (const p of parts) {
-      const clean = String(p || "").trim();
-      const key = clean.toLowerCase();
-      if (clean && !seen.has(key)) {
-        seen.add(key);
-        names.push(clean);
-      }
-    }
+    parts.forEach(addName);
   }
 
+  // 2. Email lead pada dokumen departments dicocokkan ke disciples
   const emails = normalizeLeadEmails(dept);
   for (const email of emails) {
     const matched = masterState.disciples.find(
       d => String(d.email || "").trim().toLowerCase() === email
     );
-    const label = matched
-      ? (matched.full_name || matched.nick_name || "").trim()
-      : "";
-    const key = label.toLowerCase();
-    if (label && !seen.has(key)) {
-      seen.add(key);
-      names.push(label);
+    if (matched) {
+      addName(matched.full_name || matched.nick_name);
+    }
+  }
+
+  // 3. Jemaat yang dicentang role "Head of Dept ..." pada departemen terkait
+  const headRolesForDept = masterState.roles.filter(r => {
+    if (r.is_active === false) return false;
+    const sameDept =
+      r.department_id === dept.id ||
+      String(r.dept_name || "").trim().toLowerCase() === String(dept.name || "").trim().toLowerCase();
+    if (!sameDept) return false;
+    return /^head\s+o[fd]\s+dept/i.test(String(r.role_name || "").trim());
+  });
+
+  if (headRolesForDept.length > 0) {
+    const headRoleNames = new Set(
+      headRolesForDept.map(r => String(r.role_name || "").trim().toLowerCase())
+    );
+    for (const d of masterState.disciples) {
+      const interests = Array.isArray(d.ministry_interests) ? d.ministry_interests : [];
+      const isAppointed = interests.some(item =>
+        headRoleNames.has(String(item || "").trim().toLowerCase())
+      );
+      if (isAppointed) {
+        addName(d.full_name || d.nick_name);
+      }
     }
   }
 
