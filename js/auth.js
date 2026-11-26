@@ -24,6 +24,13 @@ const BOOTSTRAP_ADMINS = [
   "tedysutedja@gmail.com"
 ];
 
+function withTimeout(promise, ms = 8000, fallbackValue = null) {
+  return Promise.race([
+    promise,
+    new Promise(resolve => setTimeout(() => resolve(fallbackValue), ms))
+  ]);
+}
+
 export async function loginWithGoogle() {
   try {
     await signInWithPopup(auth, googleProvider);
@@ -50,20 +57,24 @@ export async function sendMagicLink(email) {
 
 // Cek apakah halaman dibuka dari klik Email Magic Link
 export async function completeMagicLinkIfPresent() {
-  if (isSignInWithEmailLink(auth, window.location.href)) {
-    let email = window.localStorage.getItem("ifgf_email_for_signin");
-    if (!email) {
-      email = window.prompt("Please confirm your email address to complete sign-in:");
-    }
-    if (email) {
-      try {
-        await signInWithEmailLink(auth, email, window.location.href);
-        window.localStorage.removeItem("ifgf_email_for_signin");
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } catch (error) {
-        alert("Magic link expired or invalid: " + error.message);
+  try {
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      let email = window.localStorage.getItem("ifgf_email_for_signin");
+      if (!email) {
+        email = window.prompt("Please confirm your email address to complete sign-in:");
+      }
+      if (email) {
+        try {
+          await signInWithEmailLink(auth, email, window.location.href);
+          window.localStorage.removeItem("ifgf_email_for_signin");
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (error) {
+          alert("Magic link expired or invalid: " + error.message);
+        }
       }
     }
+  } catch (err) {
+    console.warn("Magic link check skipped:", err);
   }
 }
 
@@ -84,61 +95,99 @@ function extractLeadEmails(deptData) {
 }
 
 async function findDepartmentsLedByEmail(email) {
-  const snap = await getDocs(collection(db, "departments"));
-  return snap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .filter(d => d.active !== false && d.is_active !== false)
-    .filter(d => extractLeadEmails(d).includes(email));
+  try {
+    const snap = await withTimeout(getDocs(collection(db, "departments")), 7000, null);
+    if (!snap) return [];
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(d => d.active !== false && d.is_active !== false)
+      .filter(d => extractLeadEmails(d).includes(email));
+  } catch (err) {
+    console.warn("findDepartmentsLedByEmail fallback:", err);
+    return [];
+  }
 }
 
 // Resolusi RBAC & Profil Disciple + Department Lead
 export async function resolveUserProfile(user) {
-  const email = (user.email || "").trim().toLowerCase();
+  const email = (user?.email || "").trim().toLowerCase();
   const isBootstrapAdmin = BOOTSTRAP_ADMINS.includes(email);
 
-  const [discipleSnap, ledDepartments] = await Promise.all([
-    getDocs(query(collection(db, "disciples"), where("email", "==", email))),
-    findDepartmentsLedByEmail(email)
-  ]);
-
-  const data = !discipleSnap.empty
-    ? { id: discipleSnap.docs[0].id, ...discipleSnap.docs[0].data() }
-    : null;
-
-  const coordDepts = Array.isArray(data?.coordinator_departments)
-    ? data.coordinator_departments
-    : [];
-
-  let accessLevel = data ? "member" : "unregistered";
-  if (isBootstrapAdmin || data?.system_role === "super_admin") {
-    accessLevel = "super_admin";
-  } else if (ledDepartments.length > 0) {
-    accessLevel = "department_lead";
-  } else if (coordDepts.length > 0) {
-    accessLevel = "coordinator";
-  } else if (data?.has_active_roles === true) {
-    accessLevel = "volunteer";
-  }
-
-  return {
+  const fallbackProfile = {
     uid: user.uid,
     email,
-    displayName: data?.full_name || user.displayName || email.split("@")[0],
-    discipleDoc: data,
-    ledDepartments,
-    accessLevel,
-    isAdmin: accessLevel === "super_admin"
+    displayName: user.displayName || email.split("@")[0] || "User",
+    discipleDoc: null,
+    ledDepartments: [],
+    accessLevel: isBootstrapAdmin ? "super_admin" : "member",
+    isAdmin: isBootstrapAdmin
   };
+
+  try {
+    const [discipleSnap, ledDepartments] = await Promise.all([
+      withTimeout(
+        getDocs(query(collection(db, "disciples"), where("email", "==", email))),
+        7000,
+        null
+      ),
+      findDepartmentsLedByEmail(email)
+    ]);
+
+    const data = discipleSnap && !discipleSnap.empty
+      ? { id: discipleSnap.docs[0].id, ...discipleSnap.docs[0].data() }
+      : null;
+
+    const coordDepts = Array.isArray(data?.coordinator_departments)
+      ? data.coordinator_departments
+      : [];
+
+    let accessLevel = data ? "member" : "unregistered";
+    if (isBootstrapAdmin || data?.system_role === "super_admin") {
+      accessLevel = "super_admin";
+    } else if (ledDepartments.length > 0) {
+      accessLevel = "department_lead";
+    } else if (coordDepts.length > 0) {
+      accessLevel = "coordinator";
+    } else if (data?.has_active_roles === true) {
+      accessLevel = "volunteer";
+    }
+
+    return {
+      uid: user.uid,
+      email,
+      displayName: data?.full_name || user.displayName || email.split("@")[0],
+      discipleDoc: data,
+      ledDepartments,
+      accessLevel,
+      isAdmin: accessLevel === "super_admin"
+    };
+  } catch (err) {
+    console.warn("resolveUserProfile fallback used:", err);
+    return fallbackProfile;
+  }
 }
 
 export function initAuthObserver(onUserReady, onUserSignedOut) {
-  completeMagicLinkIfPresent();
-  onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      const profile = await resolveUserProfile(user);
-      onUserReady(profile);
-    } else {
-      onUserSignedOut();
-    }
-  });
+  let settled = false;
+
+  const startObserver = () => {
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const profile = await resolveUserProfile(user);
+        settled = true;
+        onUserReady(profile);
+      } else {
+        settled = true;
+        onUserSignedOut();
+      }
+    }, (err) => {
+      console.error("Auth observer error:", err);
+      if (!settled) {
+        settled = true;
+        onUserSignedOut();
+      }
+    });
+  };
+
+  completeMagicLinkIfPresent().finally(startObserver);
 }
