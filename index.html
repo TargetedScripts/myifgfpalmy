@@ -83,7 +83,6 @@
           <button id="nav-roster" class="tab-btn roster-lead-tab admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roster">📅 Sunday Roster</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="care">🌱 Care & Growth</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="disciples">Disciples (360°)</button>
-          <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="content">📖 Content Studio</button>
           <button id="nav-curriculum" class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="curriculum">🎓 Curriculum</button>
           <button id="nav-archives" class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="archives">🗂️ Media & Services</button>
           <button class="tab-btn admin-only-tab hidden px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition" data-tab="roles">Roles</button>
@@ -99,7 +98,7 @@
               IFGF PALMERSTON NORTH
             </span>
             <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight">THE MONTHLY COMPASS</h2>
-            <p class="text-xs sm:text-sm text-slate-300">Sunday Celebration 10:30 AM • Palmerston North, New Zealand</p>
+            <p class="text-xs sm:text-sm text-slate-300">Sunday Celebration 4:30 PM • Palmerston North, New Zealand</p>
           </div>
           <div id="public-monthly-banner" class="bg-white/10 backdrop-blur p-4 rounded-xl border border-white/10">
             <p class="text-xs text-slate-300">Loading monthly theme...</p>
@@ -188,7 +187,7 @@
         </div>
       </section>
 
-      <!-- TAB 0: SUNDAY ROSTER -->
+      <!-- TAB: SUNDAY ROSTER -->
       <section id="panel-roster" class="tab-panel hidden space-y-4">
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -348,7 +347,7 @@
         </div>
       </section>
 
-      <!-- TAB 1: DISCIPLES -->
+      <!-- TAB: DISCIPLES -->
       <section id="panel-disciples" class="tab-panel hidden space-y-3">
         <div class="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
           <div class="flex items-center gap-2 flex-1">
@@ -368,73 +367,13 @@
         <div id="list-disciples" class="space-y-2.5"></div>
       </section>
 
-      <!-- TAB 2: CONTENT STUDIO -->
-      <section id="panel-content" class="tab-panel hidden space-y-4">
-        <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">THE MONTHLY COMPASS & CURRICULUM</span>
-            <h2 class="text-lg font-bold">2026 Compass & 2027 ALIGN IN PURPOSE</h2>
-            <p class="text-xs text-slate-300">Kelola naskah bulanan, jadwal khotbah mingguan, renungan harian & galeri media</p>
-          </div>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-          <button class="content-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="weekly">Weekly Insights</button>
-          <button class="content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="monthly">Monthly Themes</button>
-          <button class="content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="devotions">Daily Reflections</button>
-          <button class="content-subtab bg-slate-100 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold" data-subtab="media">Media Gallery</button>
-        </div>
-
-        <div id="subpanel-weekly" class="content-subpanel space-y-3">
-          <div class="flex items-center justify-between gap-2">
-            <select id="filter-content-month" class="px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"></select>
-          </div>
-          <div id="list-weekly-insights" class="space-y-2.5"></div>
-        </div>
-
-        <div id="subpanel-monthly" class="content-subpanel hidden">
-          <div id="list-monthly-themes" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-        </div>
-
-        <div id="subpanel-devotions" class="content-subpanel hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <form id="form-devotion" class="bg-white p-4 rounded-xl border border-slate-200 space-y-3 text-xs h-fit">
-            <h3 class="font-bold text-sm text-slate-900">Publish Daily Reflection</h3>
-            <input type="date" id="dev-date" required class="w-full px-3 py-2 border rounded-lg" />
-            <input type="text" id="dev-title" required placeholder="Reflection Title" class="w-full px-3 py-2 border rounded-lg" />
-            <input type="text" id="dev-verse" required placeholder="Scripture (e.g., Keluaran 3:14)" class="w-full px-3 py-2 border rounded-lg" />
-            <textarea id="dev-body" rows="4" required placeholder="Reflection content..." class="w-full px-3 py-2 border rounded-lg"></textarea>
-            <textarea id="dev-prayer" rows="2" placeholder="Closing prayer..." class="w-full px-3 py-2 border rounded-lg"></textarea>
-            <button type="submit" class="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg">Save Reflection</button>
-          </form>
-          <div id="list-devotions" class="lg:col-span-2 space-y-2.5"></div>
-        </div>
-
-        <div id="subpanel-media" class="content-subpanel hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <form id="form-media" class="bg-white p-4 rounded-xl border border-slate-200 space-y-3 text-xs h-fit">
-            <h3 class="font-bold text-sm text-slate-900">Add Media / Album Link</h3>
-            <input type="date" id="med-date" required class="w-full px-3 py-2 border rounded-lg" />
-            <input type="text" id="med-title" required placeholder="Event Title" class="w-full px-3 py-2 border rounded-lg" />
-            <select id="med-cat" class="w-full px-3 py-2 border rounded-lg">
-              <option value="Sunday Service">Sunday Service</option>
-              <option value="Special Event">Special Event</option>
-              <option value="iCare & Fellowship">iCare & Fellowship</option>
-              <option value="Sermon Video">Sermon Video (YouTube)</option>
-            </select>
-            <input type="url" id="med-url" required placeholder="Google Photos / YouTube URL" class="w-full px-3 py-2 border rounded-lg" />
-            <input type="url" id="med-cover" placeholder="Optional Cover Thumbnail URL" class="w-full px-3 py-2 border rounded-lg" />
-            <button type="submit" class="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg">Save Media</button>
-          </form>
-          <div id="list-media" class="lg:col-span-2 space-y-2.5"></div>
-        </div>
-      </section>
-
-      <!-- TAB CURRICULUM (PREACHER SERMON GUIDELINE: MONTHLY & WEEKLY THEMES) -->
+      <!-- TAB: CURRICULUM -->
       <section id="panel-curriculum" class="tab-panel hidden space-y-4">
         <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
             <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">CURRICULUM • PREACHER SERMON GUIDELINE (2026 & 2027)</span>
             <h2 class="text-lg font-bold">Monthly & Weekly Themes for Preachers</h2>
-            <p class="text-xs text-slate-300">Guideline penyusunan khotbah pembicara (terpisah dari publikasi website & newsletter di Media & Services)</p>
+            <p class="text-xs text-slate-300">Sermon preparation guidelines separate from website & newsletter publishing in Media & Services</p>
           </div>
           <div class="flex flex-wrap items-center gap-2 shrink-0">
             <button type="button" id="curr-seed-2026-btn" class="px-3.5 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition">
@@ -458,7 +397,6 @@
           </button>
         </div>
 
-        <!-- SUBPANEL 1: MONTHLY THEMES -->
         <div id="curr-subpanel-monthly" class="curr-subpanel grid grid-cols-1 lg:grid-cols-3 gap-4 text-xs">
           <form id="form-curr-monthly" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 h-fit">
             <div class="flex items-center justify-between">
@@ -489,28 +427,28 @@
 
             <div>
               <label class="font-semibold text-slate-600">Subtitle / Focus</label>
-              <input type="text" id="curr-subtitle" placeholder="Tuhan Melihat & Mendengar Seruan Umat-Nya" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
+              <input type="text" id="curr-subtitle" placeholder="Monthly focus / subtitle" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
             </div>
 
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="font-semibold text-slate-600">Passages</label>
-                <input type="text" id="curr-passages" placeholder="Keluaran 1–3" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
+                <input type="text" id="curr-passages" placeholder="Exodus 1–3" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
               </div>
               <div>
                 <label class="font-semibold text-slate-600">Scripture</label>
-                <input type="text" id="curr-scripture" placeholder="Keluaran 1–3" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
+                <input type="text" id="curr-scripture" placeholder="Exodus 1–3" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
               </div>
             </div>
 
             <div>
               <label class="font-semibold text-slate-600">Synopsis</label>
-              <textarea id="curr-synopsis" rows="3" placeholder="Ringkasan tema bulanan..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5"></textarea>
+              <textarea id="curr-synopsis" rows="3" placeholder="Monthly theme synopsis..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5"></textarea>
             </div>
 
             <div>
               <label class="font-semibold text-slate-600">Preacher Sermon Guideline</label>
-              <textarea id="curr-preacher-guide" rows="2" placeholder="Arahan penyusunan khotbah bagi pembicara..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5"></textarea>
+              <textarea id="curr-preacher-guide" rows="2" placeholder="Sermon preparation notes for preachers..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5"></textarea>
             </div>
 
             <div class="grid grid-cols-2 gap-2">
@@ -539,7 +477,7 @@
 
           <div class="lg:col-span-2 space-y-2.5">
             <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-bold text-slate-700">Daftar Tema Bulanan</span>
+              <span class="text-xs font-bold text-slate-700">Monthly Themes List</span>
               <select id="curr-year-filter" class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800">
                 <option value="ALL">All Years (2026 & 2027)</option>
                 <option value="2026">2026 (Align in Promise)</option>
@@ -550,7 +488,6 @@
           </div>
         </div>
 
-        <!-- SUBPANEL 2: WEEKLY THEMES GUIDELINE -->
         <div id="curr-subpanel-weekly" class="curr-subpanel hidden grid grid-cols-1 lg:grid-cols-3 gap-4 text-xs">
           <form id="form-curr-weekly" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 h-fit">
             <div class="flex items-center justify-between">
@@ -572,7 +509,7 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="font-semibold text-slate-600">Week Label</label>
-                <input type="text" id="wk-guide-label" placeholder="MINGGU 1: 1 NOVEMBER 2026" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
+                <input type="text" id="wk-guide-label" placeholder="WEEK 1: 1 NOVEMBER 2026" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
               </div>
               <div>
                 <label class="font-semibold text-slate-600">Speaker Guideline</label>
@@ -582,38 +519,38 @@
 
             <div>
               <label class="font-semibold text-slate-600">Weekly Theme Title *</label>
-              <input type="text" id="wk-guide-title" required placeholder="Firaun Bermimpi: Dari Penjara ke Istana" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5 font-semibold" />
+              <input type="text" id="wk-guide-title" required placeholder="Weekly sermon theme title" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5 font-semibold" />
             </div>
 
             <div>
               <label class="font-semibold text-slate-600">Monthly Focus</label>
-              <input type="text" id="wk-guide-monthly-focus" placeholder="Mimpi di masa sulit (Yusuf di penjara)" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
+              <input type="text" id="wk-guide-monthly-focus" placeholder="Monthly focus" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
             </div>
 
             <div>
-              <label class="font-semibold text-slate-600">Flow Position (Posisi dalam Alur)</label>
-              <input type="text" id="wk-guide-flow" placeholder="PEMBUKA / FONDASI – ..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
+              <label class="font-semibold text-slate-600">Flow Position</label>
+              <input type="text" id="wk-guide-flow" placeholder="OPENING / FOUNDATION – ..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
             </div>
 
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="font-semibold text-slate-600">Scripture Reading</label>
-                <input type="text" id="wk-guide-reading" placeholder="Keluaran 1:1–14" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
+                <input type="text" id="wk-guide-reading" placeholder="Exodus 1:1–14" class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
               </div>
               <div>
-                <label class="font-semibold text-slate-600">Key Verse (Ayat Emas)</label>
-                <input type="text" id="wk-guide-verse" placeholder="Kejadian 41:16..." class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
+                <label class="font-semibold text-slate-600">Key Verse</label>
+                <input type="text" id="wk-guide-verse" placeholder="Genesis 41:16..." class="w-full px-2.5 py-2 border border-slate-300 rounded-lg mt-0.5" />
               </div>
             </div>
 
             <div>
               <label class="font-semibold text-slate-600">Connection to Monthly Theme</label>
-              <textarea id="wk-guide-connection" rows="2" placeholder="Koneksi ke tema bulanan..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5"></textarea>
+              <textarea id="wk-guide-connection" rows="2" placeholder="Connection to monthly theme..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5"></textarea>
             </div>
 
             <div>
               <label class="font-semibold text-slate-600">Winning Point (Sermon Guideline)</label>
-              <textarea id="wk-guide-winning" rows="4" placeholder="Poin utama khotbah bagi pembicara..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5"></textarea>
+              <textarea id="wk-guide-winning" rows="4" placeholder="Core sermon takeaway for preachers..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5"></textarea>
             </div>
 
             <div class="pt-1 flex items-center justify-between gap-2">
@@ -626,7 +563,7 @@
 
           <div class="lg:col-span-2 space-y-2.5">
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <span class="text-xs font-bold text-slate-700">Daftar Tema Mingguan (Guideline Pembicara)</span>
+              <span class="text-xs font-bold text-slate-700">Weekly Themes List (Preacher Guidelines)</span>
               <select id="curr-weekly-month-filter" class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800">
                 <option value="ALL">All Months (Nov 2026 – Jan 2027)</option>
                 <option value="2026-11">November 2026 (5 Weeks)</option>
@@ -639,17 +576,16 @@
         </div>
       </section>
 
-      <!-- TAB NEW: MEDIA & SERVICES (WEBSITE & NEWSLETTER PUBLICATION) -->
+      <!-- TAB: MEDIA & SERVICES (WEBSITE & NEWSLETTER PUBLICATION) -->
       <section id="panel-archives" class="tab-panel hidden space-y-4">
         <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">MEDIA & SERVICES • WEBSITE & NEWSLETTER</span>
             <h2 class="text-lg font-bold">Media, Monthly Compass, Annual Anchor & Sunday Archive</h2>
-            <p class="text-xs text-slate-300">Kelola arsip ibadah (<code class="font-mono text-amber-300">sunday_services</code>), The Editor's Insight, The Monthly Compass, dan The Annual Anchor untuk website</p>
+            <p class="text-xs text-slate-300">Manage service archives (<code class="font-mono text-amber-300">sunday_services</code>), The Editor's Insight, The Monthly Compass & The Annual Anchor</p>
           </div>
         </div>
 
-        <!-- SUBTABS DI MEDIA & SERVICES (DIURUTKAN OTOMATIS OLEH reorderArchiveSubtabs()) -->
         <div class="flex flex-wrap gap-2">
           <button type="button" class="archive-subtab bg-slate-900 text-white px-3.5 py-2 rounded-lg text-xs font-semibold" data-archive-subtab="sunday-archive">
             🎬 Sunday Service Archive
@@ -668,7 +604,7 @@
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 class="font-bold text-sm text-slate-900">📋 Sunday Service Archive Inquiry</h3>
-                <p class="text-[11px] text-slate-500">Cari, filter, edit, atau hapus data arsip Sunday Service.</p>
+                <p class="text-[11px] text-slate-500">Search, filter, edit, or delete Sunday Service archive records.</p>
               </div>
               <span id="sa-tab-count" class="text-xs font-semibold text-slate-500"></span>
             </div>
@@ -694,7 +630,7 @@
             <div class="flex items-center justify-between gap-2">
               <div>
                 <h3 id="sa-tab-form-title" class="font-bold text-sm text-slate-900">➕ Add Sunday Service Archive</h3>
-                <p class="text-[11px] text-slate-500">Tambah arsip baru atau klik <strong>Edit</strong> pada daftar di atas.</p>
+                <p class="text-[11px] text-slate-500">Add a new archive entry or click <strong>Edit</strong> on the list above.</p>
               </div>
               <button type="button" id="sa-tab-reset" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs">
                 New Entry
@@ -756,11 +692,11 @@
           <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-3">
               <div>
-                <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Pilih Bulan (YYYY-MM)</label>
+                <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Select Month (YYYY-MM)</label>
                 <select id="mc-month-select" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900"></select>
               </div>
               <div>
-                <span class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Status Database</span>
+                <span class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Database Status</span>
                 <span id="mc-db-badge" class="inline-block px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-700">Checking...</span>
               </div>
             </div>
@@ -783,7 +719,7 @@
           <div id="mc-editor-container" class="hidden space-y-4">
             <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <h3 class="font-bold text-sm text-slate-900">1. Pembuka Bulanan & Status Publikasi</h3>
+                <h3 class="font-bold text-sm text-slate-900">1. Monthly Opening & Publishing Status</h3>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="mc-published-check" checked class="rounded border-slate-300" />
                   <span class="font-semibold text-slate-700">Published on Website</span>
@@ -802,7 +738,7 @@
               </div>
 
               <div>
-                <label class="font-semibold text-slate-700">Intro / Pembuka Bulan Ini</label>
+                <label class="font-semibold text-slate-700">Intro / Monthly Opening</label>
                 <textarea id="mc-intro" rows="4" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1 leading-relaxed"></textarea>
               </div>
             </div>
@@ -810,17 +746,17 @@
             <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
               <div class="flex items-center justify-between">
                 <div>
-                  <h3 class="font-bold text-sm text-slate-900">2. Pathway Perjalanan Bulan Ini (Mingguan & Speaker)</h3>
-                  <p class="text-[11px] text-slate-500">Nama pembicara ditarik otomatis dari Sunday Roster / guideline dan tetap bisa di-edit langsung di sini.</p>
+                  <h3 class="font-bold text-sm text-slate-900">2. Monthly Pathway (Weekly Themes & Speakers)</h3>
+                  <p class="text-[11px] text-slate-500">Speakers are pulled from Sunday Roster / guidelines and can still be edited directly here.</p>
                 </div>
               </div>
               <div id="mc-weeks-editor" class="space-y-3"></div>
             </div>
 
             <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-              <h3 class="font-bold text-sm text-slate-900">3. Refleksi Bulan Ini & Penutup</h3>
+              <h3 class="font-bold text-sm text-slate-900">3. Monthly Reflection & Closing</h3>
               <div>
-                <label class="font-semibold text-slate-700">Refleksi Bulan Ini</label>
+                <label class="font-semibold text-slate-700">Monthly Reflection</label>
                 <textarea id="mc-reflection" rows="5" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1 leading-relaxed"></textarea>
               </div>
               <div>
@@ -836,11 +772,11 @@
           <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-3">
               <div>
-                <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Pilih Tahun (YYYY)</label>
+                <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Select Year (YYYY)</label>
                 <select id="aa-year-select" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900"></select>
               </div>
               <div>
-                <span class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Status Database</span>
+                <span class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Database Status</span>
                 <span id="aa-db-badge" class="inline-block px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-700">Checking...</span>
               </div>
             </div>
@@ -860,7 +796,7 @@
           <div id="aa-editor-container" class="hidden space-y-4">
             <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <h3 class="font-bold text-sm text-slate-900">1. Judul Tahunan, Prolog & Sambutan</h3>
+                <h3 class="font-bold text-sm text-slate-900">1. Annual Title, Prologue & Welcome</h3>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="aa-published-check" checked class="rounded border-slate-300" />
                   <span class="font-semibold text-slate-700">Published on Website</span>
@@ -879,7 +815,7 @@
               </div>
 
               <div>
-                <label class="font-semibold text-slate-700">Prolog</label>
+                <label class="font-semibold text-slate-700">Prologue</label>
                 <textarea id="aa-prologue" rows="4" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1 leading-relaxed"></textarea>
               </div>
 
@@ -889,21 +825,21 @@
                   <input type="text" id="aa-greeting" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
                 </div>
                 <div class="sm:col-span-2">
-                  <label class="font-semibold text-slate-700">Welcome / Pengantar Tahun</label>
+                  <label class="font-semibold text-slate-700">Welcome / Year Introduction</label>
                   <input type="text" id="aa-welcome" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1" />
                 </div>
               </div>
             </div>
 
             <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-              <h3 class="font-bold text-sm text-slate-900">2. Pathway Perjalanan 12 Bulan (Bisa Diedit Manual)</h3>
+              <h3 class="font-bold text-sm text-slate-900">2. 12-Month Pathway (Editable)</h3>
               <div id="aa-months-editor" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
             </div>
 
             <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-              <h3 class="font-bold text-sm text-slate-900">3. Renungan Tahunan & Penutup</h3>
+              <h3 class="font-bold text-sm text-slate-900">3. Annual Reflection & Closing</h3>
               <div>
-                <label class="font-semibold text-slate-700">Renungan Tahunan</label>
+                <label class="font-semibold text-slate-700">Annual Reflection</label>
                 <textarea id="aa-reflection" rows="5" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1 leading-relaxed"></textarea>
               </div>
               <div>
@@ -915,12 +851,12 @@
         </div>
       </section>
 
-      <!-- TAB 3: ROLES REFERENCE -->
+      <!-- TAB: ROLES REFERENCE -->
       <section id="panel-roles" class="tab-panel hidden space-y-4">
         <div class="flex flex-wrap justify-between items-center gap-2">
           <div>
             <h2 class="font-bold text-slate-800 text-sm">Ministry Roles Master Table & Order</h2>
-            <p class="text-[11px] text-slate-500">Tambah role (Singer 1–3, Lighting, Multi Media, Camera) & atur urutan tampil di Sunday Roster tanpa edit script.</p>
+            <p class="text-[11px] text-slate-500">Add roles (Singer 1–3, Lighting, Multi Media, Camera) & configure Sunday Roster display order.</p>
           </div>
           <div class="flex flex-wrap gap-2">
             <button id="btn-group-vocal-order" class="bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold px-3 py-2 rounded-xl transition">
@@ -935,7 +871,6 @@
           </div>
         </div>
 
-        <!-- Quick Add Role Inline Bar -->
         <form id="form-quick-role" class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs items-end">
           <div>
             <label class="font-semibold text-slate-600">Department</label>
@@ -984,7 +919,7 @@
         </div>
       </section>
 
-      <!-- TAB 4: DEPARTMENTS -->
+      <!-- TAB: DEPARTMENTS -->
       <section id="panel-departments" class="tab-panel hidden space-y-3">
         <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
           <table class="w-full text-left text-sm">
@@ -1186,7 +1121,7 @@
       if (!loadingScreen.classList.contains("hidden")) {
         showErrorOnLoading("Connection or script timeout. Please check all JS modules.");
       }
-    }, 6000);
+    }, 15000);
 
     function reorderArchiveSubtabs() {
       const archivePanel = document.getElementById("panel-archives");
@@ -1216,7 +1151,6 @@
     try {
       const { initAuthObserver, loginWithGoogle, sendMagicLink, logoutUser } = await import("./js/auth.js");
       const { initMasterApp } = await import("./js/ui-master.js");
-      const { initContentStudio } = await import("./js/ui-content.js");
       const { initRosterEngine } = await import("./js/ui-roster.js");
       const { initPublicPortal, initMemberSelfService } = await import("./js/ui-portal.js");
       const { initCareModule } = await import("./js/ui-care.js");
@@ -1309,8 +1243,6 @@
           document.getElementById("user-name-badge").textContent = profile.displayName;
           document.getElementById("user-role-badge").textContent = profile.accessLevel.toUpperCase();
 
-          await initMemberSelfService(profile).catch(err => console.warn("initMemberSelfService error:", err));
-
           const isAdminOrCoord = profile.accessLevel === "super_admin" || profile.accessLevel === "coordinator";
           const isDeptLead =
             profile.accessLevel === "department_lead" ||
@@ -1323,10 +1255,11 @@
             el.classList.toggle("hidden", !(isAdminOrCoord || isDeptLead));
           });
 
+          await initMemberSelfService(profile).catch(err => console.warn("initMemberSelfService error:", err));
+
           if (isAdminOrCoord) {
             await Promise.allSettled([
               initMasterApp(profile),
-              initContentStudio(),
               initCurriculumTab(),
               initRosterEngine(profile),
               initCareModule()
