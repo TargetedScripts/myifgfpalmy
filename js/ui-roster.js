@@ -29,7 +29,6 @@ const FALLBACK_ROLE_ORDER = [
   "Singer 2",
   "Singer 3",
   "Prayer",
-  "Singer / Backing Vocal",
   "Acoustic / Electric Guitar",
   "Electric Guitar",
   "Acoustic Guitar",
@@ -39,10 +38,8 @@ const FALLBACK_ROLE_ORDER = [
   "Sound Engineer",
   "Lighting",
   "Multi Media",
-  "Multimedia / Lyrics Operator",
   "Camera",
   "Livestream & Camera",
-  "Barista / Coffee Station",
   "Fellowship Refreshments",
   "Greeter / Usher"
 ];
@@ -181,6 +178,20 @@ function sortRolesCustom(roles) {
   });
 }
 
+function isUniversalRole(role) {
+  if (role?.is_universal === true) return true;
+  return /cuci piring|vacuum/i.test(role?.role_name || role?.name || "");
+}
+
+function discipleHasInterestInRole(disciple, role) {
+  if (isUniversalRole(role)) return true;
+  const interests = Array.isArray(disciple?.ministry_interests) ? disciple.ministry_interests : [];
+  if (interests.length === 0) return false;
+  const target = (role?.role_name || role?.name || "").trim().toLowerCase();
+  if (!target) return false;
+  return interests.some(item => String(item || "").trim().toLowerCase() === target);
+}
+
 async function refreshRosterContext() {
   const [depts, roles, disciples, weeks, unavail] = await Promise.all([
     getDepartments(),
@@ -243,7 +254,6 @@ async function refreshRosterContext() {
   }
 }
 
-// --- DEPARTMENT & DEPARTMENT LEAD CRUD UI (SCREEN-DRIVEN) ---
 function ensureAdminManagerContainer() {
   const board = document.getElementById("roster-board");
   if (!board || !board.parentElement) return null;
@@ -264,7 +274,6 @@ function renderDepartmentAdminManager() {
 
   const visibleDepts = getVisibleDepartments();
 
-  // Department Lead View (Non-global admin): show scope banner & allow managing roles in own dept
   if (!rosterState.isGlobalAdmin) {
     if (visibleDepts.length === 0) {
       container.innerHTML = `
@@ -297,7 +306,6 @@ function renderDepartmentAdminManager() {
     return;
   }
 
-  // System Admin / Church Coordinator View: Full CRUD for Departments, Leads & Roles
   const discipleEmailOptions = rosterState.disciples
     .filter(d => d.email)
     .map(d => `<option value="${d.email.toLowerCase()}">${d.full_name} (${d.email})</option>`)
@@ -355,7 +363,7 @@ function renderDepartmentAdminManager() {
   }).join("");
 
   container.innerHTML = `
-    <details class="bg-white rounded-xl border border-slate-200 shadow-sm" open>
+    <details class="bg-white rounded-xl border border-slate-200 shadow-sm">
       <summary class="px-4 py-3 cursor-pointer flex items-center justify-between font-bold text-xs uppercase tracking-wider text-slate-800 select-none">
         <span>⚙️ Department & Department Lead Settings (Add / Edit / Delete)</span>
         <span class="text-[11px] font-normal normal-case text-slate-500">${rosterState.departments.length} departments</span>
@@ -420,6 +428,7 @@ function renderDepartmentAdminManager() {
         department_id: deptId,
         dept_name: name,
         min_dj_level: "Come",
+        is_universal: /cuci piring|vacuum/i.test(newRoleNames[i]),
         sort_order: rosterState.roles.length + i + 1,
         active: true,
         is_active: true
@@ -480,6 +489,7 @@ window.openAddDeptRolePrompt = async (deptId) => {
     department_id: dept.id,
     dept_name: dept.name,
     min_dj_level: minDj.trim(),
+    is_universal: /cuci piring|vacuum/i.test(roleName.trim()),
     sort_order: rosterState.roles.length + 1,
     active: true,
     is_active: true
@@ -504,6 +514,7 @@ window.openEditDeptRolePrompt = async (roleId) => {
   await saveRole(role.id, {
     role_name: newName.trim(),
     min_dj_level: newDj.trim() || "Come",
+    is_universal: /cuci piring|vacuum/i.test(newName.trim()),
     ...(Number.isFinite(newOrder) ? { sort_order: newOrder } : {})
   });
   await refreshRosterContext();
@@ -557,7 +568,7 @@ async function loadServiceRoster(serviceDate) {
   }
   if (metaEl) {
     metaEl.textContent = svc
-      ? [svc.week_label, svc.key_verse].filter(Boolean).join(" • ") || "Sunday Celebration 10:30 AM"
+      ? [svc.week_label, svc.key_verse].filter(Boolean).join(" • ") || "Sunday Celebration 4:30 PM"
       : "";
   }
 
@@ -624,12 +635,25 @@ function renderRosterBoard() {
       );
       const selectedId = current?.disciple_id || "";
       const isVocalTeam = ["Worship Leader", "Singer 1", "Singer 2", "Singer 3"].includes(rName);
+      const universal = isUniversalRole(role);
 
-      const optionsHtml = rosterState.disciples.map(d => {
+      // Urutkan jemaat yang berminat pada role ini di atas (kecuali universal karena semua berlaku)
+      const sortedDisciples = [...rosterState.disciples].sort((a, b) => {
+        if (!universal) {
+          const intA = discipleHasInterestInRole(a, role) ? 0 : 1;
+          const intB = discipleHasInterestInRole(b, role) ? 0 : 1;
+          if (intA !== intB) return intA - intB;
+        }
+        return (a.full_name || "").localeCompare(b.full_name || "");
+      });
+
+      const optionsHtml = sortedDisciples.map(d => {
         const unavail = isDiscipleUnavailable(d.id, rosterState.selectedDate);
         const djOk = meetsMinDj(d, role.min_dj_level);
         const count = assignedCountByDisciple[d.id] || 0;
+        const interested = !universal && discipleHasInterestInRole(d, role);
         const flags = [
+          interested ? "✨ Interested" : "",
           unavail ? "🚫 Unavailable" : "",
           !djOk ? `⚠️ Min DJ: ${role.min_dj_level}` : "",
           count > 1 ? `(${count} roles)` : ""
@@ -655,6 +679,7 @@ function renderRosterBoard() {
           <div class="min-w-0">
             <div class="flex items-center gap-1.5">
               <p class="text-xs font-bold text-slate-900">${rName}</p>
+              ${universal ? `<span class="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Shared</span>` : ""}
               <button type="button" onclick="window.openEditDeptRolePrompt('${role.id}')" title="Edit Role" class="text-[11px] text-slate-400 hover:text-blue-600">✎</button>
               <button type="button" onclick="window.deleteDeptRoleItem('${role.id}', '${rName.replace(/'/g, "\\'")}')" title="Delete Role" class="text-[11px] text-slate-400 hover:text-red-600">×</button>
             </div>
@@ -663,7 +688,7 @@ function renderRosterBoard() {
           <div class="flex items-center gap-2 shrink-0">
             <select
               onchange="window.assignRosterSlot('${role.id}', this.value)"
-              class="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium bg-white max-w-[210px]"
+              class="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium bg-white max-w-[230px]"
             >
               <option value="">— Unassigned —</option>
               ${optionsHtml}
@@ -783,7 +808,7 @@ function buildWhatsAppRosterText() {
     `*IFGF PALMERSTON NORTH — SUNDAY ROSTER*`,
     `📅 *Date:* ${rosterState.selectedDate}`,
     svc ? `📖 *Theme:* ${svc.title}` : "",
-    `⏰ *Time:* Sunday 10:30 AM`,
+    `⏰ *Time:* Sunday 4:30 PM`,
     ``
   ].filter(Boolean);
 
@@ -893,14 +918,19 @@ window.assignRosterSlot = async (roleId, discipleId) => {
   } else {
     const disciple = rosterState.disciples.find(d => d.id === discipleId);
     if (!disciple) return;
+    const deptObj = rosterState.departments.find(
+      d => d.id === (role.department_id || role.dept_id)
+    );
     await upsertAssignment(existing?.id || null, {
       service_date: rosterState.selectedDate,
+      department_id: role.department_id || role.dept_id || "",
       dept_id: role.department_id || role.dept_id || "",
-      dept_name: role.dept_name || "",
+      dept_name: deptObj?.name || role.dept_name || "",
       role_id: role.id,
       role_name: rName,
       disciple_id: disciple.id,
       disciple_name: disciple.full_name,
+      disciple_phone: disciple.phone || "",
       status: "Assigned"
     });
   }
