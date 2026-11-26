@@ -40,7 +40,7 @@ export async function deleteDepartment(id) {
   await deleteDoc(doc(db, "departments", id));
 }
 
-// --- 2. ROLES REFERENCE (ADD / EDIT / DELETE) ---
+// --- 2. ROLES REFERENCE (ADD / EDIT / MOVE DEPT / DELETE) ---
 export async function getRolesReference() {
   const q = query(collection(db, "roles_reference"), orderBy("role_name", "asc"));
   const snap = await getDocs(q);
@@ -53,16 +53,21 @@ export async function getRoles() {
     ...r,
     name: r.role_name || r.name || "",
     dept_id: r.department_id || r.dept_id || "",
+    dept_name: r.dept_name || r.department_name || "",
     active: r.is_active !== false
   }));
 }
 
 export async function saveRoleReference(id, data) {
+  const roleName = (data.role_name ?? data.name ?? "").trim();
+  const departmentId = (data.department_id ?? data.dept_id ?? "").trim();
+  const isActive = data.is_active !== false && data.active !== false;
+
   const payload = {
     ...data,
-    role_name: data.role_name || data.name || "",
-    department_id: data.department_id || data.dept_id || "",
-    is_active: data.is_active !== false && data.active !== false,
+    ...(roleName ? { role_name: roleName } : {}),
+    ...(departmentId ? { department_id: departmentId } : {}),
+    is_active: isActive,
     updated_at: serverTimestamp()
   };
 
@@ -280,7 +285,7 @@ export async function importDisciplesFromCSV(csvText) {
   };
 }
 
-// --- 5. ONE-CLICK SEED MASTER DATA (9 DEPARTMENTS & 24+ ROLES) ---
+// --- 5. ONE-CLICK SEED MASTER DATA (9 DEPARTMENTS & ROLES) ---
 export async function seedInitialMasterData() {
   const depts = [
     { id: "pulpit_editorial", name: "Pulpit & Editorial", sort_order: 1, is_active: true },
@@ -304,39 +309,45 @@ export async function seedInitialMasterData() {
   }
 
   const roles = [
-    { role_name: "Preacher / Speaker", department_id: "pulpit_editorial", min_dj_level: "Grow", can_reimburse: false },
-    { role_name: "Service MC / Host", department_id: "pulpit_editorial", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Weekly Insight Editor", department_id: "pulpit_editorial", min_dj_level: "Grow", can_reimburse: false },
-    { role_name: "Worship Leader", department_id: "praise_worship", min_dj_level: "Grow", can_reimburse: false },
-    { role_name: "Singer 1", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Singer 2", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Singer 3", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Acoustic / Electric Guitar", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Bass Guitar", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Keyboard / Piano", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Drums / Cajon", department_id: "praise_worship", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Sound Engineer", department_id: "creative_production", min_dj_level: "Come", can_reimburse: true },
-    { role_name: "Lighting", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Multi Media", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Camera", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Photographer / Social Media", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Graphic Designer (Poster)", department_id: "creative_production", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Kitchen Lead / Cook", department_id: "kitchen_catering", min_dj_level: "Come", can_reimburse: true },
-    { role_name: "Fellowship Refreshments", department_id: "kitchen_catering", min_dj_level: "Come", can_reimburse: true },
-    { role_name: "Barista / Coffee Station", department_id: "kitchen_catering", min_dj_level: "Come", can_reimburse: true },
-    { role_name: "Head Usher", department_id: "usher_facility", min_dj_level: "Grow", can_reimburse: false },
-    { role_name: "Welcome & Seating Usher", department_id: "usher_facility", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "Hall Setup & Packdown", department_id: "usher_facility", min_dj_level: "Come", can_reimburse: false },
-    { role_name: "DJ Facilitator", department_id: "dj_class", min_dj_level: "Grow", can_reimburse: false },
-    { role_name: "iCare Leader", department_id: "icare", min_dj_level: "Grow", can_reimburse: false },
-    { role_name: "iCorner Host", department_id: "icorner_missions", min_dj_level: "Come", can_reimburse: true },
-    { role_name: "Missions & Outreach Coord", department_id: "icorner_missions", min_dj_level: "Grow", can_reimburse: true }
+    { role_name: "Preacher / Speaker", department_id: "pulpit_editorial", dept_name: "Pulpit & Editorial", min_dj_level: "Grow", can_reimburse: false, is_universal: false },
+    { role_name: "Service MC / Host", department_id: "pulpit_editorial", dept_name: "Pulpit & Editorial", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Weekly Insight Editor", department_id: "pulpit_editorial", dept_name: "Pulpit & Editorial", min_dj_level: "Grow", can_reimburse: false, is_universal: false },
+    { role_name: "Worship Leader", department_id: "praise_worship", dept_name: "Praise & Worship", min_dj_level: "Grow", can_reimburse: false, is_universal: false },
+    { role_name: "Singer 1", department_id: "praise_worship", dept_name: "Praise & Worship", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Singer 2", department_id: "praise_worship", dept_name: "Praise & Worship", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Singer 3", department_id: "praise_worship", dept_name: "Praise & Worship", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Acoustic / Electric Guitar", department_id: "praise_worship", dept_name: "Praise & Worship", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Bass Guitar", department_id: "praise_worship", dept_name: "Praise & Worship", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Keyboard / Piano", department_id: "praise_worship", dept_name: "Praise & Worship", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Drums / Cajon", department_id: "praise_worship", dept_name: "Praise & Worship", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Sound Engineer", department_id: "creative_production", dept_name: "Creative & Production", min_dj_level: "Come", can_reimburse: true, is_universal: false },
+    { role_name: "Lighting", department_id: "creative_production", dept_name: "Creative & Production", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Multi Media", department_id: "creative_production", dept_name: "Creative & Production", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Camera", department_id: "creative_production", dept_name: "Creative & Production", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Photographer / Social Media", department_id: "creative_production", dept_name: "Creative & Production", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Graphic Designer (Poster)", department_id: "creative_production", dept_name: "Creative & Production", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Kitchen Lead / Cook", department_id: "kitchen_catering", dept_name: "Kitchen & Catering", min_dj_level: "Come", can_reimburse: true, is_universal: false },
+    { role_name: "Fellowship Refreshments", department_id: "kitchen_catering", dept_name: "Kitchen & Catering", min_dj_level: "Come", can_reimburse: true, is_universal: false },
+    { role_name: "Barista / Coffee Station", department_id: "kitchen_catering", dept_name: "Kitchen & Catering", min_dj_level: "Come", can_reimburse: true, is_universal: false },
+    { role_name: "Head Usher", department_id: "usher_facility", dept_name: "Usher & Facility", min_dj_level: "Grow", can_reimburse: false, is_universal: false },
+    { role_name: "Welcome & Seating Usher", department_id: "usher_facility", dept_name: "Usher & Facility", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Hall Setup & Packdown", department_id: "usher_facility", dept_name: "Usher & Facility", min_dj_level: "Come", can_reimburse: false, is_universal: false },
+    { role_name: "Cuci Piring 1", department_id: "usher_facility", dept_name: "Usher & Facility", min_dj_level: "Come", can_reimburse: false, is_universal: true },
+    { role_name: "Cuci Piring 2", department_id: "usher_facility", dept_name: "Usher & Facility", min_dj_level: "Come", can_reimburse: false, is_universal: true },
+    { role_name: "Cuci Piring 3", department_id: "usher_facility", dept_name: "Usher & Facility", min_dj_level: "Come", can_reimburse: false, is_universal: true },
+    { role_name: "Vacuum", department_id: "usher_facility", dept_name: "Usher & Facility", min_dj_level: "Come", can_reimburse: false, is_universal: true },
+    { role_name: "DJ Facilitator", department_id: "dj_class", dept_name: "DJ Class", min_dj_level: "Grow", can_reimburse: false, is_universal: false },
+    { role_name: "iCare Leader", department_id: "icare", dept_name: "iCare", min_dj_level: "Grow", can_reimburse: false, is_universal: false },
+    { role_name: "iCorner Host", department_id: "icorner_missions", dept_name: "iCorner & Missions", min_dj_level: "Come", can_reimburse: true, is_universal: false },
+    { role_name: "Missions & Outreach Coord", department_id: "icorner_missions", dept_name: "iCorner & Missions", min_dj_level: "Grow", can_reimburse: true, is_universal: false }
   ];
 
-  for (const r of roles) {
+  for (let i = 0; i < roles.length; i++) {
+    const r = roles[i];
     const slug = r.role_name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
     await setDoc(doc(db, "roles_reference", slug), {
       ...r,
+      sort_order: i + 1,
       is_active: true,
       created_at: serverTimestamp()
     }, { merge: true });
