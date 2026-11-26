@@ -13,6 +13,7 @@ import {
 import * as dbPortal from "./db-portal.js";
 import { getDailyReflections, seedNov20toDec31Reflections } from "./db-content.js";
 import { addUnavailability, deleteUnavailability } from "./db-roster.js";
+import { getDepartments, getRolesReference } from "./db-master.js";
 
 const {
   getPublicMonthlyThemes,
@@ -33,114 +34,51 @@ const DEFAULT_CHURCH_PROFILE = {
   website_url: "https://ifgfpalmy.org"
 };
 
-function isUniversalSharedTask(roleName = "") {
-  const n = String(roleName || "").toLowerCase();
-  return (
-    n.includes("cuci piring") ||
-    n.includes("dishwash") ||
-    n.includes("dish wash") ||
-    n.includes("dishes") ||
-    n.includes("vacuum")
-  );
-}
-
-function extractRoleLabel(r = {}) {
-  const direct =
-    r.role_name ?? r.name ?? r.title ?? r.role ?? r.label ?? r.nama ?? r.roleName;
-  if (direct) return String(direct).trim();
-
-  const skipKeys = new Set([
-    "id",
-    "church_id",
-    "department_id",
-    "dept_id",
-    "created_at",
-    "updated_at",
-    "created_at_iso"
-  ]);
-  for (const [k, v] of Object.entries(r)) {
-    if (!skipKeys.has(k) && typeof v === "string" && v.trim().length > 0 && v.trim().length < 60) {
-      return v.trim();
-    }
-  }
-  return "";
+function isUniversalSharedTask(role = {}) {
+  if (role?.is_universal === true) return true;
+  const n = String(role?.role_name || role?.name || role || "").toLowerCase();
+  return n.includes("cuci piring") || n.includes("vacuum");
 }
 
 async function fetchSelectableMinistryRoles() {
   try {
-    let items = [];
+    const [depts, roles] = await Promise.all([
+      getDepartments().catch(() => []),
+      getRolesReference().catch(() => [])
+    ]);
 
-    // 1. Cek koleksi "roles" jika ada isinya
-    const roleSnap = await getDocs(collection(db, "roles"));
-    if (!roleSnap.empty) {
-      items = roleSnap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(r => r.active !== false && r.is_active !== false && r.enabled !== false)
-        .map(r => ({
-          ...r,
-          _label: extractRoleLabel(r),
-          _isUniversal: isUniversalSharedTask(extractRoleLabel(r))
-        }))
-        .filter(r => r._label);
-    }
-
-    // 2. Jika koleksi "roles" kosong, ambil dari array apa pun di koleksi "departments"
-    if (items.length === 0) {
-      const deptSnap = await getDocs(collection(db, "departments"));
-      const seen = new Set();
-
-      deptSnap.docs.forEach(d => {
-        const data = d.data();
-        if (data.active === false || data.is_active === false || data.enabled === false) return;
-
-        let extractedAnyRoleFromDept = false;
-        Object.values(data).forEach(val => {
-          if (Array.isArray(val)) {
-            val.forEach(raw => {
-              const label = typeof raw === "string" ? raw.trim() : extractRoleLabel(raw);
-              if (label && !seen.has(label.toLowerCase())) {
-                seen.add(label.toLowerCase());
-                extractedAnyRoleFromDept = true;
-                items.push({
-                  id: `${d.id}_${label}`,
-                  _label: label,
-                  _isUniversal: isUniversalSharedTask(label)
-                });
-              }
-            });
-          }
-        });
-
-        // Fallback jika dokumen department tidak punya array role, pakai nama department-nya
-        if (!extractedAnyRoleFromDept) {
-          const deptLabel = String(
-            data.department_name ?? data.name ?? data.title ?? data.label ?? ""
-          ).trim();
-          if (deptLabel && !seen.has(deptLabel.toLowerCase())) {
-            seen.add(deptLabel.toLowerCase());
-            items.push({
-              id: d.id,
-              _label: deptLabel,
-              _isUniversal: isUniversalSharedTask(deptLabel)
-            });
-          }
-        }
+    const deptMap = new Map();
+    depts.forEach((d, idx) => {
+      deptMap.set(d.id, {
+        name: d.name || d.id,
+        sort_order: Number(d.sort_order) || idx + 1,
+        is_active: d.is_active !== false
       });
-    }
-
-    return items.sort((a, b) => {
-      if (a._isUniversal !== b._isUniversal) return a._isUniversal ? 1 : -1;
-      const orderA = Number.isFinite(Number(a.sort_order ?? a.order ?? a.display_order))
-        ? Number(a.sort_order ?? a.order ?? a.display_order)
-        : 999;
-      const orderB = Number.isFinite(Number(b.sort_order ?? b.order ?? b.display_order))
-        ? Number(b.sort_order ?? b.order ?? b.display_order)
-        : 999;
-      if (orderA !== orderB) return orderA - orderB;
-      return a._label.localeCompare(b._label);
     });
+
+    return roles
+      .filter(r => r.is_active !== false && r.active !== false)
+      .map((r, idx) => {
+        const label = String(r.role_name || r.name || "").trim();
+        const deptInfo = deptMap.get(r.department_id);
+        return {
+          ...r,
+          _label: label,
+          _deptName: deptInfo?.name || r.dept_name || "General Ministry",
+          _deptOrder: deptInfo?.sort_order ?? 999,
+          _roleOrder: Number(r.sort_order) || idx + 1,
+          _isUniversal: isUniversalSharedTask(r)
+        };
+      })
+      .filter(r => Boolean(r._label))
+      .sort((a, b) => {
+        if (a._isUniversal !== b._isUniversal) return a._isUniversal ? 1 : -1;
+        if (a._deptOrder !== b._deptOrder) return a._deptOrder - b._deptOrder;
+        if (a._roleOrder !== b._roleOrder) return a._roleOrder - b._roleOrder;
+        return a._label.localeCompare(b._label);
+      });
   } catch (err) {
-    console.warn("fetchSelectableMinistryRoles fallback:", err);
+    console.warn("fetchSelectableMinistryRoles error:", err);
     return [];
   }
 }
@@ -181,7 +119,7 @@ async function fetchHubSnapshotCounts() {
     const [discSnap, deptSnap, roleSnap] = await Promise.all([
       getDocs(collection(db, "disciples")).catch(() => null),
       getDocs(collection(db, "departments")).catch(() => null),
-      getDocs(collection(db, "roles")).catch(() => null)
+      getDocs(collection(db, "roles_reference")).catch(() => null)
     ]);
 
     const activeDisciples = discSnap
@@ -474,7 +412,6 @@ function renderPublicFeed() {
   const snap = portalState.snapshot;
 
   panel.innerHTML = `
-    <!-- COMPACT CHURCH HUB HEADER -->
     <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-5 rounded-2xl shadow-md space-y-4">
       <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div class="space-y-1.5">
@@ -537,9 +474,7 @@ function renderPublicFeed() {
       ` : ""}
     </div>
 
-    <!-- MAIN 1-SCREEN GRID -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <!-- LEFT 2 COLUMNS: ANNOUNCEMENT BOARD + NEXT SERVICE -->
       <div class="lg:col-span-2 space-y-4">
         <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
           <div class="flex items-center justify-between gap-2">
@@ -576,7 +511,6 @@ function renderPublicFeed() {
           <div id="church-announcements-list" class="space-y-2.5"></div>
         </div>
 
-        <!-- NEXT SUNDAY SERVICE SNAPSHOT -->
         <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="font-bold text-sm text-slate-900">🗓️ Next Sunday Service</h3>
@@ -607,7 +541,6 @@ function renderPublicFeed() {
         </div>
       </div>
 
-      <!-- RIGHT COLUMN: TODAY'S REFLECTION + HUB SNAPSHOT -->
       <div class="space-y-4">
         <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
           <div class="flex items-center justify-between gap-2">
@@ -730,37 +663,49 @@ function renderMyInterestsChecklist(savedInterests = []) {
 
   const isRoleSelected = (roleName) => {
     const target = roleName.toLowerCase();
-    return normalizedSaved.some(saved => {
-      if (saved === target) return true;
-      if (target === "drummer" && saved === "drum") return true;
-      if (target === "multi media" && saved.includes("multimedia")) return true;
-      if (target === "sound system" && saved.includes("sound")) return true;
-      return false;
-    });
+    return normalizedSaved.includes(target);
   };
 
-  container.innerHTML = roles.map(r => {
-    const roleName = r._label || extractRoleLabel(r);
-    const isUniversal = Boolean(r._isUniversal || isUniversalSharedTask(roleName));
+  // Ganti grid datar menjadi daftar terkelompok per departemen
+  container.classList.remove("grid", "grid-cols-1", "sm:grid-cols-2");
+  container.classList.add("space-y-3");
 
-    if (isUniversal) {
+  const byDept = new Map();
+  roles.forEach(r => {
+    const deptLabel = r._deptName || "General Ministry";
+    if (!byDept.has(deptLabel)) byDept.set(deptLabel, []);
+    byDept.get(deptLabel).push(r);
+  });
+
+  container.innerHTML = Array.from(byDept.entries()).map(([deptName, deptRoles]) => {
+    const checkboxesHtml = deptRoles.map(r => {
+      const roleName = r._label;
+      if (r._isUniversal) {
+        return `
+          <label class="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 cursor-not-allowed select-none opacity-85" title="Shared responsibility for all members">
+            <span class="flex items-center gap-2 min-w-0">
+              <input type="checkbox" name="my-interest-role" value="${esc(roleName)}" checked disabled class="rounded border-slate-300 text-slate-500 cursor-not-allowed" />
+              <span class="text-xs font-medium text-slate-600 truncate">${esc(roleName)}</span>
+            </span>
+            <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded shrink-0">All</span>
+          </label>
+        `;
+      }
+
+      const checked = isRoleSelected(roleName) ? "checked" : "";
       return `
-        <label class="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 cursor-not-allowed select-none opacity-85" title="Shared responsibility for all members">
-          <span class="flex items-center gap-2 min-w-0">
-            <input type="checkbox" name="my-interest-role" value="${esc(roleName)}" checked disabled class="rounded border-slate-300 text-slate-500 cursor-not-allowed" />
-            <span class="text-xs font-medium text-slate-600 truncate">${esc(roleName)}</span>
-          </span>
-          <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded shrink-0">All</span>
+        <label class="flex items-center gap-2 px-2.5 py-1.5 bg-white rounded-lg border border-slate-200 hover:border-slate-400 cursor-pointer select-none">
+          <input type="checkbox" name="my-interest-role" value="${esc(roleName)}" ${checked} class="rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
+          <span class="text-xs font-medium text-slate-800 truncate" title="${esc(roleName)}">${esc(roleName)}</span>
         </label>
       `;
-    }
+    }).join("");
 
-    const checked = isRoleSelected(roleName) ? "checked" : "";
     return `
-      <label class="flex items-center gap-2 px-2.5 py-1.5 bg-white rounded-lg border border-slate-200 hover:border-slate-400 cursor-pointer select-none">
-        <input type="checkbox" name="my-interest-role" value="${esc(roleName)}" ${checked} class="rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
-        <span class="text-xs font-medium text-slate-800 truncate" title="${esc(roleName)}">${esc(roleName)}</span>
-      </label>
+      <div class="space-y-1.5">
+        <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">${esc(deptName)}</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">${checkboxesHtml}</div>
+      </div>
     `;
   }).join("");
 }
@@ -838,7 +783,7 @@ function renderMyDuties() {
             <span class="text-xs font-bold text-slate-900">${esc(d.role_name)}</span>
             <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${statusStyle}">${esc(status)}</span>
           </div>
-          ${d.department_name ? `<p class="text-[11px] text-slate-500">Department: <strong class="text-slate-700">${esc(d.department_name)}</strong></p>` : ""}
+          ${d.dept_name || d.department_name ? `<p class="text-[11px] text-slate-500">Department: <strong class="text-slate-700">${esc(d.dept_name || d.department_name)}</strong></p>` : ""}
           ${insight ? `
             <p class="text-xs text-slate-600">
               📖 <strong>${esc(insight.title)}</strong>${insight.speaker ? ` • 🎙️ ${esc(insight.speaker)}` : ""}
