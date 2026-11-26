@@ -185,8 +185,72 @@ function getAucklandTodayISO() {
 }
 
 function canManageChurchPortal() {
-  const level = portalState.profile?.accessLevel || "";
-  return level === "super_admin" || level === "coordinator";
+  const level = String(portalState.profile?.accessLevel || "").toLowerCase();
+  const sysRole = String(
+    portalState.profile?.system_role ||
+    portalState.profile?.discipleDoc?.system_role ||
+    portalState.profile?.role ||
+    ""
+  ).toLowerCase();
+  return (
+    level === "super_admin" ||
+    level === "coordinator" ||
+    sysRole === "super_admin" ||
+    sysRole === "coordinator" ||
+    portalState.profile?.isAdmin === true
+  );
+}
+
+function isSystemAdminUser() {
+  const level = String(portalState.profile?.accessLevel || "").toLowerCase();
+  const sysRole = String(
+    portalState.profile?.system_role ||
+    portalState.profile?.discipleDoc?.system_role ||
+    portalState.profile?.role ||
+    ""
+  ).toLowerCase();
+  return level === "super_admin" || sysRole === "super_admin";
+}
+
+async function resolveDiscipleForCurrentUser(profile) {
+  if (profile?.discipleDoc) return profile.discipleDoc;
+
+  const email = String(profile?.email || "").trim().toLowerCase();
+  const displayName = String(profile?.displayName || profile?.name || "").trim().toLowerCase();
+
+  try {
+    const snap = await getDocs(collection(db, "disciples"));
+    const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    if (email) {
+      const byEmail = all.find(d => String(d.email || "").trim().toLowerCase() === email);
+      if (byEmail) return byEmail;
+    }
+
+    if (displayName) {
+      const byName = all.find(d => String(d.full_name || "").trim().toLowerCase() === displayName);
+      if (byName) return byName;
+    }
+  } catch (err) {
+    console.warn("resolveDiscipleForCurrentUser lookup skipped:", err);
+  }
+
+  if (isSystemAdminUser() || canManageChurchPortal()) {
+    return {
+      id: profile?.uid || "system_admin",
+      member_id: "SUPER_ADMIN",
+      full_name: profile?.displayName || profile?.name || "System Admin",
+      email: profile?.email || "",
+      phone: "",
+      address: "",
+      system_role: "super_admin",
+      dj_traffic_light: "green",
+      ministry_interests: [],
+      _isAdminFallback: true
+    };
+  }
+
+  return null;
 }
 
 // --- 1. CHURCH PORTAL INITIALIZER (GUEST & LOGGED-IN) ---
@@ -608,7 +672,7 @@ export async function initMemberSelfService(profile) {
 }
 
 async function refreshMemberSelfService() {
-  const discipleDoc = portalState.profile?.discipleDoc;
+  const discipleDoc = await resolveDiscipleForCurrentUser(portalState.profile);
   const unregBanner = document.getElementById("member-unregistered-notice");
   const selfServiceBody = document.getElementById("member-selfservice-body");
 
@@ -618,12 +682,15 @@ async function refreshMemberSelfService() {
     return;
   }
 
+  portalState.profile = { ...portalState.profile, discipleDoc };
   unregBanner?.classList.add("hidden");
   selfServiceBody?.classList.remove("hidden");
 
+  const isRealDiscipleRecord = Boolean(discipleDoc.id) && !discipleDoc._isAdminFallback;
+
   const [duties, blockouts, selectableRoles] = await Promise.all([
-    getMyAssignments(discipleDoc.id),
-    getMyUnavailability(discipleDoc.id),
+    isRealDiscipleRecord ? getMyAssignments(discipleDoc.id).catch(() => []) : Promise.resolve([]),
+    isRealDiscipleRecord ? getMyUnavailability(discipleDoc.id).catch(() => []) : Promise.resolve([]),
     fetchSelectableMinistryRoles()
   ]);
 
@@ -666,7 +733,6 @@ function renderMyInterestsChecklist(savedInterests = []) {
     return normalizedSaved.includes(target);
   };
 
-  // Ganti grid datar menjadi daftar terkelompok per departemen
   container.classList.remove("grid", "grid-cols-1", "sm:grid-cols-2");
   container.classList.add("space-y-3");
 
@@ -834,7 +900,7 @@ function bindMemberPortalEvents() {
   document.getElementById("form-my-blockout")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const discipleDoc = portalState.profile?.discipleDoc;
-    if (!discipleDoc) return;
+    if (!discipleDoc || discipleDoc._isAdminFallback) return;
 
     const fromDate = document.getElementById("my-blockout-from").value;
     const toDate = document.getElementById("my-blockout-to").value || fromDate;
@@ -868,7 +934,7 @@ function bindMemberPortalEvents() {
   document.getElementById("form-my-profile")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const discipleDoc = portalState.profile?.discipleDoc;
-    if (!discipleDoc) return;
+    if (!discipleDoc || discipleDoc._isAdminFallback) return;
 
     const phone = document.getElementById("my-phone-input").value.trim();
     const address = document.getElementById("my-address-input").value.trim();
