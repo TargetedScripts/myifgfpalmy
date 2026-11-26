@@ -68,6 +68,11 @@ function getDeptLabel(deptId) {
   return found?.name || deptId || "-";
 }
 
+function isUniversalRole(role) {
+  if (role?.is_universal === true) return true;
+  return /cuci piring|vacuum/i.test(role?.role_name || "");
+}
+
 function populateDepartmentSelects() {
   const activeDepts = masterState.departments.filter(d => d.is_active !== false);
   const optionsHtml = activeDepts
@@ -93,7 +98,6 @@ function ensureRoleManagementControlsUI() {
   const panelRoles = document.getElementById("panel-roles");
   if (!panelRoles) return;
 
-  // Tambahkan kolom Action di header tabel roles bila belum ada
   const theadRow = panelRoles.querySelector("table thead tr");
   if (theadRow && !document.getElementById("th-role-actions")) {
     const th = document.createElement("th");
@@ -103,7 +107,6 @@ function ensureRoleManagementControlsUI() {
     theadRow.appendChild(th);
   }
 
-  // Tambahkan toolbar pembersihan role Disabled & duplikat + seed Cuci Piring 1-3 & Vacuum
   if (!document.getElementById("roles-cleanup-toolbar")) {
     const tableWrap = panelRoles.querySelector("table")?.parentElement;
     if (tableWrap) {
@@ -173,7 +176,7 @@ function renderRolesTable() {
     const isActive = r.is_active !== false;
     const orderNum = Number(r.sort_order) || index + 1;
     const isVocal = VOCAL_GROUP_NAMES.includes(r.role_name);
-    const isUniversal = Boolean(r.is_universal);
+    const isUniversal = isUniversalRole(r);
 
     const deptSelectHtml = `
       <select
@@ -289,6 +292,7 @@ function renderDisciplesList() {
   if (badge) badge.textContent = `${filtered.length} disciples`;
 
   container.innerHTML = filtered.map(d => {
+    const interests = Array.isArray(d.ministry_interests) ? d.ministry_interests : [];
     const familyInfo = [
       d.spouse_name ? `Spouse: ${d.spouse_name}` : "",
       d.children_names ? `Children: ${d.children_names}` : "",
@@ -297,19 +301,80 @@ function renderDisciplesList() {
 
     return `
       <div class="bg-white p-3.5 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div class="space-y-0.5">
+        <div class="space-y-1">
           <p class="font-bold text-sm text-slate-900">
             ${d.full_name || "Unnamed"}
             ${d.nick_name ? `<span class="text-xs font-normal text-slate-500">(${d.nick_name})</span>` : ""}
           </p>
           <p class="text-xs text-slate-500">${d.email || "No email"} • ${d.phone || "No phone"} • <span class="font-semibold">${d.status || "Active"}</span></p>
           ${familyInfo ? `<p class="text-[11px] text-slate-600">${familyInfo}</p>` : ""}
+          ${interests.length > 0 ? `
+            <div class="flex flex-wrap gap-1 pt-0.5">
+              ${interests.map(roleName => `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-medium">${roleName}</span>`).join("")}
+            </div>
+          ` : ""}
         </div>
         <button
           type="button"
           onclick="window.editDiscipleModal('${d.id}')"
           class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 self-start sm:self-center shrink-0"
         >Edit</button>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderDiscipleInterestsChecklist(selectedInterests = []) {
+  const box = document.getElementById("disciple-ministry-interests-box");
+  if (!box) return;
+
+  const activeRoles = masterState.roles.filter(r => r.is_active !== false);
+  if (activeRoles.length === 0) {
+    box.innerHTML = `<p class="text-[11px] text-slate-500 col-span-full">No active roles in roles_reference.</p>`;
+    return;
+  }
+
+  const normalizedSelected = (Array.isArray(selectedInterests) ? selectedInterests : [])
+    .map(s => String(s || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  // Kelompokkan berdasarkan departemen sesuai urutan master
+  const byDept = new Map();
+  activeRoles.forEach(r => {
+    const deptName = getDeptLabel(r.department_id);
+    if (!byDept.has(deptName)) byDept.set(deptName, []);
+    byDept.get(deptName).push(r);
+  });
+
+  box.innerHTML = Array.from(byDept.entries()).map(([deptName, deptRoles]) => {
+    const itemsHtml = deptRoles.map(r => {
+      const rName = (r.role_name || "").trim();
+      const universal = isUniversalRole(r);
+      if (universal) {
+        return `
+          <label class="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-slate-100 border border-slate-200 text-[11px] text-slate-600 cursor-not-allowed select-none">
+            <span class="flex items-center gap-1.5 min-w-0">
+              <input type="checkbox" name="disciple-interest-cb" value="${rName}" checked disabled class="rounded border-slate-300" />
+              <span class="truncate">${rName}</span>
+            </span>
+            <span class="text-[9px] font-bold uppercase px-1 rounded bg-slate-200 text-slate-600 shrink-0">All</span>
+          </label>
+        `;
+      }
+
+      const isChecked = normalizedSelected.includes(rName.toLowerCase()) ? "checked" : "";
+      return `
+        <label class="flex items-center gap-1.5 px-2 py-1 rounded bg-white border border-slate-200 hover:border-slate-400 text-[11px] text-slate-800 cursor-pointer select-none">
+          <input type="checkbox" name="disciple-interest-cb" value="${rName}" ${isChecked} class="rounded border-slate-300 text-slate-900" />
+          <span class="truncate" title="${rName}">${rName}</span>
+        </label>
+      `;
+    }).join("");
+
+    return `
+      <div class="space-y-1.5">
+        <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">${deptName}</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">${itemsHtml}</div>
       </div>
     `;
   }).join("");
@@ -390,7 +455,7 @@ function ensureDiscipleDetailFieldsUI() {
         </div>
       </div>
 
-      <p class="font-bold text-[11px] uppercase tracking-wider text-slate-500 pt-1">Family, iCare & Ministry</p>
+      <p class="font-bold text-[11px] uppercase tracking-wider text-slate-500 pt-1">Family & iCare</p>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 min-w-0">
         <div class="min-w-0">
           <label class="block font-semibold text-slate-600">Marital Status</label>
@@ -406,16 +471,13 @@ function ensureDiscipleDetailFieldsUI() {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
-        <div class="min-w-0">
-          <label class="block font-semibold text-slate-600">Children Names</label>
-          <input type="text" id="disciple-children-names" placeholder="Nama anak-anak (pisahkan koma)" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
-        </div>
-        <div class="min-w-0">
-          <label class="block font-semibold text-slate-600">Ministry Interests</label>
-          <input type="text" id="disciple-ministry-interests" placeholder="Worship, Multimedia, Usher, ..." class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
-        </div>
+      <div class="min-w-0">
+        <label class="block font-semibold text-slate-600">Children Names</label>
+        <input type="text" id="disciple-children-names" placeholder="Nama anak-anak (pisahkan koma)" class="w-full min-w-0 px-2.5 py-1.5 border rounded-lg mt-1 bg-white" />
       </div>
+
+      <p class="font-bold text-[11px] uppercase tracking-wider text-slate-500 pt-1">Ministry Interests (Linked to Master Roles)</p>
+      <div id="disciple-ministry-interests-box" class="space-y-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl max-h-52 overflow-y-auto"></div>
 
       <p class="font-bold text-[11px] uppercase tracking-wider text-slate-500 pt-1">DJ Progress & Pastoral Notes</p>
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 min-w-0">
@@ -491,7 +553,6 @@ function bindMasterEvents() {
     alert("Master departments & roles seeded!");
   });
 
-  // Ensure Cuci Piring 1-3 & Vacuum under Usher & Facility
   document.getElementById("btn-ensure-shared-roles")?.addEventListener("click", async () => {
     const targetDeptId = masterState.departments.some(d => d.id === "usher_facility")
       ? "usher_facility"
@@ -533,12 +594,10 @@ function bindMasterEvents() {
     alert("Cuci Piring 1–3 & Vacuum siap di bawah Usher & Facility.");
   });
 
-  // Delete permanently all Disabled & duplicate roles
   document.getElementById("btn-purge-disabled-and-dups")?.addEventListener("click", async () => {
     const seenNames = new Set();
     const toDelete = [];
 
-    // Urutkan role aktif lebih dulu agar yang dipertahankan jika ada duplikat nama adalah versi aktif
     const orderedForDedup = [...masterState.roles].sort((a, b) => {
       const actA = a.is_active !== false ? 0 : 1;
       const actB = b.is_active !== false ? 0 : 1;
@@ -576,7 +635,6 @@ function bindMasterEvents() {
     alert(`${toDelete.length} role Disabled & duplikat telah dihapus permanen.`);
   });
 
-  // Quick Add Role inline form
   document.getElementById("form-quick-role")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const roleName = document.getElementById("quick-role-name").value.trim();
@@ -605,7 +663,6 @@ function bindMasterEvents() {
     await reloadMasterData();
   });
 
-  // Add Role modal form
   document.getElementById("form-role")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const roleName = document.getElementById("role-name").value.trim();
@@ -635,7 +692,6 @@ function bindMasterEvents() {
     await reloadMasterData();
   });
 
-  // Group Worship Leader + Singer 1-3 together in sequence
   document.getElementById("btn-group-vocal-order")?.addEventListener("click", () => {
     const vocalRows = [];
     const otherRows = [];
@@ -669,13 +725,11 @@ function bindMasterEvents() {
     renderRolesTable();
   });
 
-  // Save Order button -> persists numeric sort_order to Firestore
   document.getElementById("btn-save-role-order")?.addEventListener("click", async () => {
     await persistAllRoleOrders();
     alert("Role order saved (Number sort_order updated in Firestore).");
   });
 
-  // Disciples search & CSV import
   document.getElementById("search-disciple")?.addEventListener("input", renderDisciplesList);
 
   document.getElementById("btn-import-csv")?.addEventListener("click", () => {
@@ -698,10 +752,9 @@ function bindMasterEvents() {
     const id = getFieldVal("disciple-id") || null;
     const existing = id ? masterState.disciples.find(x => x.id === id) : null;
 
-    const rawInterests = getFieldVal("disciple-ministry-interests")
-      .split(",")
-      .map(s => s.trim())
-      .filter(Boolean);
+    const selectedInterests = Array.from(
+      document.querySelectorAll('input[name="disciple-interest-cb"]:checked')
+    ).map(cb => cb.value.trim()).filter(Boolean);
 
     await saveDisciple(id, {
       member_id: getFieldVal("disciple-member-id"),
@@ -719,7 +772,7 @@ function bindMasterEvents() {
       spouse_name: getFieldVal("disciple-spouse-name"),
       children_names: getFieldVal("disciple-children-names"),
       in_icare: getFieldVal("disciple-in-icare"),
-      ministry_interests: rawInterests,
+      ministry_interests: selectedInterests,
       pastoral_notes: getFieldVal("disciple-pastoral-notes"),
       status: getFieldVal("disciple-status") || "Active",
       system_role: getFieldVal("disciple-sysrole") || "member",
@@ -802,6 +855,7 @@ window.openNewDiscipleModal = () => {
   setFieldVal("disciple-dj-grow", "Not Started");
   setFieldVal("disciple-dj-serve", "Not Started");
   setFieldVal("disciple-dj-lead", "Not Started");
+  renderDiscipleInterestsChecklist([]);
   document.getElementById("modal-disciple").classList.remove("hidden");
 };
 
@@ -809,10 +863,6 @@ window.editDiscipleModal = (id) => {
   const d = masterState.disciples.find(x => x.id === id);
   if (!d) return;
   ensureDiscipleDetailFieldsUI();
-
-  const interestsStr = Array.isArray(d.ministry_interests)
-    ? d.ministry_interests.join(", ")
-    : (d.ministry_interests || "");
 
   document.getElementById("modal-disciple-title").textContent = "Edit Disciple";
   setFieldVal("disciple-id", d.id);
@@ -839,7 +889,7 @@ window.editDiscipleModal = (id) => {
   setFieldVal("disciple-spouse-name", d.spouse_name || "");
   setFieldVal("disciple-children-names", d.children_names || "");
   setFieldVal("disciple-in-icare", d.in_icare || "");
-  setFieldVal("disciple-ministry-interests", interestsStr);
+  renderDiscipleInterestsChecklist(d.ministry_interests || []);
   setFieldVal("disciple-pastoral-notes", d.pastoral_notes || "");
 
   setFieldVal("disciple-dj-come", d.dj_progress?.come || "Not Started");
