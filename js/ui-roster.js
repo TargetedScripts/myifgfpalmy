@@ -84,6 +84,11 @@ function normalizeEmailList(val) {
     .filter(Boolean);
 }
 
+function isLeadershipRole(role) {
+  const name = (role?.role_name || role?.name || "").toString().trim().toLowerCase();
+  return name.startsWith("head of dept") || name.startsWith("lead of dept");
+}
+
 function resolveUserAccess() {
   const email = (
     rosterState.currentUserProfile?.email ||
@@ -101,6 +106,7 @@ function resolveUserAccess() {
     rosterState.currentUserProfile?.system_role ||
     rosterState.currentUserProfile?.discipleDoc?.system_role ||
     rosterState.currentUserProfile?.role ||
+    rosterState.currentUserProfile?.accessLevel ||
     ""
   )
     .toString()
@@ -121,11 +127,24 @@ function getVisibleDepartments() {
   if (rosterState.isGlobalAdmin) return activeDepts;
 
   const myEmail = rosterState.currentUserEmail;
-  if (!myEmail) return [];
+  const myInterests = Array.isArray(rosterState.currentUserProfile?.discipleDoc?.ministry_interests)
+    ? rosterState.currentUserProfile.discipleDoc.ministry_interests.map(i =>
+        String(i || "").trim().toLowerCase()
+      )
+    : [];
 
   return activeDepts.filter(d => {
     const leads = normalizeEmailList(d.lead_emails || d.lead_email || d.head_email);
-    return leads.includes(myEmail);
+    if (myEmail && leads.includes(myEmail)) return true;
+
+    const deptNameLower = String(d.name || "").trim().toLowerCase();
+    if (!deptNameLower) return false;
+
+    return myInterests.some(
+      item =>
+        (item.startsWith("head of dept") || item.startsWith("lead of dept")) &&
+        item.includes(deptNameLower)
+    );
   });
 }
 
@@ -264,7 +283,9 @@ async function refreshRosterContext() {
     (a.name || "").localeCompare(b.name || "")
   );
   rosterState.roles = sortRolesCustom(
-    roles.filter(r => r.active !== false && r.is_active !== false)
+    roles.filter(
+      r => r.active !== false && r.is_active !== false && !isLeadershipRole(r)
+    )
   );
   rosterState.disciples = disciples.filter(d => (d.status || "Active") === "Active");
   rosterState.unavailability = unavail;
