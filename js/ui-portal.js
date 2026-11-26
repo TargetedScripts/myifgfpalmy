@@ -33,6 +33,36 @@ const DEFAULT_CHURCH_PROFILE = {
   website_url: "https://ifgfpalmy.org"
 };
 
+function isExcludedUniversalTask(roleName = "") {
+  const n = String(roleName || "").toLowerCase();
+  return (
+    n.includes("cuci piring") ||
+    n.includes("dishwash") ||
+    n.includes("dish wash") ||
+    n.includes("dishes") ||
+    n.includes("vacuum")
+  );
+}
+
+async function fetchSelectableMinistryRoles() {
+  try {
+    const snap = await getDocs(collection(db, "roles"));
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(r => r.active !== false && r.is_active !== false)
+      .filter(r => !isExcludedUniversalTask(r.role_name || r.name || ""))
+      .sort((a, b) => {
+        const orderA = Number.isFinite(Number(a.sort_order ?? a.order)) ? Number(a.sort_order ?? a.order) : 999;
+        const orderB = Number.isFinite(Number(b.sort_order ?? b.order)) ? Number(b.sort_order ?? b.order) : 999;
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.role_name || a.name || "").localeCompare(String(b.role_name || b.name || ""));
+      });
+  } catch (err) {
+    console.warn("fetchSelectableMinistryRoles fallback:", err);
+    return [];
+  }
+}
+
 async function fetchChurchProfile() {
   try {
     const snap = await getDoc(doc(db, "church_profile", "ifgf_palmy"));
@@ -107,6 +137,7 @@ let portalState = {
   churchProfile: { ...DEFAULT_CHURCH_PROFILE },
   announcements: [],
   snapshot: { activeDisciples: 0, totalDisciples: 0, departmentsCount: 0, rolesCount: 0 },
+  selectableRoles: [],
   months: [],
   weeks: [],
   reflections: [],
@@ -572,9 +603,10 @@ async function refreshMemberSelfService() {
   unregBanner?.classList.add("hidden");
   selfServiceBody?.classList.remove("hidden");
 
-  const [duties, blockouts] = await Promise.all([
+  const [duties, blockouts, selectableRoles] = await Promise.all([
     getMyAssignments(discipleDoc.id),
-    getMyUnavailability(discipleDoc.id)
+    getMyUnavailability(discipleDoc.id),
+    fetchSelectableMinistryRoles()
   ]);
 
   const todayISO = getAucklandTodayISO();
@@ -584,14 +616,52 @@ async function refreshMemberSelfService() {
   portalState.myBlockouts = blockouts
     .filter(b => (b.end_date || b.start_date || "") >= todayISO)
     .sort((a, b) => String(a.start_date || "").localeCompare(String(b.start_date || "")));
+  portalState.selectableRoles = selectableRoles;
 
   renderMyProfileHeader(discipleDoc);
   document.getElementById("my-phone-input").value = discipleDoc.phone || "";
   document.getElementById("my-address-input").value = discipleDoc.address || "";
-  document.getElementById("my-interests-input").value = (discipleDoc.ministry_interests || []).join(", ");
+  renderMyInterestsChecklist(discipleDoc.ministry_interests || []);
 
   renderMyDuties();
   renderMyBlockouts();
+}
+
+function renderMyInterestsChecklist(savedInterests = []) {
+  const container = document.getElementById("my-interests-checklist");
+  if (!container) return;
+
+  const roles = portalState.selectableRoles;
+  if (!roles || roles.length === 0) {
+    container.innerHTML = `<p class="text-[11px] text-slate-500 col-span-full">No ministry roles available yet.</p>`;
+    return;
+  }
+
+  const normalizedSaved = (Array.isArray(savedInterests) ? savedInterests : [])
+    .map(s => String(s || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  const isRoleSelected = (roleName) => {
+    const target = roleName.toLowerCase();
+    return normalizedSaved.some(saved => {
+      if (saved === target) return true;
+      if (target === "drummer" && saved === "drum") return true;
+      if (target === "multi media" && saved.includes("multimedia")) return true;
+      if (target === "sound system" && saved.includes("sound")) return true;
+      return false;
+    });
+  };
+
+  container.innerHTML = roles.map(r => {
+    const roleName = (r.role_name || r.name || "").trim();
+    const checked = isRoleSelected(roleName) ? "checked" : "";
+    return `
+      <label class="flex items-center gap-2 px-2.5 py-1.5 bg-white rounded-lg border border-slate-200 hover:border-slate-400 cursor-pointer select-none">
+        <input type="checkbox" name="my-interest-role" value="${esc(roleName)}" ${checked} class="rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
+        <span class="text-xs font-medium text-slate-800 truncate" title="${esc(roleName)}">${esc(roleName)}</span>
+      </label>
+    `;
+  }).join("");
 }
 
 function renderMyProfileHeader(discipleDoc) {
@@ -756,12 +826,9 @@ function bindMemberPortalEvents() {
 
     const phone = document.getElementById("my-phone-input").value.trim();
     const address = document.getElementById("my-address-input").value.trim();
-    const interests = document
-      .getElementById("my-interests-input")
-      .value
-      .split(",")
-      .map(s => s.trim())
-      .filter(Boolean);
+    const interests = Array.from(
+      document.querySelectorAll('input[name="my-interest-role"]:checked')
+    ).map(cb => cb.value.trim()).filter(Boolean);
 
     const btn = e.target.querySelector('button[type="submit"]');
     const origText = btn?.textContent || "Save Changes";
