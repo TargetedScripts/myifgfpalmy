@@ -177,8 +177,12 @@
                   </div>
                   <div>
                     <label class="font-semibold text-slate-600">Ministry Interests (comma separated)</label>
-                    <input type="text" id="my-interests-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-0.5" />
-                  </div>
+                    <div>
+                    <label class="font-semibold text-slate-600 block mb-1.5">Ministry Interests (Select roles you are interested in)</label>
+                    <div id="my-interests-checklist" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-52 overflow-y-auto p-2.5 bg-slate-50 border border-slate-300 rounded-lg">
+                      <p class="text-slate-400 text-[11px]">Loading ministry roles...</p>
+                    </div>
+                  </div>                  </div>
                   <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded-lg">Save Changes</button>
                 </form>
               </div>
