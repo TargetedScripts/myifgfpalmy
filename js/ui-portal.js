@@ -33,7 +33,7 @@ const DEFAULT_CHURCH_PROFILE = {
   website_url: "https://ifgfpalmy.org"
 };
 
-function isExcludedUniversalTask(roleName = "") {
+function isUniversalSharedTask(roleName = "") {
   const n = String(roleName || "").toLowerCase();
   return (
     n.includes("cuci piring") ||
@@ -56,9 +56,14 @@ async function fetchSelectableMinistryRoles() {
     return snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(r => r.active !== false && r.is_active !== false && r.enabled !== false)
-      .map(r => ({ ...r, _label: extractRoleLabel(r) }))
-      .filter(r => r._label && !isExcludedUniversalTask(r._label))
+      .map(r => ({
+        ...r,
+        _label: extractRoleLabel(r),
+        _isUniversal: isUniversalSharedTask(extractRoleLabel(r))
+      }))
+      .filter(r => r._label)
       .sort((a, b) => {
+        if (a._isUniversal !== b._isUniversal) return a._isUniversal ? 1 : -1;
         const orderA = Number.isFinite(Number(a.sort_order ?? a.order ?? a.display_order))
           ? Number(a.sort_order ?? a.order ?? a.display_order)
           : 999;
@@ -670,6 +675,20 @@ function renderMyInterestsChecklist(savedInterests = []) {
 
   container.innerHTML = roles.map(r => {
     const roleName = r._label || extractRoleLabel(r);
+    const isUniversal = Boolean(r._isUniversal || isUniversalSharedTask(roleName));
+
+    if (isUniversal) {
+      return `
+        <label class="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 cursor-not-allowed select-none opacity-85" title="Shared responsibility for all members">
+          <span class="flex items-center gap-2 min-w-0">
+            <input type="checkbox" name="my-interest-role" value="${esc(roleName)}" checked disabled class="rounded border-slate-300 text-slate-500 cursor-not-allowed" />
+            <span class="text-xs font-medium text-slate-600 truncate">${esc(roleName)}</span>
+          </span>
+          <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded shrink-0">All</span>
+        </label>
+      `;
+    }
+
     const checked = isRoleSelected(roleName) ? "checked" : "";
     return `
       <label class="flex items-center gap-2 px-2.5 py-1.5 bg-white rounded-lg border border-slate-200 hover:border-slate-400 cursor-pointer select-none">
