@@ -4,6 +4,7 @@ import {
   saveDepartment,
   getRolesReference,
   saveRoleReference,
+  deleteRoleReference,
   toggleRoleActive,
   getDisciples,
   saveDisciple,
@@ -27,6 +28,7 @@ let masterState = {
 
 export async function initMasterApp(userProfile) {
   masterState.currentUser = userProfile;
+  ensureRoleManagementControlsUI();
   ensureDiscipleDetailFieldsUI();
   bindMasterEvents();
   await reloadMasterData();
@@ -87,6 +89,54 @@ function populateDepartmentSelects() {
   }
 }
 
+function ensureRoleManagementControlsUI() {
+  const panelRoles = document.getElementById("panel-roles");
+  if (!panelRoles) return;
+
+  // Tambahkan kolom Action di header tabel roles bila belum ada
+  const theadRow = panelRoles.querySelector("table thead tr");
+  if (theadRow && !document.getElementById("th-role-actions")) {
+    const th = document.createElement("th");
+    th.id = "th-role-actions";
+    th.className = "p-3 text-right";
+    th.textContent = "Actions";
+    theadRow.appendChild(th);
+  }
+
+  // Tambahkan toolbar pembersihan role Disabled & duplikat + seed Cuci Piring 1-3 & Vacuum
+  if (!document.getElementById("roles-cleanup-toolbar")) {
+    const tableWrap = panelRoles.querySelector("table")?.parentElement;
+    if (tableWrap) {
+      const bar = document.createElement("div");
+      bar.id = "roles-cleanup-toolbar";
+      bar.className = "bg-amber-50/70 border border-amber-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs";
+      bar.innerHTML = `
+        <div class="text-slate-700">
+          <strong class="text-slate-900">Master Role Cleanup:</strong>
+          Pindahkan role ke departemen mana pun lewat dropdown Department, atau hapus permanen role Disabled & duplikat.
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            id="btn-ensure-shared-roles"
+            class="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-semibold rounded-lg"
+          >
+            + Ensure Cuci Piring 1–3 & Vacuum (Usher & Facility)
+          </button>
+          <button
+            type="button"
+            id="btn-purge-disabled-and-dups"
+            class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg"
+          >
+            🗑 Delete All Disabled & Duplicate Roles
+          </button>
+        </div>
+      `;
+      panelRoles.insertBefore(bar, tableWrap);
+    }
+  }
+}
+
 function renderDepartmentsTable() {
   const tbody = document.getElementById("tbody-departments");
   if (!tbody) return;
@@ -117,10 +167,24 @@ function renderRolesTable() {
   const tbody = document.getElementById("tbody-roles");
   if (!tbody) return;
 
+  const deptOptions = masterState.departments.filter(d => d.is_active !== false);
+
   tbody.innerHTML = masterState.roles.map((r, index) => {
     const isActive = r.is_active !== false;
     const orderNum = Number(r.sort_order) || index + 1;
     const isVocal = VOCAL_GROUP_NAMES.includes(r.role_name);
+    const isUniversal = Boolean(r.is_universal);
+
+    const deptSelectHtml = `
+      <select
+        onchange="window.changeRoleDepartment('${r.id}', this.value)"
+        class="px-2 py-1 text-xs border border-slate-300 rounded-lg bg-white text-slate-800"
+      >
+        ${deptOptions.map(d => `
+          <option value="${d.id}" ${d.id === r.department_id ? "selected" : ""}>${d.name}</option>
+        `).join("")}
+      </select>
+    `;
 
     return `
       <tr class="border-b border-slate-100 last:border-b-0 ${isVocal ? "bg-amber-50/40" : ""}">
@@ -153,8 +217,9 @@ function renderRolesTable() {
         <td class="p-3 font-semibold text-slate-900">
           ${r.role_name}
           ${isVocal ? `<span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-bold">Vocal</span>` : ""}
+          ${isUniversal ? `<span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-bold">Shared</span>` : ""}
         </td>
-        <td class="p-3 text-slate-700">${getDeptLabel(r.department_id)}</td>
+        <td class="p-3 text-slate-700">${deptSelectHtml}</td>
         <td class="p-3">
           <span class="text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700">DJ ${r.min_dj_level || "Come"}</span>
         </td>
@@ -171,6 +236,13 @@ function renderRolesTable() {
                 : "bg-red-100 text-red-700 hover:bg-red-200"
             }"
           >${isActive ? "Active" : "Disabled"}</button>
+        </td>
+        <td class="p-3 text-right whitespace-nowrap">
+          <button
+            type="button"
+            onclick="window.deleteRolePermanent('${r.id}', '${(r.role_name || "").replace(/'/g, "\\'")}')"
+            class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+          >Delete</button>
         </td>
       </tr>
     `;
@@ -252,7 +324,6 @@ function ensureDiscipleDetailFieldsUI() {
     modal.classList.remove("overflow-hidden");
     modal.classList.add("overflow-y-auto", "p-4");
 
-    // Perlebar panel/card di dalam modal jika ada
     const panel = modal.querySelector(":scope > div");
     if (panel) {
       panel.style.maxWidth = "44rem";
@@ -262,7 +333,6 @@ function ensureDiscipleDetailFieldsUI() {
     }
   }
 
-  // Cegah form menjadi grid/flex yang menarik tinggi tombol ke bawah
   form.style.display = "block";
   form.style.width = "100%";
   form.style.maxWidth = "100%";
@@ -376,7 +446,6 @@ function ensureDiscipleDetailFieldsUI() {
     form.appendChild(wrapper);
   }
 
-  // Rapikan tombol Save Disciple & Cancel di footer normal di bagian paling bawah form
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) {
     let footer = document.getElementById("disciple-modal-footer-actions");
@@ -422,6 +491,91 @@ function bindMasterEvents() {
     alert("Master departments & roles seeded!");
   });
 
+  // Ensure Cuci Piring 1-3 & Vacuum under Usher & Facility
+  document.getElementById("btn-ensure-shared-roles")?.addEventListener("click", async () => {
+    const targetDeptId = masterState.departments.some(d => d.id === "usher_facility")
+      ? "usher_facility"
+      : (masterState.departments[0]?.id || "usher_facility");
+    const targetDeptName = getDeptLabel(targetDeptId);
+
+    const sharedItems = [
+      "Cuci Piring 1",
+      "Cuci Piring 2",
+      "Cuci Piring 3",
+      "Vacuum"
+    ];
+
+    let maxOrder = masterState.roles.reduce(
+      (max, r) => Math.max(max, Number(r.sort_order) || 0),
+      0
+    );
+
+    for (const label of sharedItems) {
+      const exists = masterState.roles.some(
+        r => (r.role_name || "").trim().toLowerCase() === label.toLowerCase()
+      );
+      if (!exists) {
+        maxOrder += 1;
+        await saveRoleReference(null, {
+          role_name: label,
+          department_id: targetDeptId,
+          dept_name: targetDeptName,
+          min_dj_level: "Come",
+          can_reimburse: false,
+          is_universal: true,
+          sort_order: maxOrder,
+          is_active: true
+        });
+      }
+    }
+
+    await reloadMasterData();
+    alert("Cuci Piring 1–3 & Vacuum siap di bawah Usher & Facility.");
+  });
+
+  // Delete permanently all Disabled & duplicate roles
+  document.getElementById("btn-purge-disabled-and-dups")?.addEventListener("click", async () => {
+    const seenNames = new Set();
+    const toDelete = [];
+
+    // Urutkan role aktif lebih dulu agar yang dipertahankan jika ada duplikat nama adalah versi aktif
+    const orderedForDedup = [...masterState.roles].sort((a, b) => {
+      const actA = a.is_active !== false ? 0 : 1;
+      const actB = b.is_active !== false ? 0 : 1;
+      if (actA !== actB) return actA - actB;
+      return (Number(a.sort_order) || 999) - (Number(b.sort_order) || 999);
+    });
+
+    for (const r of orderedForDedup) {
+      const normName = (r.role_name || "").trim().toLowerCase();
+      const isDisabled = r.is_active === false;
+      const isDuplicate = normName && seenNames.has(normName);
+
+      if (isDisabled || isDuplicate) {
+        toDelete.push(r);
+      } else if (normName) {
+        seenNames.add(normName);
+      }
+    }
+
+    if (toDelete.length === 0) {
+      alert("Tidak ada role Disabled atau duplikat yang perlu dihapus.");
+      return;
+    }
+
+    const previewNames = toDelete.map(x => `• ${x.role_name} (${x.is_active === false ? "Disabled" : "Duplicate"})`).join("\n");
+    if (!confirm(`Hapus PERMANEN ${toDelete.length} role berikut dari database?\n\n${previewNames}`)) {
+      return;
+    }
+
+    for (const item of toDelete) {
+      await deleteRoleReference(item.id);
+    }
+
+    await reloadMasterData();
+    alert(`${toDelete.length} role Disabled & duplikat telah dihapus permanen.`);
+  });
+
   // Quick Add Role inline form
   document.getElementById("form-quick-role")?.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -439,8 +593,10 @@ function bindMasterEvents() {
     await saveRoleReference(null, {
       role_name: roleName,
       department_id: deptId,
+      dept_name: getDeptLabel(deptId),
       min_dj_level: djLevel,
       can_reimburse: canReimburse,
+      is_universal: /cuci piring|vacuum/i.test(roleName),
       sort_order: Number(maxOrder + 1),
       is_active: true
     });
@@ -466,8 +622,10 @@ function bindMasterEvents() {
     await saveRoleReference(null, {
       role_name: roleName,
       department_id: deptId,
+      dept_name: getDeptLabel(deptId),
       min_dj_level: djLevel,
       can_reimburse: canReimburse,
+      is_universal: /cuci piring|vacuum/i.test(roleName),
       sort_order: Number(maxOrder + 1),
       is_active: true
     });
@@ -581,6 +739,22 @@ function bindMasterEvents() {
     await reloadMasterData();
   });
 }
+
+window.changeRoleDepartment = async (roleId, newDeptId) => {
+  if (!roleId || !newDeptId) return;
+  await saveRoleReference(roleId, {
+    department_id: newDeptId,
+    dept_name: getDeptLabel(newDeptId)
+  });
+  await reloadMasterData();
+};
+
+window.deleteRolePermanent = async (roleId, roleName) => {
+  if (!roleId) return;
+  if (!confirm(`Hapus PERMANEN role "${roleName}" dari roles_reference?`)) return;
+  await deleteRoleReference(roleId);
+  await reloadMasterData();
+};
 
 window.moveRoleRow = (index, delta) => {
   const target = index + delta;
