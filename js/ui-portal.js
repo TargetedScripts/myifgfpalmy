@@ -236,6 +236,9 @@ function bindPublicPortalEvents() {
         portalState.churchProfile = { ...portalState.churchProfile, ...payload };
         document.getElementById("church-profile-editor")?.classList.add("hidden");
         renderPublicFeed();
+        if (portalState.profile?.discipleDoc) {
+          renderMyDuties();
+        }
       } catch (err) {
         alert("Failed to save church profile: " + (err?.message || err));
       }
@@ -569,57 +572,113 @@ async function refreshMemberSelfService() {
   unregBanner?.classList.add("hidden");
   selfServiceBody?.classList.remove("hidden");
 
-  document.getElementById("my-profile-name").textContent = discipleDoc.full_name || "";
-  document.getElementById("my-profile-meta").textContent =
-    `${discipleDoc.member_id || "Member"} • ${discipleDoc.email} • DJ Status: ${(discipleDoc.dj_traffic_light || "red").toUpperCase()}`;
-  document.getElementById("my-phone-input").value = discipleDoc.phone || "";
-  document.getElementById("my-address-input").value = discipleDoc.address || "";
-  document.getElementById("my-interests-input").value = (discipleDoc.ministry_interests || []).join(", ");
-
   const [duties, blockouts] = await Promise.all([
     getMyAssignments(discipleDoc.id),
     getMyUnavailability(discipleDoc.id)
   ]);
-  portalState.myDuties = duties;
-  portalState.myBlockouts = blockouts;
+
+  const todayISO = getAucklandTodayISO();
+  portalState.myDuties = duties.sort((a, b) =>
+    String(a.service_date || "").localeCompare(String(b.service_date || ""))
+  );
+  portalState.myBlockouts = blockouts
+    .filter(b => (b.end_date || b.start_date || "") >= todayISO)
+    .sort((a, b) => String(a.start_date || "").localeCompare(String(b.start_date || "")));
+
+  renderMyProfileHeader(discipleDoc);
+  document.getElementById("my-phone-input").value = discipleDoc.phone || "";
+  document.getElementById("my-address-input").value = discipleDoc.address || "";
+  document.getElementById("my-interests-input").value = (discipleDoc.ministry_interests || []).join(", ");
 
   renderMyDuties();
   renderMyBlockouts();
+}
+
+function renderMyProfileHeader(discipleDoc) {
+  const nameEl = document.getElementById("my-profile-name");
+  const metaEl = document.getElementById("my-profile-meta");
+  if (!nameEl || !metaEl) return;
+
+  const djColor = (discipleDoc.dj_traffic_light || "red").toLowerCase();
+  const djBadgeClass =
+    djColor === "green"
+      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+      : djColor === "amber"
+      ? "bg-amber-100 text-amber-800 border-amber-200"
+      : "bg-red-100 text-red-800 border-red-200";
+
+  const confirmedCount = portalState.myDuties.filter(d => d.status === "Confirmed").length;
+
+  nameEl.textContent = discipleDoc.full_name || "Member";
+  metaEl.innerHTML = `
+    <span class="inline-flex flex-wrap items-center gap-2 mt-1">
+      <span class="font-mono font-semibold text-slate-700">${esc(discipleDoc.member_id || "Member")}</span>
+      <span>•</span>
+      <span>${esc(discipleDoc.email || "")}</span>
+      <span>•</span>
+      <span class="px-2 py-0.5 border rounded-full font-bold text-[10px] ${djBadgeClass}">DJ: ${esc(djColor.toUpperCase())}</span>
+      <span>•</span>
+      <span class="font-semibold text-slate-700">Upcoming Duties: ${portalState.myDuties.length} (${confirmedCount} Confirmed)</span>
+    </span>
+  `;
 }
 
 function renderMyDuties() {
   const container = document.getElementById("my-duties-list");
   if (!container) return;
 
+  const serviceTime = portalState.churchProfile?.service_time || "4:30 PM";
+
   if (portalState.myDuties.length === 0) {
-    container.innerHTML = `<div class="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500">You have no upcoming ministry roster assignments yet.</div>`;
+    container.innerHTML = `
+      <div class="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-500">
+        You have no upcoming ministry roster assignments yet.
+      </div>
+    `;
     return;
   }
 
   container.innerHTML = portalState.myDuties.map(d => {
     const insight = portalState.weeks.find(w => w.service_date === d.service_date);
+    const status = d.status || "Pending";
     const statusStyle =
-      d.status === "Confirmed"
-        ? "badge-green"
-        : d.status === "Declined"
-        ? "badge-red"
-        : "badge-amber";
+      status === "Confirmed"
+        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+        : status === "Declined"
+        ? "bg-red-100 text-red-800 border border-red-200"
+        : "bg-amber-100 text-amber-800 border border-amber-200";
+
+    const confirmBtnClass =
+      status === "Confirmed"
+        ? "bg-emerald-700 text-white ring-2 ring-emerald-300"
+        : "bg-emerald-600 hover:bg-emerald-700 text-white";
+
+    const declineBtnClass =
+      status === "Declined"
+        ? "bg-red-600 text-white ring-2 ring-red-200"
+        : "bg-slate-100 hover:bg-red-100 text-slate-700 hover:text-red-700";
 
     return `
-      <div class="p-3.5 bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-mono font-bold px-2 py-0.5 bg-slate-900 text-white rounded">${d.service_date}</span>
-            <span class="text-xs font-bold text-slate-900">${d.role_name}</span>
-            <span class="text-[11px] px-2 py-0.5 rounded-full font-semibold ${statusStyle}">${d.status}</span>
+      <div class="p-4 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="space-y-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-mono font-bold px-2.5 py-0.5 bg-slate-900 text-amber-400 rounded">${esc(d.service_date)}</span>
+            <span class="text-[11px] font-semibold text-slate-500">${esc(serviceTime)}</span>
+            <span class="text-xs font-bold text-slate-900">${esc(d.role_name)}</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${statusStyle}">${esc(status)}</span>
           </div>
-          ${insight ? `<p class="text-xs text-slate-500 mt-1">📖 Theme: ${insight.title}</p>` : ""}
+          ${d.department_name ? `<p class="text-[11px] text-slate-500">Department: <strong class="text-slate-700">${esc(d.department_name)}</strong></p>` : ""}
+          ${insight ? `
+            <p class="text-xs text-slate-600">
+              📖 <strong>${esc(insight.title)}</strong>${insight.speaker ? ` • 🎙️ ${esc(insight.speaker)}` : ""}
+            </p>
+          ` : ""}
         </div>
-        <div class="flex items-center gap-2 self-end sm:self-center">
-          <button onclick="window.respondMyDuty('${d.id}', 'Confirmed')" class="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg">
+        <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
+          <button type="button" onclick="window.respondMyDuty('${esc(d.id)}', 'Confirmed')" class="px-3 py-1.5 text-xs font-bold rounded-lg transition ${confirmBtnClass}">
             ✅ Confirm
           </button>
-          <button onclick="window.respondMyDuty('${d.id}', 'Declined')" class="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-red-100 text-slate-700 hover:text-red-700 rounded-lg">
+          <button type="button" onclick="window.respondMyDuty('${esc(d.id)}', 'Declined')" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition ${declineBtnClass}">
             ❌ Decline
           </button>
         </div>
@@ -637,17 +696,17 @@ function renderMyBlockouts() {
   if (!container) return;
 
   if (portalState.myBlockouts.length === 0) {
-    container.innerHTML = `<p class="text-xs text-slate-500">No unavailable dates set.</p>`;
+    container.innerHTML = `<p class="text-xs text-slate-500">No upcoming unavailable dates set.</p>`;
     return;
   }
 
   container.innerHTML = portalState.myBlockouts.map(b => `
     <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between gap-2 text-xs">
       <div>
-        <span class="font-mono font-bold text-red-700">${formatDateRangeLabel(b.start_date, b.end_date)}</span>
-        ${b.reason ? `<span class="text-slate-600 ml-1.5">— ${b.reason}</span>` : ""}
+        <span class="font-mono font-bold text-red-700">${esc(formatDateRangeLabel(b.start_date, b.end_date))}</span>
+        ${b.reason ? `<span class="text-slate-600 ml-1.5">— ${esc(b.reason)}</span>` : ""}
       </div>
-      <button onclick="window.deleteMyBlockout('${b.id}')" class="text-red-600 hover:underline font-medium shrink-0">Remove</button>
+      <button type="button" onclick="window.deleteMyBlockout('${esc(b.id)}')" class="text-red-600 hover:underline font-medium shrink-0">Remove</button>
     </div>
   `).join("");
 }
@@ -671,15 +730,23 @@ function bindMemberPortalEvents() {
       return;
     }
 
-    await addUnavailability({
-      disciple_id: discipleDoc.id,
-      disciple_name: discipleDoc.full_name,
-      start_date: fromDate,
-      end_date: toDate,
-      reason
-    });
-    e.target.reset();
-    await refreshMemberSelfService();
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    try {
+      await addUnavailability({
+        disciple_id: discipleDoc.id,
+        disciple_name: discipleDoc.full_name,
+        start_date: fromDate,
+        end_date: toDate,
+        reason
+      });
+      e.target.reset();
+      await refreshMemberSelfService();
+    } catch (err) {
+      alert("Failed to save unavailable date: " + (err?.message || err));
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   });
 
   document.getElementById("form-my-profile")?.addEventListener("submit", async (e) => {
@@ -691,28 +758,54 @@ function bindMemberPortalEvents() {
     const address = document.getElementById("my-address-input").value.trim();
     const interests = document
       .getElementById("my-interests-input")
-      .value.split(",")
+      .value
+      .split(",")
       .map(s => s.trim())
       .filter(Boolean);
 
-    await updateMyContactProfile(discipleDoc.id, {
-      phone,
-      address,
-      ministry_interests: interests
-    });
-    portalState.profile.discipleDoc.phone = phone;
-    portalState.profile.discipleDoc.address = address;
-    portalState.profile.discipleDoc.ministry_interests = interests;
-    alert("Your profile has been updated!");
+    const btn = e.target.querySelector('button[type="submit"]');
+    const origText = btn?.textContent || "Save Changes";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+    }
+
+    try {
+      await updateMyContactProfile(discipleDoc.id, {
+        phone,
+        address,
+        ministry_interests: interests
+      });
+      portalState.profile.discipleDoc.phone = phone;
+      portalState.profile.discipleDoc.address = address;
+      portalState.profile.discipleDoc.ministry_interests = interests;
+      if (btn) btn.textContent = "✅ Saved!";
+      setTimeout(() => {
+        if (btn) btn.textContent = origText;
+      }, 2000);
+    } catch (err) {
+      if (btn) btn.textContent = origText;
+      alert("Failed to update profile: " + (err?.message || err));
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   });
 }
 
 window.respondMyDuty = async (assignmentId, status) => {
-  await respondToAssignment(assignmentId, status);
-  await refreshMemberSelfService();
+  try {
+    await respondToAssignment(assignmentId, status);
+    await refreshMemberSelfService();
+  } catch (err) {
+    alert("Failed to update duty status: " + (err?.message || err));
+  }
 };
 
 window.deleteMyBlockout = async (id) => {
-  await deleteUnavailability(id);
-  await refreshMemberSelfService();
+  try {
+    await deleteUnavailability(id);
+    await refreshMemberSelfService();
+  } catch (err) {
+    alert("Failed to remove unavailable date: " + (err?.message || err));
+  }
 };
