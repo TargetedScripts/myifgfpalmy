@@ -45,34 +45,92 @@ function isUniversalSharedTask(roleName = "") {
 }
 
 function extractRoleLabel(r = {}) {
-  return String(
-    r.role_name ?? r.name ?? r.title ?? r.role ?? r.label ?? ""
-  ).trim();
+  const direct =
+    r.role_name ?? r.name ?? r.title ?? r.role ?? r.label ?? r.nama ?? r.roleName;
+  if (direct) return String(direct).trim();
+
+  const skipKeys = new Set([
+    "id",
+    "church_id",
+    "department_id",
+    "dept_id",
+    "created_at",
+    "updated_at",
+    "created_at_iso"
+  ]);
+  for (const [k, v] of Object.entries(r)) {
+    if (!skipKeys.has(k) && typeof v === "string" && v.trim().length > 0 && v.trim().length < 60) {
+      return v.trim();
+    }
+  }
+  return "";
 }
 
 async function fetchSelectableMinistryRoles() {
   try {
-    const snap = await getDocs(collection(db, "roles"));
-    return snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(r => r.active !== false && r.is_active !== false && r.enabled !== false)
-      .map(r => ({
-        ...r,
-        _label: extractRoleLabel(r),
-        _isUniversal: isUniversalSharedTask(extractRoleLabel(r))
-      }))
-      .filter(r => r._label)
-      .sort((a, b) => {
-        if (a._isUniversal !== b._isUniversal) return a._isUniversal ? 1 : -1;
-        const orderA = Number.isFinite(Number(a.sort_order ?? a.order ?? a.display_order))
-          ? Number(a.sort_order ?? a.order ?? a.display_order)
-          : 999;
-        const orderB = Number.isFinite(Number(b.sort_order ?? b.order ?? b.display_order))
-          ? Number(b.sort_order ?? b.order ?? b.display_order)
-          : 999;
-        if (orderA !== orderB) return orderA - orderB;
-        return a._label.localeCompare(b._label);
+    let items = [];
+
+    const roleSnap = await getDocs(collection(db, "roles"));
+    console.log(
+      "DEBUG koleksi roles:",
+      roleSnap.size,
+      roleSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    );
+
+    if (!roleSnap.empty) {
+      items = roleSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(r => r.active !== false && r.is_active !== false && r.enabled !== false)
+        .map(r => ({
+          ...r,
+          _label: extractRoleLabel(r),
+          _isUniversal: isUniversalSharedTask(extractRoleLabel(r))
+        }))
+        .filter(r => r._label);
+    }
+
+    if (items.length === 0) {
+      const deptSnap = await getDocs(collection(db, "departments"));
+      console.log(
+        "DEBUG koleksi departments:",
+        deptSnap.size,
+        deptSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      );
+
+      const seen = new Set();
+      deptSnap.docs.forEach(d => {
+        const data = d.data();
+        if (data.active === false || data.is_active === false) return;
+        const deptRoles = Array.isArray(data.roles)
+          ? data.roles
+          : Array.isArray(data.role_list)
+          ? data.role_list
+          : [];
+        deptRoles.forEach(raw => {
+          const label = typeof raw === "string" ? raw.trim() : extractRoleLabel(raw);
+          if (label && !seen.has(label.toLowerCase())) {
+            seen.add(label.toLowerCase());
+            items.push({
+              id: label,
+              _label: label,
+              _isUniversal: isUniversalSharedTask(label)
+            });
+          }
+        });
       });
+    }
+
+    return items.sort((a, b) => {
+      if (a._isUniversal !== b._isUniversal) return a._isUniversal ? 1 : -1;
+      const orderA = Number.isFinite(Number(a.sort_order ?? a.order ?? a.display_order))
+        ? Number(a.sort_order ?? a.order ?? a.display_order)
+        : 999;
+      const orderB = Number.isFinite(Number(b.sort_order ?? b.order ?? b.display_order))
+        ? Number(b.sort_order ?? b.order ?? b.display_order)
+        : 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return a._label.localeCompare(b._label);
+    });
   } catch (err) {
     console.warn("fetchSelectableMinistryRoles fallback:", err);
     return [];
