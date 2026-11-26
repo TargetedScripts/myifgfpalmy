@@ -15,8 +15,6 @@ import {
   deleteNewcomer
 } from "./db-care.js";
 
-const DJ_STAGES_KEYS = ["come", "grow", "serve", "lead"];
-
 let careState = {
   disciples: [],
   insights: [],
@@ -79,7 +77,7 @@ function resolveDiscipleDJDates(d) {
 function isICareLeaderCandidate(d) {
   const interests = Array.isArray(d.ministry_interests) ? d.ministry_interests : [];
   const matchesInterest = interests.some(item =>
-    String(item || "").trim().toLowerCase().includes("icare leader")
+    String(item || "").trim().toLowerCase() === "icare leader"
   );
   const matchesInIcare = String(d.in_icare || "").toLowerCase().includes("leader");
   return matchesInterest || matchesInIcare;
@@ -319,7 +317,7 @@ window.updateDJStageDate = async (discipleId, stageKey, dateStr) => {
   renderDJMatrix();
 };
 
-// --- 3. ICARE GROUPS (LEADER FROM iCare Leader ROLE + LINKED TO DISCIPLES) ---
+// --- 3. ICARE GROUPS (LEADER FROM iCare Leader ROLE + AUTO-TAG LEADER & MEMBERS IN DISCIPLES) ---
 function ensureICareFormControlsUI() {
   const form = document.getElementById("form-icare");
   if (!form) return;
@@ -331,7 +329,6 @@ function ensureICareFormControlsUI() {
     form.prepend(hiddenId);
   }
 
-  // Konversi input #icare-leader menjadi <select> jika masih <input>
   const leaderEl = document.getElementById("icare-leader");
   if (leaderEl && leaderEl.tagName.toLowerCase() === "input") {
     const selectEl = document.createElement("select");
@@ -366,7 +363,7 @@ function populateICareLeaderSelect(selectedLeaderId = "", selectedLeaderName = "
   const pool = leaders.length > 0 ? leaders : careState.disciples;
 
   const options = [
-    `<option value="">${leaders.length > 0 ? "— Select iCare Leader —" : "— Select Leader (No iCare Leader role tagged yet) —"}</option>`
+    `<option value="">${leaders.length > 0 ? "— Select iCare Leader —" : "— Select Leader (Auto-tags iCare Leader) —"}</option>`
   ];
 
   const addedIds = new Set();
@@ -407,17 +404,41 @@ function populateICareFormSelects(selectedMemberIds = [], selectedLeaderId = "",
   `).join("");
 }
 
-async function syncDisciplesICareMembership(groupName, memberIds = []) {
+async function syncDisciplesICareMembership(groupName, memberIds = [], leaderId = "") {
   const memberSet = new Set(memberIds);
+  if (leaderId) memberSet.add(leaderId);
+
   for (const d of careState.disciples) {
     const isMember = memberSet.has(d.id);
+    const isLeader = Boolean(leaderId && d.id === leaderId);
     const currentVal = (d.in_icare || "").trim();
+    const currentInterests = Array.isArray(d.ministry_interests) ? [...d.ministry_interests] : [];
+    const hasLeaderRole = currentInterests.some(
+      item => String(item || "").trim().toLowerCase() === "icare leader"
+    );
+
+    const updates = {};
+    let changed = false;
+
     if (isMember && currentVal !== groupName) {
-      await saveDisciple(d.id, { in_icare: groupName });
+      updates.in_icare = groupName;
       d.in_icare = groupName;
+      changed = true;
     } else if (!isMember && currentVal === groupName) {
-      await saveDisciple(d.id, { in_icare: "No" });
+      updates.in_icare = "No";
       d.in_icare = "No";
+      changed = true;
+    }
+
+    if (isLeader && !hasLeaderRole) {
+      const nextInterests = [...currentInterests, "iCare Leader"];
+      updates.ministry_interests = nextInterests;
+      d.ministry_interests = nextInterests;
+      changed = true;
+    }
+
+    if (changed) {
+      await saveDisciple(d.id, updates);
     }
   }
 }
@@ -650,7 +671,7 @@ function bindCareEvents() {
       member_ids: memberIds
     });
 
-    await syncDisciplesICareMembership(name, memberIds);
+    await syncDisciplesICareMembership(name, memberIds, leaderId);
 
     e.target.reset();
     const editEl = document.getElementById("icare-edit-id");
