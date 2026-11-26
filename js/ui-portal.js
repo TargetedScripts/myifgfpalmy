@@ -12,8 +12,15 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import * as dbPortal from "./db-portal.js";
 import { getDailyReflections, seedNov20toDec31Reflections } from "./db-content.js";
-import { addUnavailability, deleteUnavailability } from "./db-roster.js";
-import { getDepartments, getRolesReference } from "./db-master.js";
+import {
+  getAssignmentsByDate,
+  upsertAssignment,
+  deleteAssignment,
+  getUnavailability,
+  addUnavailability,
+  deleteUnavailability
+} from "./db-roster.js";
+import { getDepartments, getRolesReference, getDisciples } from "./db-master.js";
 
 const {
   getPublicMonthlyThemes,
@@ -34,10 +41,75 @@ const DEFAULT_CHURCH_PROFILE = {
   website_url: "https://ifgfpalmy.org"
 };
 
+const LEGACY_SINGER_NAMES = ["Singer 1", "Singer 2", "Singer 3"];
+
 function isUniversalSharedTask(role = {}) {
   if (role?.is_universal === true) return true;
   const n = String(role?.role_name || role?.name || role || "").toLowerCase();
   return n.includes("cuci piring") || n.includes("vacuum");
+}
+
+function isLeadershipRoleName(roleName = "") {
+  const n = String(roleName || "").trim().toLowerCase();
+  return n.startsWith("head of dept") || n.startsWith("lead of dept");
+}
+
+function normKey(val = "") {
+  return String(val || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+function normalizeEmailList(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    return val.map(e => String(e || "").trim().toLowerCase()).filter(Boolean);
+  }
+  return String(val || "")
+    .split(/[,;\n]+/)
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function getRoleSlotsCount(role) {
+  const raw = Number(role?.slots_count);
+  if (Number.isFinite(raw) && raw >= 1) return Math.min(20, Math.floor(raw));
+  if (/^singer$/i.test(String(role?.role_name || role?.name || "").trim())) return 3;
+  return 1;
+}
+
+function buildRoleSlots(role) {
+  const count = getRoleSlotsCount(role);
+  const baseName = String(role?.role_name || role?.name || "Role").trim();
+  if (count <= 1) {
+    return [{
+      slotIndex: 1,
+      slotsCount: 1,
+      slotKey: role.id,
+      displayLabel: baseName
+    }];
+  }
+  return Array.from({ length: count }, (_, idx) => {
+    const num = idx + 1;
+    return {
+      slotIndex: num,
+      slotsCount: count,
+      slotKey: `${role.id}__${num}`,
+      displayLabel: `${baseName} ${num}`
+    };
+  });
+}
+
+function roleMatchesDept(role, dept) {
+  const deptKeys = new Set([normKey(dept.id), normKey(dept.name)].filter(Boolean));
+  const roleKeys = [
+    normKey(role.department_id),
+    normKey(role.dept_id),
+    normKey(role.dept_name),
+    normKey(role.department_name)
+  ].filter(Boolean);
+  return roleKeys.some(k => deptKeys.has(k));
 }
 
 async function fetchSelectableMinistryRoles() {
@@ -70,7 +142,7 @@ async function fetchSelectableMinistryRoles() {
           _isUniversal: isUniversalSharedTask(r)
         };
       })
-      .filter(r => Boolean(r._label))
+      .filter(r => Boolean(r._label) && !isLeadershipRoleName(r._label))
       .sort((a, b) => {
         if (a._isUniversal !== b._isUniversal) return a._isUniversal ? 1 : -1;
         if (a._deptOrder !== b._deptOrder) return a._deptOrder - b._deptOrder;
@@ -163,6 +235,14 @@ let portalState = {
   reflections: [],
   myDuties: [],
   myBlockouts: [],
+  // Department Roster Manager state inside My Portal
+  allDepartments: [],
+  allRoles: [],
+  allDisciples: [],
+  allUnavailability: [],
+  managedDepartments: [],
+  selectedRosterDate: "",
+  dateAssignments: [],
   publicEventsBound: false,
   memberEventsBound: false
 };
@@ -184,6 +264,17 @@ function getAucklandTodayISO() {
   }).format(new Date());
 }
 
+function isSystemAdminUser() {
+  const level = String(portalState.profile?.accessLevel || "").toLowerCase();
+  const sysRole = String(
+    portalState.profile?.system_role ||
+    portalState.profile?.discipleDoc?.system_role ||
+    portalState.profile?.role ||
+    ""
+  ).toLowerCase();
+  return level === "super_admin" || sysRole === "super_admin";
+}
+
 function canManageChurchPortal() {
   const level = String(portalState.profile?.accessLevel || "").toLowerCase();
   const sysRole = String(
@@ -201,15 +292,32 @@ function canManageChurchPortal() {
   );
 }
 
-function isSystemAdminUser() {
-  const level = String(portalState.profile?.accessLevel || "").toLowerCase();
-  const sysRole = String(
-    portalState.profile?.system_role ||
-    portalState.profile?.discipleDoc?.system_role ||
-    portalState.profile?.role ||
-    ""
-  ).toLowerCase();
-  return level === "super_admin" || sysRole === "super_admin";
+function resolveManagedDepartments(discipleDoc, departments) {
+  const activeDepts = departments.filter(d => d.active !== false && d.is_active !== false);
+  if (isSystemAdminUser() || canManageChurchPortal()) {
+    return activeDepts;
+  }
+
+  const email = String(
+    discipleDoc?.email || portalState.profile?.email || ""
+  ).trim().toLowerCase();
+
+  const interests = Array.isArray(discipleDoc?.ministry_interests)
+    ? discipleDoc.ministry_interests.map(i => String(i || "").trim().toLowerCase())
+    : [];
+
+  return activeDepts.filter(dept => {
+    const leads = normalizeEmailList(dept.lead_emails || dept.lead_email || dept.head_email);
+    if (email && leads.includes(email)) return true;
+
+    const deptNameLower = String(dept.name || "").trim().toLowerCase();
+    if (!deptNameLower) return false;
+
+    return interests.some(item =>
+      (item.startsWith("head of dept") || item.startsWith("lead of dept")) &&
+      item.includes(deptNameLower)
+    );
+  });
 }
 
 async function resolveDiscipleForCurrentUser(profile) {
@@ -688,10 +796,22 @@ async function refreshMemberSelfService() {
 
   const isRealDiscipleRecord = Boolean(discipleDoc.id) && !discipleDoc._isAdminFallback;
 
-  const [duties, blockouts, selectableRoles] = await Promise.all([
+  const [
+    duties,
+    blockouts,
+    selectableRoles,
+    allDepartments,
+    allRoles,
+    allDisciples,
+    allUnavailability
+  ] = await Promise.all([
     isRealDiscipleRecord ? getMyAssignments(discipleDoc.id).catch(() => []) : Promise.resolve([]),
     isRealDiscipleRecord ? getMyUnavailability(discipleDoc.id).catch(() => []) : Promise.resolve([]),
-    fetchSelectableMinistryRoles()
+    fetchSelectableMinistryRoles(),
+    getDepartments().catch(() => []),
+    getRolesReference().catch(() => []),
+    getDisciples().catch(() => []),
+    getUnavailability().catch(() => [])
   ]);
 
   const todayISO = getAucklandTodayISO();
@@ -703,6 +823,29 @@ async function refreshMemberSelfService() {
     .sort((a, b) => String(a.start_date || "").localeCompare(String(b.start_date || "")));
   portalState.selectableRoles = selectableRoles;
 
+  portalState.allDepartments = [...allDepartments].sort((a, b) =>
+    (Number(a.sort_order) || 999) - (Number(b.sort_order) || 999) ||
+    String(a.name || "").localeCompare(String(b.name || ""))
+  );
+  portalState.allRoles = allRoles
+    .filter(r => r.active !== false && r.is_active !== false && !isLeadershipRoleName(r.role_name || r.name))
+    .sort((a, b) => (Number(a.sort_order) || 999) - (Number(b.sort_order) || 999));
+  portalState.allDisciples = allDisciples.filter(d => (d.status || "Active") === "Active");
+  portalState.allUnavailability = allUnavailability;
+  portalState.managedDepartments = resolveManagedDepartments(discipleDoc, portalState.allDepartments);
+
+  if (!portalState.selectedRosterDate && portalState.weeks.length > 0) {
+    const sortedWeeks = [...portalState.weeks].sort((a, b) =>
+      String(a.service_date || "").localeCompare(String(b.service_date || ""))
+    );
+    const upcoming = sortedWeeks.find(w => (w.service_date || "") >= todayISO) || sortedWeeks[0];
+    portalState.selectedRosterDate = upcoming?.service_date || "";
+  }
+
+  if (portalState.managedDepartments.length > 0 && portalState.selectedRosterDate) {
+    portalState.dateAssignments = await getAssignmentsByDate(portalState.selectedRosterDate).catch(() => []);
+  }
+
   renderMyProfileHeader(discipleDoc);
   const phoneInput = document.getElementById("my-phone-input");
   const addressInput = document.getElementById("my-address-input");
@@ -712,6 +855,7 @@ async function refreshMemberSelfService() {
 
   renderMyDuties();
   renderMyBlockouts();
+  renderDepartmentRosterManagerInMyPortal();
 }
 
 function renderMyInterestsChecklist(savedInterests = []) {
@@ -790,6 +934,15 @@ function renderMyProfileHeader(discipleDoc) {
       : "bg-red-100 text-red-800 border-red-200";
 
   const confirmedCount = portalState.myDuties.filter(d => d.status === "Confirmed").length;
+  const isSysAdmin = isSystemAdminUser() || canManageChurchPortal();
+  const managedDepts = portalState.managedDepartments;
+
+  let roleScopeBadge = "";
+  if (isSysAdmin) {
+    roleScopeBadge = `<span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-slate-900 text-amber-400">🛡️ SYSTEM ADMIN (ALL ROSTERS)</span>`;
+  } else if (managedDepts.length > 0) {
+    roleScopeBadge = `<span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-blue-100 text-blue-900 border border-blue-200">👑 HEAD OF DEPT: ${esc(managedDepts.map(d => d.name).join(", "))}</span>`;
+  }
 
   nameEl.textContent = discipleDoc.full_name || "Member";
   metaEl.innerHTML = `
@@ -799,11 +952,258 @@ function renderMyProfileHeader(discipleDoc) {
       <span>${esc(discipleDoc.email || "")}</span>
       <span>•</span>
       <span class="px-2 py-0.5 border rounded-full font-bold text-[10px] ${djBadgeClass}">DJ: ${esc(djColor.toUpperCase())}</span>
+      ${roleScopeBadge ? `<span>•</span>${roleScopeBadge}` : ""}
       <span>•</span>
       <span class="font-semibold text-slate-700">Upcoming Duties: ${portalState.myDuties.length} (${confirmedCount} Confirmed)</span>
     </span>
   `;
 }
+
+// --- 3. HEAD OF DEPT & SYSTEM ADMIN ROSTER MANAGER INSIDE MY PORTAL ---
+function findAssignmentForPortalSlot(role, slot) {
+  const baseName = String(role?.role_name || role?.name || "").trim();
+  const exactBySlot = portalState.dateAssignments.find(
+    a => a.slot_key === slot.slotKey || a.role_id === slot.slotKey
+  );
+  if (exactBySlot) return exactBySlot;
+
+  if (slot.slotIndex === 1) {
+    const matching = portalState.dateAssignments.filter(
+      a => !a.slot_key && (a.role_id === role.id || a.role_name === baseName)
+    );
+    return matching[0] || null;
+  }
+
+  const matchingForRole = portalState.dateAssignments.filter(
+    a => a.role_id === role.id || a.role_name === baseName || a.role_name === slot.displayLabel
+  );
+  return matchingForRole[slot.slotIndex - 1] || null;
+}
+
+function isDiscipleUnavailableOnDate(discipleId, serviceDate) {
+  return portalState.allUnavailability.find(u => {
+    if (u.disciple_id !== discipleId) return false;
+    const start = u.start_date || u.unavailable_date || "";
+    const end = u.end_date || start;
+    return serviceDate >= start && serviceDate <= end;
+  });
+}
+
+function discipleMatchesRoleInterest(disciple, role) {
+  if (isUniversalSharedTask(role)) return true;
+  const interests = Array.isArray(disciple?.ministry_interests) ? disciple.ministry_interests : [];
+  const target = String(role?.role_name || role?.name || "").trim().toLowerCase();
+  if (!target) return false;
+  return interests.some(item => {
+    const val = String(item || "").trim().toLowerCase();
+    if (val === target) return true;
+    if (target === "singer" && LEGACY_SINGER_NAMES.some(s => s.toLowerCase() === val)) return true;
+    return false;
+  });
+}
+
+function renderDepartmentRosterManagerInMyPortal() {
+  const bodyEl = document.getElementById("member-selfservice-body");
+  if (!bodyEl) return;
+
+  let container = document.getElementById("my-portal-dept-roster-manager");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "my-portal-dept-roster-manager";
+    container.className = "mt-6";
+    bodyEl.appendChild(container);
+  }
+
+  const managedDepts = portalState.managedDepartments;
+  if (!managedDepts || managedDepts.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const isSysAdmin = isSystemAdminUser() || canManageChurchPortal();
+  const sortedWeeks = [...portalState.weeks].sort((a, b) =>
+    String(a.service_date || "").localeCompare(String(b.service_date || ""))
+  );
+
+  const dateOptions = sortedWeeks.map(w => `
+    <option value="${esc(w.service_date)}" ${w.service_date === portalState.selectedRosterDate ? "selected" : ""}>
+      ${esc(w.service_date)} — ${esc(w.title || "Sunday Celebration")}
+    </option>
+  `).join("");
+
+  const deptCardsHtml = managedDepts.map(dept => {
+    const deptRoles = portalState.allRoles.filter(r => roleMatchesDept(r, dept));
+    if (deptRoles.length === 0) return "";
+
+    const expandedSlots = deptRoles.flatMap(role =>
+      buildRoleSlots(role).map(slot => ({ role, slot }))
+    );
+
+    const filledCount = expandedSlots.filter(({ role, slot }) =>
+      Boolean(findAssignmentForPortalSlot(role, slot)?.disciple_id)
+    ).length;
+
+    const rowsHtml = expandedSlots.map(({ role, slot }) => {
+      const current = findAssignmentForPortalSlot(role, slot);
+      const selectedId = current?.disciple_id || "";
+      const universal = isUniversalSharedTask(role);
+
+      const sortedDisciples = [...portalState.allDisciples].sort((a, b) => {
+        if (!universal) {
+          const intA = discipleMatchesRoleInterest(a, role) ? 0 : 1;
+          const intB = discipleMatchesRoleInterest(b, role) ? 0 : 1;
+          if (intA !== intB) return intA - intB;
+        }
+        return String(a.full_name || "").localeCompare(String(b.full_name || ""));
+      });
+
+      const optionsHtml = sortedDisciples.map(d => {
+        const unavail = isDiscipleUnavailableOnDate(d.id, portalState.selectedRosterDate);
+        const interested = !universal && discipleMatchesRoleInterest(d, role);
+        const flags = [
+          interested ? "✨" : "",
+          unavail ? "🚫 Unavail" : ""
+        ].filter(Boolean).join(" ");
+        return `<option value="${esc(d.id)}" ${d.id === selectedId ? "selected" : ""}>${esc(d.full_name)}${flags ? ` (${flags})` : ""}</option>`;
+      }).join("");
+
+      const statusBadge = selectedId
+        ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${
+            current?.status === "Confirmed"
+              ? "bg-emerald-100 text-emerald-800"
+              : current?.status === "Declined"
+              ? "bg-red-100 text-red-800"
+              : "bg-amber-100 text-amber-800"
+          }">${esc(current?.status || "Assigned")}</span>`
+        : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Open</span>`;
+
+      return `
+        <div class="py-2 border-b border-slate-100 last:border-b-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-slate-900">${esc(slot.displayLabel)}</p>
+            <p class="text-[10px] text-slate-500">Min DJ: ${esc(role.min_dj_level || "Come")}</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <select
+              onchange="window.assignMyPortalRosterSlot('${esc(role.id)}', '${esc(slot.slotKey)}', this.value)"
+              class="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium bg-white max-w-[220px]"
+            >
+              <option value="">— Unassigned —</option>
+              ${optionsHtml}
+            </select>
+            ${statusBadge}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+        <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
+          <h4 class="font-bold text-xs uppercase tracking-wider text-slate-800">${esc(dept.name)}</h4>
+          <span class="text-[11px] font-bold text-slate-600">${filledCount}/${expandedSlots.length} filled</span>
+        </div>
+        <div>${rowsHtml}</div>
+      </div>
+    `;
+  }).filter(Boolean).join("");
+
+  container.innerHTML = `
+    <div class="bg-white p-5 rounded-2xl border-2 ${isSysAdmin ? "border-slate-900" : "border-blue-200"} shadow-sm space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <span class="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+            isSysAdmin ? "bg-slate-900 text-amber-400" : "bg-blue-100 text-blue-900"
+          }">
+            ${isSysAdmin ? "🛡️ System Admin — Full Roster Control" : "👑 Head of Dept — Department Roster Control"}
+          </span>
+          <h3 class="font-bold text-base text-slate-900 mt-1">
+            ${isSysAdmin ? "All Departments Sunday Roster" : `Manage Roster: ${esc(managedDepts.map(d => d.name).join(", "))}`}
+          </h3>
+          <p class="text-xs text-slate-500">
+            ${isSysAdmin
+              ? "As System Admin, you can assign or modify roster slots across all departments."
+              : "You can assign or update Sunday service roles for the department(s) under your leadership."}
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <label for="my-portal-roster-date" class="text-xs font-bold text-slate-700">Service Date:</label>
+          <select
+            id="my-portal-roster-date"
+            onchange="window.changeMyPortalRosterDate(this.value)"
+            class="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold bg-white"
+          >
+            ${dateOptions || `<option value="">No service dates</option>`}
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        ${deptCardsHtml || `<p class="text-xs text-slate-500 col-span-full">No active roles found for your department scope.</p>`}
+      </div>
+    </div>
+  `;
+}
+
+window.changeMyPortalRosterDate = async (serviceDate) => {
+  if (!serviceDate) return;
+  portalState.selectedRosterDate = serviceDate;
+  portalState.dateAssignments = await getAssignmentsByDate(serviceDate).catch(() => []);
+  renderDepartmentRosterManagerInMyPortal();
+};
+
+window.assignMyPortalRosterSlot = async (roleId, slotKey, discipleId) => {
+  const role = portalState.allRoles.find(r => r.id === roleId);
+  if (!role || !portalState.selectedRosterDate) return;
+
+  const slots = buildRoleSlots(role);
+  const slot = slots.find(s => s.slotKey === slotKey) || slots[0];
+  const existing = findAssignmentForPortalSlot(role, slot);
+
+  try {
+    if (!discipleId) {
+      if (existing?.id) {
+        await deleteAssignment(existing.id);
+      }
+    } else {
+      const disciple = portalState.allDisciples.find(d => d.id === discipleId);
+      if (!disciple) return;
+      const deptObj = portalState.allDepartments.find(
+        d => d.id === (role.department_id || role.dept_id)
+      );
+      await upsertAssignment(existing?.id || null, {
+        service_date: portalState.selectedRosterDate,
+        department_id: role.department_id || role.dept_id || "",
+        dept_id: role.department_id || role.dept_id || "",
+        dept_name: deptObj?.name || role.dept_name || "",
+        role_id: role.id,
+        slot_key: slot.slotKey,
+        slot_index: slot.slotIndex,
+        role_name: slot.displayLabel,
+        disciple_id: disciple.id,
+        disciple_name: disciple.full_name,
+        disciple_phone: disciple.phone || "",
+        status: "Assigned"
+      });
+    }
+
+    portalState.dateAssignments = await getAssignmentsByDate(portalState.selectedRosterDate).catch(() => []);
+    renderDepartmentRosterManagerInMyPortal();
+
+    const currentDisciple = portalState.profile?.discipleDoc;
+    if (currentDisciple?.id && !currentDisciple._isAdminFallback) {
+      const duties = await getMyAssignments(currentDisciple.id).catch(() => []);
+      portalState.myDuties = duties.sort((a, b) =>
+        String(a.service_date || "").localeCompare(String(b.service_date || ""))
+      );
+      renderMyProfileHeader(currentDisciple);
+      renderMyDuties();
+    }
+  } catch (err) {
+    alert("Failed to update roster slot: " + (err?.message || err));
+  }
+};
 
 function renderMyDuties() {
   const container = document.getElementById("my-duties-list");
