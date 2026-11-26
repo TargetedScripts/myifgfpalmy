@@ -14,12 +14,15 @@ import {
 
 const LEGACY_SINGER_NAMES = ["Singer 1", "Singer 2", "Singer 3"];
 const VOCAL_GROUP_NAMES = ["Worship Leader", "Singer", ...LEGACY_SINGER_NAMES];
+const DJ_RANK = { come: 1, grow: 2, serve: 3, lead: 4 };
 
 let masterState = {
   departments: [],
   roles: [],
   disciples: [],
-  currentUser: null
+  currentUser: null,
+  sortBy: "sort_order",
+  sortDir: "asc"
 };
 
 export async function initMasterApp(userProfile) {
@@ -50,11 +53,12 @@ async function reloadMasterData() {
   if (disciplesRes.status === "rejected") console.error("[ui-master] getDisciples failed:", disciplesRes.reason);
 
   masterState.departments = depts;
-  masterState.roles = sortRolesByOrder(roles).map((r, i) => ({
+  const normalizedRoles = roles.map((r, i) => ({
     ...r,
     slots_count: Math.max(1, Number(r.slots_count) || 1),
     sort_order: typeof r.sort_order === "number" ? r.sort_order : Number(r.sort_order) || i + 1
   }));
+  masterState.roles = applyRolesSort(normalizedRoles, masterState.sortBy, masterState.sortDir);
   masterState.disciples = disciples;
 
   populateDepartmentSelects();
@@ -63,13 +67,47 @@ async function reloadMasterData() {
   renderDisciplesList();
 }
 
-function sortRolesByOrder(roles) {
+function compareRolesByKey(a, b, key) {
+  switch (key) {
+    case "role_name":
+      return String(a.role_name || "").localeCompare(String(b.role_name || ""), undefined, { sensitivity: "base" });
+    case "department":
+      return getDeptLabel(a.department_id).localeCompare(getDeptLabel(b.department_id), undefined, { sensitivity: "base" });
+    case "min_dj_level": {
+      const ra = DJ_RANK[String(a.min_dj_level || "come").trim().toLowerCase()] || 99;
+      const rb = DJ_RANK[String(b.min_dj_level || "come").trim().toLowerCase()] || 99;
+      return ra - rb;
+    }
+    case "can_reimburse":
+      return (a.can_reimburse ? 1 : 0) - (b.can_reimburse ? 1 : 0);
+    case "slots_count":
+      return (Number(a.slots_count) || 1) - (Number(b.slots_count) || 1);
+    case "is_active":
+      return (a.is_active !== false ? 1 : 0) - (b.is_active !== false ? 1 : 0);
+    case "sort_order":
+    default: {
+      const orderA = typeof a.sort_order === "number" ? a.sort_order : Number(a.sort_order) || 999;
+      const orderB = typeof b.sort_order === "number" ? b.sort_order : Number(b.sort_order) || 999;
+      return orderA - orderB;
+    }
+  }
+}
+
+function applyRolesSort(roles, sortBy = "sort_order", sortDir = "asc") {
+  const factor = sortDir === "desc" ? -1 : 1;
   return [...roles].sort((a, b) => {
-    const orderA = typeof a.sort_order === "number" ? a.sort_order : Number(a.sort_order) || 999;
-    const orderB = typeof b.sort_order === "number" ? b.sort_order : Number(b.sort_order) || 999;
-    if (orderA !== orderB) return orderA - orderB;
-    return (a.role_name || "").localeCompare(b.role_name || "");
+    const cmp = compareRolesByKey(a, b, sortBy);
+    if (cmp !== 0) return cmp * factor;
+    if (sortBy !== "sort_order") {
+      const orderCmp = compareRolesByKey(a, b, "sort_order");
+      if (orderCmp !== 0) return orderCmp;
+    }
+    return String(a.role_name || "").localeCompare(String(b.role_name || ""), undefined, { sensitivity: "base" });
   });
+}
+
+function sortRolesByOrder(roles) {
+  return applyRolesSort(roles, "sort_order", "asc");
 }
 
 function getDeptLabel(deptId) {
@@ -121,14 +159,14 @@ function getDepartmentHeadNames(dept) {
     }
   }
 
-  // 3. Jemaat yang dicentang role "Head of Dept ..." pada departemen terkait
+  // 3. Jemaat yang memiliki role "Head of Dept ..." atau "Lead of Dept ..." pada departemen terkait
   const headRolesForDept = masterState.roles.filter(r => {
     if (r.is_active === false) return false;
     const sameDept =
       r.department_id === dept.id ||
       String(r.dept_name || "").trim().toLowerCase() === String(dept.name || "").trim().toLowerCase();
     if (!sameDept) return false;
-    return /^head\s+o[fd]\s+dept/i.test(String(r.role_name || "").trim());
+    return /^(?:head|lead)\s+o[fd]\s+dept/i.test(String(r.role_name || "").trim());
   });
 
   if (headRolesForDept.length > 0) {
@@ -195,6 +233,39 @@ function populateDepartmentSelects() {
   }
 }
 
+function updateSortableRoleHeaders(panelRoles) {
+  const theadRow = panelRoles.querySelector("table thead tr");
+  if (!theadRow) return;
+
+  const ths = Array.from(theadRow.children);
+  const sortMap = [
+    { key: "sort_order", label: "ORDER", alignClass: "text-left" },
+    { key: "role_name", label: "ROLE NAME", alignClass: "text-left" },
+    { key: "department", label: "DEPARTMENT", alignClass: "text-left" },
+    { key: "min_dj_level", label: "MIN DJ", alignClass: "text-left" },
+    { key: "can_reimburse", label: "REIMBURSE", alignClass: "text-left" },
+    { key: "slots_count", label: "SLOTS", alignClass: "text-center" },
+    { key: "is_active", label: "STATUS", alignClass: "text-right" }
+  ];
+
+  sortMap.forEach((cfg, idx) => {
+    const th = ths[idx];
+    if (!th) return;
+    const isActive = masterState.sortBy === cfg.key;
+    const arrow = isActive ? (masterState.sortDir === "asc" ? " ▲" : " ▼") : " ↕";
+    th.className = `p-3 ${cfg.alignClass} cursor-pointer select-none hover:bg-slate-100/80 transition-colors ${isActive ? "text-slate-900 font-bold" : ""}`;
+    th.setAttribute("onclick", `window.sortRolesByColumn('${cfg.key}')`);
+    th.title = `Klik untuk sort berdasarkan ${cfg.label}`;
+    th.innerHTML = `${cfg.label}<span class="text-[10px] ${isActive ? "text-slate-800" : "text-slate-400"}">${arrow}</span>`;
+  });
+
+  const resetBtn = document.getElementById("btn-reset-role-sort");
+  if (resetBtn) {
+    const isCustomSort = !(masterState.sortBy === "sort_order" && masterState.sortDir === "asc");
+    resetBtn.classList.toggle("hidden", !isCustomSort);
+  }
+}
+
 function ensureRoleManagementControlsUI() {
   const panelRoles =
     document.getElementById("panel-roles") ||
@@ -207,7 +278,7 @@ function ensureRoleManagementControlsUI() {
     const thSlots = document.createElement("th");
     thSlots.id = "th-role-slots";
     thSlots.className = "p-3 text-center";
-    thSlots.textContent = "Slots";
+    thSlots.textContent = "SLOTS";
     const actionTh = theadRow.lastElementChild;
     if (actionTh) {
       theadRow.insertBefore(thSlots, actionTh);
@@ -220,7 +291,7 @@ function ensureRoleManagementControlsUI() {
     const th = document.createElement("th");
     th.id = "th-role-actions";
     th.className = "p-3 text-right";
-    th.textContent = "Actions";
+    th.textContent = "ACTIONS";
     theadRow.appendChild(th);
   }
 
@@ -233,9 +304,16 @@ function ensureRoleManagementControlsUI() {
       bar.innerHTML = `
         <div class="text-slate-700">
           <strong class="text-slate-900">Master Role Cleanup:</strong>
-          Satukan Singer 1–3 menjadi <strong>Singer</strong> (3 slots), atur kuota slot per role, atau hapus permanen role Disabled & duplikat.
+          Klik header kolom untuk sort tampilan, satukan Singer 1–3 menjadi <strong>Singer</strong> (3 slots), atau hapus role Disabled & duplikat.
         </div>
         <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            id="btn-reset-role-sort"
+            class="hidden px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-900 font-bold rounded-lg"
+          >
+            ↺ Reset Order Sort
+          </button>
           <button
             type="button"
             id="btn-consolidate-singers"
@@ -262,6 +340,8 @@ function ensureRoleManagementControlsUI() {
       panelRoles.insertBefore(bar, tableWrap);
     }
   }
+
+  updateSortableRoleHeaders(panelRoles);
 }
 
 function renderDepartmentsTable() {
@@ -305,6 +385,9 @@ function renderDepartmentsTable() {
 function renderRolesTable() {
   const tbody = document.getElementById("tbody-roles");
   if (!tbody) return;
+
+  const panelRoles = tbody.closest("section, div[id*='panel'], div[class*='panel']") || document;
+  updateSortableRoleHeaders(panelRoles);
 
   if (!masterState.roles.length) {
     tbody.innerHTML = `
@@ -704,6 +787,13 @@ function getFieldVal(id) {
 }
 
 function bindMasterEvents() {
+  document.getElementById("btn-reset-role-sort")?.addEventListener("click", () => {
+    masterState.sortBy = "sort_order";
+    masterState.sortDir = "asc";
+    masterState.roles = applyRolesSort(masterState.roles, masterState.sortBy, masterState.sortDir);
+    renderRolesTable();
+  });
+
   document.getElementById("btn-seed-master")?.addEventListener("click", async () => {
     await seedInitialMasterData();
     await reloadMasterData();
@@ -946,6 +1036,8 @@ function bindMasterEvents() {
       ...otherRows.slice(insertAt)
     ];
 
+    masterState.sortBy = "sort_order";
+    masterState.sortDir = "asc";
     masterState.roles = merged.map((r, idx) => ({
       ...r,
       sort_order: Number(idx + 1)
@@ -1023,6 +1115,18 @@ function bindMasterEvents() {
   });
 }
 
+window.sortRolesByColumn = (columnKey) => {
+  if (!columnKey) return;
+  if (masterState.sortBy === columnKey) {
+    masterState.sortDir = masterState.sortDir === "asc" ? "desc" : "asc";
+  } else {
+    masterState.sortBy = columnKey;
+    masterState.sortDir = "asc";
+  }
+  masterState.roles = applyRolesSort(masterState.roles, masterState.sortBy, masterState.sortDir);
+  renderRolesTable();
+};
+
 window.changeRoleSlotsCount = async (roleId, rawVal) => {
   if (!roleId) return;
   const slotsCount = Math.max(1, Math.min(20, parseInt(rawVal, 10) || 1));
@@ -1052,6 +1156,8 @@ window.moveRoleRow = (index, delta) => {
   const copy = [...masterState.roles];
   const [moved] = copy.splice(index, 1);
   copy.splice(target, 0, moved);
+  masterState.sortBy = "sort_order";
+  masterState.sortDir = "asc";
   masterState.roles = copy.map((r, idx) => ({
     ...r,
     sort_order: Number(idx + 1)
@@ -1066,6 +1172,8 @@ window.setRoleOrderNumber = (index, rawVal) => {
   moved.sort_order = Number(num);
   copy.splice(index, 0, moved);
   copy.sort((a, b) => (Number(a.sort_order) || 999) - (Number(b.sort_order) || 999));
+  masterState.sortBy = "sort_order";
+  masterState.sortDir = "asc";
   masterState.roles = copy.map((r, idx) => ({
     ...r,
     sort_order: Number(idx + 1)
