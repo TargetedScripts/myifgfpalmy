@@ -77,6 +77,54 @@ function getDeptLabel(deptId) {
   return found?.name || deptId || "-";
 }
 
+function normalizeLeadEmails(dept) {
+  const raw = dept?.lead_emails ?? dept?.lead_email ?? dept?.head_email ?? "";
+  if (Array.isArray(raw)) {
+    return raw.map(e => String(e || "").trim().toLowerCase()).filter(Boolean);
+  }
+  return String(raw)
+    .split(/[,;\n]+/)
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function getDepartmentHeadNames(dept) {
+  const names = [];
+  const seen = new Set();
+
+  const directHead = dept?.head_name ?? dept?.lead_name ?? "";
+  if (directHead) {
+    const parts = Array.isArray(directHead)
+      ? directHead
+      : String(directHead).split(/[,;\n]+/);
+    for (const p of parts) {
+      const clean = String(p || "").trim();
+      const key = clean.toLowerCase();
+      if (clean && !seen.has(key)) {
+        seen.add(key);
+        names.push(clean);
+      }
+    }
+  }
+
+  const emails = normalizeLeadEmails(dept);
+  for (const email of emails) {
+    const matched = masterState.disciples.find(
+      d => String(d.email || "").trim().toLowerCase() === email
+    );
+    const label = matched
+      ? (matched.full_name || matched.nick_name || "").trim()
+      : "";
+    const key = label.toLowerCase();
+    if (label && !seen.has(key)) {
+      seen.add(key);
+      names.push(label);
+    }
+  }
+
+  return names.join(", ");
+}
+
 function isUniversalRole(role) {
   if (role?.is_universal === true) return true;
   return /cuci piring|vacuum/i.test(role?.role_name || "");
@@ -207,10 +255,13 @@ function renderDepartmentsTable() {
 
   tbody.innerHTML = masterState.departments.map((d, idx) => {
     const active = d.is_active !== false;
+    const headNames = getDepartmentHeadNames(d);
     return `
       <tr class="border-b border-slate-100 last:border-b-0">
         <td class="p-3 font-mono text-xs text-slate-500">${Number(d.sort_order) || idx + 1}</td>
-        <td class="p-3 font-semibold text-slate-900">${d.name}</td>
+        <td class="p-3 text-slate-900">
+          <span class="font-semibold">${d.name}</span>${headNames ? `<span class="ml-2 text-xs font-medium text-slate-600">${headNames}</span>` : ""}
+        </td>
         <td class="p-3">
           <span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${
             active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
