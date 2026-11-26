@@ -21,13 +21,14 @@ import {
   deleteUnavailability
 } from "./db-roster.js";
 
+const LEGACY_SINGER_NAMES = ["Singer 1", "Singer 2", "Singer 3"];
+
 const FALLBACK_ROLE_ORDER = [
   "Service MC / Host",
   "MD",
   "Worship Leader",
-  "Singer 1",
-  "Singer 2",
-  "Singer 3",
+  "Singer",
+  ...LEGACY_SINGER_NAMES,
   "Prayer",
   "Acoustic / Electric Guitar",
   "Electric Guitar",
@@ -183,13 +184,70 @@ function isUniversalRole(role) {
   return /cuci piring|vacuum/i.test(role?.role_name || role?.name || "");
 }
 
+function getRoleSlotsCount(role) {
+  const raw = Number(role?.slots_count);
+  if (Number.isFinite(raw) && raw >= 1) return Math.min(20, Math.floor(raw));
+  if (/^singer$/i.test((role?.role_name || role?.name || "").trim())) return 3;
+  return 1;
+}
+
+function buildRoleSlots(role) {
+  const count = getRoleSlotsCount(role);
+  const baseName = (role?.role_name || role?.name || "Role").trim();
+  if (count <= 1) {
+    return [{
+      slotIndex: 1,
+      slotsCount: 1,
+      slotKey: role.id,
+      displayLabel: baseName,
+      assignmentKey: role.id
+    }];
+  }
+  return Array.from({ length: count }, (_, idx) => {
+    const num = idx + 1;
+    return {
+      slotIndex: num,
+      slotsCount: count,
+      slotKey: `${role.id}__${num}`,
+      displayLabel: `${baseName} ${num}`,
+      assignmentKey: `${role.id}__${num}`
+    };
+  });
+}
+
+function findAssignmentForSlot(role, slot) {
+  const baseName = (role?.role_name || role?.name || "").trim();
+  const exactBySlot = rosterState.assignments.find(
+    a => a.slot_key === slot.slotKey || a.role_id === slot.slotKey
+  );
+  if (exactBySlot) return exactBySlot;
+
+  if (slot.slotIndex === 1) {
+    const matching = rosterState.assignments.filter(
+      a => !a.slot_key && (a.role_id === role.id || a.role_name === baseName)
+    );
+    return matching[0] || null;
+  }
+
+  const matchingForRole = rosterState.assignments.filter(
+    a => a.role_id === role.id || a.role_name === baseName || a.role_name === slot.displayLabel
+  );
+  return matchingForRole[slot.slotIndex - 1] || null;
+}
+
 function discipleHasInterestInRole(disciple, role) {
   if (isUniversalRole(role)) return true;
   const interests = Array.isArray(disciple?.ministry_interests) ? disciple.ministry_interests : [];
   if (interests.length === 0) return false;
   const target = (role?.role_name || role?.name || "").trim().toLowerCase();
   if (!target) return false;
-  return interests.some(item => String(item || "").trim().toLowerCase() === target);
+
+  return interests.some(item => {
+    const val = String(item || "").trim().toLowerCase();
+    if (val === target) return true;
+    if (target === "singer" && LEGACY_SINGER_NAMES.some(s => s.toLowerCase() === val)) return true;
+    return false;
+  });
 }
 
 async function refreshRosterContext() {
@@ -318,9 +376,10 @@ function renderDepartmentAdminManager() {
 
     const roleBadges = deptRoles.map(r => {
       const rName = r.role_name || r.name;
+      const slots = getRoleSlotsCount(r);
       return `
         <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[11px] text-slate-800">
-          <span>${rName}</span>
+          <span>${rName}${slots > 1 ? ` (${slots} slots)` : ""}</span>
           <button type="button" onclick="window.openEditDeptRolePrompt('${r.id}')" title="Edit Role" class="text-blue-600 hover:underline font-bold">✎</button>
           <button type="button" onclick="window.deleteDeptRoleItem('${r.id}', '${rName.replace(/'/g, "\\'")}')" title="Delete Role" class="text-red-600 hover:underline font-bold">×</button>
         </span>
@@ -382,7 +441,7 @@ function renderDepartmentAdminManager() {
           </div>
           <div class="md:col-span-3">
             <label class="block text-[11px] font-bold text-slate-700 mb-1">Initial Roles (Opsional, pisah koma)</label>
-            <input type="text" id="dept-edit-roles" placeholder="WL, Singer 1, Keyboard" class="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white" />
+            <input type="text" id="dept-edit-roles" placeholder="WL, Singer, Keyboard" class="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white" />
           </div>
           <div class="md:col-span-2 flex items-end gap-1.5">
             <button type="submit" id="btn-save-dept" class="w-full px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg">
@@ -423,12 +482,14 @@ function renderDepartmentAdminManager() {
       .filter(Boolean);
 
     for (let i = 0; i < newRoleNames.length; i++) {
+      const rName = newRoleNames[i];
       await saveRole(null, {
-        role_name: newRoleNames[i],
+        role_name: rName,
         department_id: deptId,
         dept_name: name,
         min_dj_level: "Come",
-        is_universal: /cuci piring|vacuum/i.test(newRoleNames[i]),
+        slots_count: /^singer$/i.test(rName) ? 3 : 1,
+        is_universal: /cuci piring|vacuum/i.test(rName),
         sort_order: rosterState.roles.length + i + 1,
         active: true,
         is_active: true
@@ -479,17 +540,22 @@ window.openAddDeptRolePrompt = async (deptId) => {
   const dept = rosterState.departments.find(d => d.id === deptId);
   if (!dept) return;
 
-  const roleName = prompt(`Tambah Role baru untuk departemen "${dept.name}" (contoh: WL, Singer 1, Lighting):`);
+  const roleName = prompt(`Tambah Role baru untuk departemen "${dept.name}" (contoh: WL, Singer, Lighting):`);
   if (!roleName || !roleName.trim()) return;
 
+  const cleanName = roleName.trim();
+  const defaultSlots = /^singer$/i.test(cleanName) ? "3" : "1";
+  const slotsRaw = prompt("Jumlah slot pada kebaktian Minggu (1, 2, 3, ...):", defaultSlots);
+  const slotsCount = Math.max(1, Math.min(20, parseInt(slotsRaw, 10) || Number(defaultSlots)));
   const minDj = prompt("Min DJ Level (Come / Grow / Serve / Lead):", "Come") || "Come";
 
   await saveRole(null, {
-    role_name: roleName.trim(),
+    role_name: cleanName,
     department_id: dept.id,
     dept_name: dept.name,
     min_dj_level: minDj.trim(),
-    is_universal: /cuci piring|vacuum/i.test(roleName.trim()),
+    slots_count: slotsCount,
+    is_universal: /cuci piring|vacuum/i.test(cleanName),
     sort_order: rosterState.roles.length + 1,
     active: true,
     is_active: true
@@ -505,6 +571,9 @@ window.openEditDeptRolePrompt = async (roleId) => {
   const newName = prompt("Edit nama Role:", currentName);
   if (!newName || !newName.trim()) return;
 
+  const newSlotsRaw = prompt("Jumlah slot pada kebaktian Minggu:", String(getRoleSlotsCount(role)));
+  const newSlots = Math.max(1, Math.min(20, parseInt(newSlotsRaw, 10) || 1));
+
   const newDj = prompt("Min DJ Level (Come / Grow / Serve / Lead):", role.min_dj_level || "Come");
   if (newDj === null) return;
 
@@ -513,6 +582,7 @@ window.openEditDeptRolePrompt = async (roleId) => {
 
   await saveRole(role.id, {
     role_name: newName.trim(),
+    slots_count: newSlots,
     min_dj_level: newDj.trim() || "Come",
     is_universal: /cuci piring|vacuum/i.test(newName.trim()),
     ...(Number.isFinite(newOrder) ? { sort_order: newOrder } : {})
@@ -619,25 +689,24 @@ function renderRosterBoard() {
     const deptRoles = rosterState.roles.filter(r => roleMatchesDept(r, dept));
     if (deptRoles.length === 0) return "";
 
-    const filledCount = deptRoles.filter(r => {
-      const rName = r.role_name || r.name;
-      return rosterState.assignments.some(
-        a => (a.role_id === r.id || a.role_name === rName) && a.disciple_id
-      );
+    const expandedSlots = deptRoles.flatMap(role =>
+      buildRoleSlots(role).map(slot => ({ role, slot }))
+    );
+
+    const filledCount = expandedSlots.filter(({ role, slot }) => {
+      const current = findAssignmentForSlot(role, slot);
+      return Boolean(current?.disciple_id);
     }).length;
 
     const leads = normalizeEmailList(dept.lead_emails || dept.lead_email);
 
-    const rowsHtml = deptRoles.map(role => {
+    const rowsHtml = expandedSlots.map(({ role, slot }) => {
       const rName = role.role_name || role.name || "Role";
-      const current = rosterState.assignments.find(
-        a => a.role_id === role.id || a.role_name === rName
-      );
+      const current = findAssignmentForSlot(role, slot);
       const selectedId = current?.disciple_id || "";
-      const isVocalTeam = ["Worship Leader", "Singer 1", "Singer 2", "Singer 3"].includes(rName);
+      const isVocalTeam = ["Worship Leader", "Singer", ...LEGACY_SINGER_NAMES].includes(rName);
       const universal = isUniversalRole(role);
 
-      // Urutkan jemaat yang berminat pada role ini di atas (kecuali universal karena semua berlaku)
       const sortedDisciples = [...rosterState.disciples].sort((a, b) => {
         if (!universal) {
           const intA = discipleHasInterestInRole(a, role) ? 0 : 1;
@@ -672,22 +741,26 @@ function renderRosterBoard() {
           }">${current?.status || "Assigned"}</span>`
         : `<span class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Optional / Open</span>`;
 
+      const slotMeta = slot.slotsCount > 1 ? ` • Slot ${slot.slotIndex}/${slot.slotsCount}` : "";
+
       return `
         <div class="py-2.5 border-b border-slate-100 last:border-b-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
           isVocalTeam ? "bg-amber-50/35 -mx-2 px-2 rounded-lg" : ""
         }">
           <div class="min-w-0">
             <div class="flex items-center gap-1.5">
-              <p class="text-xs font-bold text-slate-900">${rName}</p>
+              <p class="text-xs font-bold text-slate-900">${slot.displayLabel}</p>
               ${universal ? `<span class="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Shared</span>` : ""}
-              <button type="button" onclick="window.openEditDeptRolePrompt('${role.id}')" title="Edit Role" class="text-[11px] text-slate-400 hover:text-blue-600">✎</button>
-              <button type="button" onclick="window.deleteDeptRoleItem('${role.id}', '${rName.replace(/'/g, "\\'")}')" title="Delete Role" class="text-[11px] text-slate-400 hover:text-red-600">×</button>
+              ${slot.slotIndex === 1 ? `
+                <button type="button" onclick="window.openEditDeptRolePrompt('${role.id}')" title="Edit Role & Slots" class="text-[11px] text-slate-400 hover:text-blue-600">✎</button>
+                <button type="button" onclick="window.deleteDeptRoleItem('${role.id}', '${rName.replace(/'/g, "\\'")}')" title="Delete Role" class="text-[11px] text-slate-400 hover:text-red-600">×</button>
+              ` : ""}
             </div>
-            <p class="text-[11px] text-slate-500">Min DJ: ${role.min_dj_level || "Come"}${role.can_reimburse ? " • Reimbursable" : ""}</p>
+            <p class="text-[11px] text-slate-500">Min DJ: ${role.min_dj_level || "Come"}${slotMeta}${role.can_reimburse ? " • Reimbursable" : ""}</p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <select
-              onchange="window.assignRosterSlot('${role.id}', this.value)"
+              onchange="window.assignRosterSlot('${role.id}', '${slot.slotKey}', this.value)"
               class="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium bg-white max-w-[230px]"
             >
               <option value="">— Unassigned —</option>
@@ -708,7 +781,7 @@ function renderRosterBoard() {
           </div>
           <div class="flex items-center gap-2">
             <button type="button" onclick="window.openAddDeptRolePrompt('${dept.id}')" class="text-[11px] font-bold text-blue-600 hover:underline">+ Role</button>
-            <span class="text-xs font-bold text-slate-600">${filledCount}/${deptRoles.length} filled</span>
+            <span class="text-xs font-bold text-slate-600">${filledCount}/${expandedSlots.length} filled</span>
           </div>
         </div>
         <div>${rowsHtml}</div>
@@ -748,10 +821,11 @@ function renderConflicts() {
       warnings.push(`🚫 <strong>${a.disciple_name}</strong> is marked unavailable for <strong>${roleNameOr(a.role_name)}</strong>${unavail.reason ? ` (${unavail.reason})` : ""}.`);
     }
 
-    const role = rosterState.roles.find(r => r.id === a.role_id || (r.role_name || r.name) === a.role_name);
+    const baseRoleId = String(a.role_id || "").split("__")[0];
+    const role = rosterState.roles.find(r => r.id === baseRoleId || r.id === a.role_id || (r.role_name || r.name) === a.role_name);
     const disciple = rosterState.disciples.find(d => d.id === a.disciple_id);
     if (role && disciple && !meetsMinDj(disciple, role.min_dj_level)) {
-      const rName = role.role_name || role.name;
+      const rName = a.role_name || role.role_name || role.name;
       warnings.push(`⚠️ <strong>${a.disciple_name}</strong> is assigned to <strong>${rName}</strong> (Min DJ: ${role.min_dj_level}).`);
     }
   });
@@ -818,12 +892,11 @@ function buildWhatsAppRosterText() {
 
     lines.push(`*${dept.name}*`);
     deptRoles.forEach(role => {
-      const rName = role.role_name || role.name || "Role";
-      const assigned = rosterState.assignments.find(
-        a => a.role_id === role.id || a.role_name === rName
-      );
-      const person = assigned?.disciple_name || "_Unassigned_";
-      lines.push(`• ${rName}: ${person}`);
+      buildRoleSlots(role).forEach(slot => {
+        const assigned = findAssignmentForSlot(role, slot);
+        const person = assigned?.disciple_name || "_Unassigned_";
+        lines.push(`• ${slot.displayLabel}: ${person}`);
+      });
     });
     lines.push(``);
   });
@@ -902,14 +975,13 @@ function bindRosterEvents() {
   });
 }
 
-window.assignRosterSlot = async (roleId, discipleId) => {
+window.assignRosterSlot = async (roleId, slotKey, discipleId) => {
   const role = rosterState.roles.find(r => r.id === roleId);
   if (!role || !rosterState.selectedDate) return;
 
-  const rName = role.role_name || role.name || "Role";
-  const existing = rosterState.assignments.find(
-    a => a.role_id === role.id || a.role_name === rName
-  );
+  const slots = buildRoleSlots(role);
+  const slot = slots.find(s => s.slotKey === slotKey) || slots[0];
+  const existing = findAssignmentForSlot(role, slot);
 
   if (!discipleId) {
     if (existing?.id) {
@@ -927,7 +999,9 @@ window.assignRosterSlot = async (roleId, discipleId) => {
       dept_id: role.department_id || role.dept_id || "",
       dept_name: deptObj?.name || role.dept_name || "",
       role_id: role.id,
-      role_name: rName,
+      slot_key: slot.slotKey,
+      slot_index: slot.slotIndex,
+      role_name: slot.displayLabel,
       disciple_id: disciple.id,
       disciple_name: disciple.full_name,
       disciple_phone: disciple.phone || "",
