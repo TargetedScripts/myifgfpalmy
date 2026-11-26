@@ -44,18 +44,29 @@ function isExcludedUniversalTask(roleName = "") {
   );
 }
 
+function extractRoleLabel(r = {}) {
+  return String(
+    r.role_name ?? r.name ?? r.title ?? r.role ?? r.label ?? ""
+  ).trim();
+}
+
 async function fetchSelectableMinistryRoles() {
   try {
     const snap = await getDocs(collection(db, "roles"));
     return snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(r => r.active !== false && r.is_active !== false)
-      .filter(r => !isExcludedUniversalTask(r.role_name || r.name || ""))
+      .filter(r => r.active !== false && r.is_active !== false && r.enabled !== false)
+      .map(r => ({ ...r, _label: extractRoleLabel(r) }))
+      .filter(r => r._label && !isExcludedUniversalTask(r._label))
       .sort((a, b) => {
-        const orderA = Number.isFinite(Number(a.sort_order ?? a.order)) ? Number(a.sort_order ?? a.order) : 999;
-        const orderB = Number.isFinite(Number(b.sort_order ?? b.order)) ? Number(b.sort_order ?? b.order) : 999;
+        const orderA = Number.isFinite(Number(a.sort_order ?? a.order ?? a.display_order))
+          ? Number(a.sort_order ?? a.order ?? a.display_order)
+          : 999;
+        const orderB = Number.isFinite(Number(b.sort_order ?? b.order ?? b.display_order))
+          ? Number(b.sort_order ?? b.order ?? b.display_order)
+          : 999;
         if (orderA !== orderB) return orderA - orderB;
-        return String(a.role_name || a.name || "").localeCompare(String(b.role_name || b.name || ""));
+        return a._label.localeCompare(b._label);
       });
   } catch (err) {
     console.warn("fetchSelectableMinistryRoles fallback:", err);
@@ -356,6 +367,9 @@ function renderPublicFeed() {
   const panel = document.getElementById("panel-public");
   if (!panel) return;
 
+  const isEditorOpen = !document.getElementById("church-profile-editor")?.classList.contains("hidden") &&
+    Boolean(document.getElementById("church-profile-editor"));
+
   const todayISO = getAucklandTodayISO();
   const currentMonthKey = todayISO.slice(0, 7);
   const cp = portalState.churchProfile;
@@ -420,7 +434,7 @@ function renderPublicFeed() {
       </div>
 
       ${isManager ? `
-        <div id="church-profile-editor" class="hidden bg-slate-950/70 border border-white/15 rounded-xl p-4 text-xs">
+        <div id="church-profile-editor" class="${isEditorOpen ? "" : "hidden"} bg-slate-950/70 border border-white/15 rounded-xl p-4 text-xs">
           <form id="form-church-profile" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 items-end">
             <div>
               <label class="text-slate-300 font-semibold">Church Name</label>
@@ -619,8 +633,10 @@ async function refreshMemberSelfService() {
   portalState.selectableRoles = selectableRoles;
 
   renderMyProfileHeader(discipleDoc);
-  document.getElementById("my-phone-input").value = discipleDoc.phone || "";
-  document.getElementById("my-address-input").value = discipleDoc.address || "";
+  const phoneInput = document.getElementById("my-phone-input");
+  const addressInput = document.getElementById("my-address-input");
+  if (phoneInput) phoneInput.value = discipleDoc.phone || "";
+  if (addressInput) addressInput.value = discipleDoc.address || "";
   renderMyInterestsChecklist(discipleDoc.ministry_interests || []);
 
   renderMyDuties();
@@ -653,7 +669,7 @@ function renderMyInterestsChecklist(savedInterests = []) {
   };
 
   container.innerHTML = roles.map(r => {
-    const roleName = (r.role_name || r.name || "").trim();
+    const roleName = r._label || extractRoleLabel(r);
     const checked = isRoleSelected(roleName) ? "checked" : "";
     return `
       <label class="flex items-center gap-2 px-2.5 py-1.5 bg-white rounded-lg border border-slate-200 hover:border-slate-400 cursor-pointer select-none">
