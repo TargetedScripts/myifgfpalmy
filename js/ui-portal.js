@@ -235,7 +235,6 @@ let portalState = {
   reflections: [],
   myDuties: [],
   myBlockouts: [],
-  // Department Roster Manager state inside My Portal
   allDepartments: [],
   allRoles: [],
   allDisciples: [],
@@ -779,6 +778,89 @@ export async function initMemberSelfService(profile) {
   renderPublicFeed();
 }
 
+function findSectionCardByChild(childEl, fallbackId) {
+  if (fallbackId) {
+    const direct = document.getElementById(fallbackId);
+    if (direct) return direct;
+  }
+  if (!childEl) return null;
+  let curr = childEl.parentElement;
+  const bodyEl = document.getElementById("member-selfservice-body");
+  while (curr && curr !== bodyEl && curr.parentElement) {
+    if (curr.parentElement === bodyEl) return curr;
+    curr = curr.parentElement;
+  }
+  return childEl.parentElement;
+}
+
+function applyMemberPortalLayoutOrder() {
+  const bodyEl = document.getElementById("member-selfservice-body");
+  if (!bodyEl) return;
+
+  const profileHeaderCard =
+    document.getElementById("my-profile-card") ||
+    findSectionCardByChild(document.getElementById("my-profile-name"), null);
+
+  const dutiesCard =
+    document.getElementById("my-duties-card") ||
+    findSectionCardByChild(document.getElementById("my-duties-list"), null);
+
+  const blockoutCard =
+    document.getElementById("my-blockout-card") ||
+    findSectionCardByChild(document.getElementById("form-my-blockout"), null);
+
+  const profileFormCard =
+    document.getElementById("my-profile-form-card") ||
+    findSectionCardByChild(document.getElementById("form-my-profile"), null);
+
+  const rosterManagerCard = document.getElementById("my-portal-dept-roster-manager");
+
+  let twoColGrid = document.getElementById("my-portal-bottom-two-col");
+  if (!twoColGrid) {
+    twoColGrid = document.createElement("div");
+    twoColGrid.id = "my-portal-bottom-two-col";
+  }
+  twoColGrid.className = "grid grid-cols-1 lg:grid-cols-2 gap-4 items-start";
+
+  [blockoutCard, profileFormCard].forEach(card => {
+    if (!card) return;
+    card.classList.remove("mt-4", "mt-5", "mt-6", "mb-4", "mb-6");
+    if (card.parentElement !== twoColGrid) {
+      twoColGrid.appendChild(card);
+    }
+  });
+
+  if (dutiesCard) {
+    dutiesCard.classList.remove("mt-4", "mt-5", "mt-6", "mb-4", "mb-6");
+  }
+  if (rosterManagerCard) {
+    rosterManagerCard.classList.remove("mt-4", "mt-5", "mt-6", "mb-4", "mb-6");
+  }
+
+  const hasManagedDepts = Array.isArray(portalState.managedDepartments) && portalState.managedDepartments.length > 0;
+
+  if (profileHeaderCard && profileHeaderCard.parentElement === bodyEl) {
+    bodyEl.appendChild(profileHeaderCard);
+  }
+
+  if (hasManagedDepts) {
+    // 1. Head of Dept / System Admin Roster Control paling atas
+    if (rosterManagerCard) bodyEl.appendChild(rosterManagerCard);
+    // 2. My Upcoming Ministry Duties setelahnya
+    if (dutiesCard) bodyEl.appendChild(dutiesCard);
+    // 3. My Unavailable Dates & Update My Contact & Interests bersebelahan di bawahnya
+    bodyEl.appendChild(twoColGrid);
+  } else {
+    // 1. Jemaat biasa: My Upcoming Ministry Duties paling atas
+    if (dutiesCard) bodyEl.appendChild(dutiesCard);
+    // 2. My Unavailable Dates & Update My Contact & Interests bersebelahan di bawahnya
+    bodyEl.appendChild(twoColGrid);
+    if (rosterManagerCard && rosterManagerCard.parentElement === bodyEl) {
+      bodyEl.removeChild(rosterManagerCard);
+    }
+  }
+}
+
 async function refreshMemberSelfService() {
   const discipleDoc = await resolveDiscipleForCurrentUser(portalState.profile);
   const unregBanner = document.getElementById("member-unregistered-notice");
@@ -856,6 +938,7 @@ async function refreshMemberSelfService() {
   renderMyDuties();
   renderMyBlockouts();
   renderDepartmentRosterManagerInMyPortal();
+  applyMemberPortalLayoutOrder();
 }
 
 function renderMyInterestsChecklist(savedInterests = []) {
@@ -1010,7 +1093,6 @@ function renderDepartmentRosterManagerInMyPortal() {
   if (!container) {
     container = document.createElement("div");
     container.id = "my-portal-dept-roster-manager";
-    container.className = "mt-6";
     bodyEl.appendChild(container);
   }
 
@@ -1151,6 +1233,7 @@ window.changeMyPortalRosterDate = async (serviceDate) => {
   portalState.selectedRosterDate = serviceDate;
   portalState.dateAssignments = await getAssignmentsByDate(serviceDate).catch(() => []);
   renderDepartmentRosterManagerInMyPortal();
+  applyMemberPortalLayoutOrder();
 };
 
 window.assignMyPortalRosterSlot = async (roleId, slotKey, discipleId) => {
@@ -1200,6 +1283,7 @@ window.assignMyPortalRosterSlot = async (roleId, slotKey, discipleId) => {
       renderMyProfileHeader(currentDisciple);
       renderMyDuties();
     }
+    applyMemberPortalLayoutOrder();
   } catch (err) {
     alert("Failed to update roster slot: " + (err?.message || err));
   }
