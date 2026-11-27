@@ -309,6 +309,16 @@ function canManageChurchPortal() {
   );
 }
 
+function canManageAnnouncements() {
+  if (canManageChurchPortal()) return true;
+  const interests = portalState.profile?.discipleDoc?.ministry_interests;
+  if (!Array.isArray(interests)) return false;
+  return interests.some(item => {
+    const s = String(item || "").trim().toLowerCase();
+    return s === "announcement board" || s.includes("announcement");
+  });
+}
+
 function canManageDjClasses() {
   if (canManageChurchPortal()) return true;
   const interests = portalState.profile?.discipleDoc?.ministry_interests;
@@ -466,41 +476,6 @@ function bindPublicPortalEvents() {
   if (!panel) return;
 
   panel.addEventListener("submit", async (e) => {
-    if (e.target.id === "form-announcement") {
-      e.preventDefault();
-      if (!canManageChurchPortal()) return;
-
-      const title = document.getElementById("ann-title")?.value.trim() || "";
-      const category = document.getElementById("ann-category")?.value || "General";
-      const body = document.getElementById("ann-body")?.value.trim() || "";
-      const pinned = Boolean(document.getElementById("ann-pinned")?.checked);
-      if (!title || !body) return;
-
-      const submitBtn = e.target.querySelector('button[type="submit"]');
-      if (submitBtn) submitBtn.disabled = true;
-
-      try {
-        await addDoc(collection(db, "announcements"), {
-          church_id: portalState.churchProfile.church_id || "ifgf_palmy",
-          title,
-          category,
-          body,
-          pinned,
-          announcement_date: getAucklandTodayISO(),
-          author_name: portalState.profile?.displayName || "Admin",
-          is_active: true,
-          created_at: serverTimestamp()
-        });
-        e.target.reset();
-        portalState.announcements = await fetchAnnouncements();
-        renderAnnouncementBoard();
-      } catch (err) {
-        alert("Failed to post announcement: " + (err?.message || err));
-      } finally {
-        if (submitBtn) submitBtn.disabled = false;
-      }
-    }
-
     if (e.target.id === "form-church-profile") {
       e.preventDefault();
       if (!canManageChurchPortal()) return;
@@ -528,89 +503,12 @@ function bindPublicPortalEvents() {
         alert("Failed to save church profile: " + (err?.message || err));
       }
     }
-
-    if (e.target.id === "form-create-dj-offering") {
-      e.preventDefault();
-      if (!canManageDjClasses()) {
-        alert("Only DJ Facilitators or Admins can open a new DJ class.");
-        return;
-      }
-
-      const rawLevel = document.getElementById("dj-new-level")?.value || "come";
-      const classKey = normalizeDjKey(rawLevel);
-      const className = classKey.charAt(0).toUpperCase() + classKey.slice(1);
-      const classTitle = document.getElementById("dj-new-title")?.value.trim() || "";
-      const openDate = document.getElementById("dj-new-open")?.value || getAucklandTodayISO();
-      const closeDate = document.getElementById("dj-new-close")?.value || "";
-      const isHidden = Boolean(document.getElementById("dj-new-hidden")?.checked);
-
-      const facilitatorName =
-        portalState.profile?.discipleDoc?.full_name ||
-        portalState.profile?.displayName ||
-        portalState.profile?.name ||
-        "Facilitator";
-      const facilitatorEmail =
-        portalState.profile?.discipleDoc?.email ||
-        portalState.profile?.email ||
-        "";
-
-      const submitBtn = e.target.querySelector('button[type="submit"]');
-      if (submitBtn) submitBtn.disabled = true;
-
-      try {
-        const created = await createDjClassOffering({
-          class_key: classKey,
-          class_name: className,
-          class_title: classTitle,
-          facilitator_id: portalState.profile?.discipleDoc?.id || portalState.profile?.uid || "",
-          facilitator_name: facilitatorName,
-          facilitator_email: facilitatorEmail,
-          registration_open_date: openDate,
-          registration_close_date: closeDate,
-          is_hidden: isHidden
-        });
-        e.target.reset();
-        const openEl = document.getElementById("dj-new-open");
-        if (openEl) openEl.value = getAucklandTodayISO();
-
-        portalState.djOfferings = await getAllDjOfferings().catch(() => []);
-        if (created?.id) portalState.selectedDjOfferingId = created.id;
-        renderPublicDjClasses();
-        if (portalState.profile?.discipleDoc) {
-          await loadSelectedDjEnrollments();
-          renderMyDjClassesSection();
-          renderDjFacilitatorTeachingPanel();
-          applyMemberPortalLayoutOrder();
-        }
-      } catch (err) {
-        alert("Failed to create DJ class: " + (err?.message || err));
-      } finally {
-        if (submitBtn) submitBtn.disabled = false;
-      }
-    }
   });
 
   panel.addEventListener("click", async (e) => {
     const toggleProfileBtn = e.target.closest("#btn-toggle-church-profile");
     if (toggleProfileBtn) {
       document.getElementById("church-profile-editor")?.classList.toggle("hidden");
-      return;
-    }
-
-    const delAnnBtn = e.target.closest("button[data-delete-ann]");
-    if (delAnnBtn) {
-      if (!canManageChurchPortal()) return;
-      const annId = delAnnBtn.dataset.deleteAnn;
-      if (!annId || !confirm("Delete this announcement?")) return;
-      delAnnBtn.disabled = true;
-      try {
-        await deleteDoc(doc(db, "announcements", annId));
-        portalState.announcements = portalState.announcements.filter(a => a.id !== annId);
-        renderAnnouncementBoard();
-      } catch (err) {
-        delAnnBtn.disabled = false;
-        alert("Failed to delete announcement: " + (err?.message || err));
-      }
       return;
     }
 
@@ -694,11 +592,18 @@ function bindPublicPortalEvents() {
   });
 }
 
+function getAnnouncementCategoryBadge(cat) {
+  const c = String(cat || "General").toLowerCase();
+  if (c.includes("roster")) return "bg-blue-50 text-blue-800 border-blue-200";
+  if (c.includes("service")) return "bg-amber-50 text-amber-900 border-amber-200";
+  if (c.includes("urgent")) return "bg-red-50 text-red-800 border-red-200";
+  return "bg-slate-100 text-slate-700 border-slate-200";
+}
+
 function renderAnnouncementBoard() {
   const listEl = document.getElementById("church-announcements-list");
   if (!listEl) return;
 
-  const isManager = canManageChurchPortal();
   const items = portalState.announcements;
 
   if (items.length === 0) {
@@ -710,23 +615,14 @@ function renderAnnouncementBoard() {
     return;
   }
 
-  const categoryBadge = (cat) => {
-    const c = String(cat || "General").toLowerCase();
-    if (c.includes("roster")) return "bg-blue-50 text-blue-800 border-blue-200";
-    if (c.includes("service")) return "bg-amber-50 text-amber-900 border-amber-200";
-    if (c.includes("urgent")) return "bg-red-50 text-red-800 border-red-200";
-    return "bg-slate-100 text-slate-700 border-slate-200";
-  };
-
   listEl.innerHTML = items.map(a => `
     <div class="p-3.5 rounded-xl border ${a.pinned ? "border-amber-300 bg-amber-50/40" : "border-slate-200 bg-white"} space-y-1.5 text-xs">
       <div class="flex items-start justify-between gap-2">
         <div class="flex items-center gap-1.5 flex-wrap">
           ${a.pinned ? `<span class="px-2 py-0.5 bg-amber-400 text-slate-950 font-extrabold rounded text-[10px]">PINNED</span>` : ""}
-          <span class="px-2 py-0.5 border rounded font-semibold text-[10px] ${categoryBadge(a.category)}">${esc(a.category || "General")}</span>
+          <span class="px-2 py-0.5 border rounded font-semibold text-[10px] ${getAnnouncementCategoryBadge(a.category)}">${esc(a.category || "General")}</span>
           <span class="font-mono text-[11px] text-slate-500">${esc(a.announcement_date || "")}</span>
         </div>
-        ${isManager ? `<button type="button" data-delete-ann="${esc(a.id)}" class="text-red-600 hover:underline font-semibold shrink-0">Delete</button>` : ""}
       </div>
       <h4 class="font-bold text-sm text-slate-900">${esc(a.title)}</h4>
       <p class="text-slate-700 whitespace-pre-line leading-relaxed">${esc(a.body)}</p>
@@ -740,7 +636,6 @@ function renderPublicDjClasses() {
   if (!container) return;
 
   const todayISO = getAucklandTodayISO();
-  const canCreate = canManageDjClasses();
   const discipleDoc = portalState.profile?.discipleDoc;
   const isMember = Boolean(discipleDoc?.id) && !discipleDoc?._isAdminFallback;
 
@@ -752,8 +647,6 @@ function renderPublicDjClasses() {
       String(a.created_at_iso || a.registration_open_date || "")
     );
   });
-
-  const hiddenOrDisabledCount = portalState.djOfferings.length - visibleOfferings.length;
 
   const levelBadge = (key) => {
     const l = normalizeDjKey(key);
@@ -834,46 +727,8 @@ function renderPublicDjClasses() {
           <h3 class="font-bold text-sm text-slate-900">🎓 Discipleship Journey (DJ) Classes</h3>
           <p class="text-[11px] text-slate-500">Sequential path: ${DJ_LEVEL_ORDER.map(k => k.toUpperCase()).join(" → ")}</p>
         </div>
-        <div class="flex items-center gap-2">
-          ${canCreate && hiddenOrDisabledCount > 0 ? `<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${hiddenOrDisabledCount} hidden/disabled (manage in My Portal)</span>` : ""}
-          <span class="text-[11px] font-semibold text-slate-500">${visibleOfferings.length} visible</span>
-        </div>
+        <span class="text-[11px] font-semibold text-slate-500">${visibleOfferings.length} visible</span>
       </div>
-
-      ${canCreate ? `
-        <form id="form-create-dj-offering" class="bg-amber-50/60 p-3 rounded-xl border border-amber-200 space-y-2 text-xs">
-          <p class="font-bold text-slate-900">➕ Open New DJ Class (Facilitator / Admin)</p>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            <div>
-              <label class="text-[10px] font-bold text-slate-600 uppercase">DJ Class Level</label>
-              <select id="dj-new-level" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold mt-0.5">
-                ${DJ_LEVEL_ORDER.map(k => `<option value="${k}">${k.charAt(0).toUpperCase() + k.slice(1)}</option>`).join("")}
-              </select>
-            </div>
-            <div>
-              <label class="text-[10px] font-bold text-slate-600 uppercase">Batch / Title</label>
-              <input type="text" id="dj-new-title" placeholder="e.g. Come — Dec 2026" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5" />
-            </div>
-            <div>
-              <label class="text-[10px] font-bold text-slate-600 uppercase">Registration Opens</label>
-              <input type="date" id="dj-new-open" value="${esc(todayISO)}" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5" />
-            </div>
-            <div>
-              <label class="text-[10px] font-bold text-slate-600 uppercase">Registration Closes</label>
-              <input type="date" id="dj-new-close" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5" />
-            </div>
-          </div>
-          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
-            <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
-              <input type="checkbox" id="dj-new-hidden" class="rounded border-slate-300" />
-              Create as hidden (invisible on Church Portal until ready)
-            </label>
-            <button type="submit" class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg">
-              🚀 Publish DJ Class
-            </button>
-          </div>
-        </form>
-      ` : ""}
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${cardsHtml}</div>
     </div>
@@ -992,29 +847,6 @@ function renderPublicFeed() {
             </div>
             <span class="text-[11px] font-semibold text-slate-500">${portalState.announcements.length} active</span>
           </div>
-
-          ${isManager ? `
-            <form id="form-announcement" class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 text-xs">
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <input type="text" id="ann-title" required placeholder="Announcement title..." class="sm:col-span-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold" />
-                <select id="ann-category" class="px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold">
-                  <option value="General">General</option>
-                  <option value="Sunday Service">Sunday Service</option>
-                  <option value="Ministry Roster">Ministry Roster</option>
-                  <option value="Urgent">Urgent</option>
-                </select>
-              </div>
-              <textarea id="ann-body" rows="2" required placeholder="Write short internal notice..." class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"></textarea>
-              <div class="flex items-center justify-between gap-2">
-                <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
-                  <input type="checkbox" id="ann-pinned" class="rounded border-slate-300" /> Pin to top
-                </label>
-                <button type="submit" class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg">
-                  + Post Notice
-                </button>
-              </div>
-            </form>
-          ` : ""}
 
           <div id="church-announcements-list" class="space-y-2.5"></div>
         </div>
@@ -1154,6 +986,7 @@ function applyMemberPortalLayoutOrder() {
     findSectionCardByChild(document.getElementById("form-my-profile"), null);
 
   const rosterManagerCard = document.getElementById("my-portal-dept-roster-manager");
+  const announcementManagerCard = document.getElementById("my-portal-announcement-manager");
   const djTeachingCard = document.getElementById("my-portal-dj-teaching-panel");
   const myDjCard = document.getElementById("my-portal-dj-classes-card");
 
@@ -1172,32 +1005,39 @@ function applyMemberPortalLayoutOrder() {
     }
   });
 
-  [dutiesCard, rosterManagerCard, djTeachingCard, myDjCard].forEach(card => {
+  [dutiesCard, rosterManagerCard, announcementManagerCard, djTeachingCard, myDjCard].forEach(card => {
     if (card) card.classList.remove("mt-4", "mt-5", "mt-6", "mb-4", "mb-6");
   });
 
   const hasManagedDepts = Array.isArray(portalState.managedDepartments) && portalState.managedDepartments.length > 0;
-  const hasDjPanel = canManageDjClasses() && portalState.djOfferings.length > 0;
+  const hasAnnouncementPanel = canManageAnnouncements();
+  const hasDjPanel = canManageDjClasses();
 
   if (profileHeaderCard && profileHeaderCard.parentElement === bodyEl) {
     bodyEl.appendChild(profileHeaderCard);
   }
 
-  if (hasManagedDepts) {
-    if (rosterManagerCard) bodyEl.appendChild(rosterManagerCard);
-    if (hasDjPanel && djTeachingCard) bodyEl.appendChild(djTeachingCard);
-    if (dutiesCard) bodyEl.appendChild(dutiesCard);
-    if (myDjCard) bodyEl.appendChild(myDjCard);
-    bodyEl.appendChild(twoColGrid);
-  } else {
-    if (hasDjPanel && djTeachingCard) bodyEl.appendChild(djTeachingCard);
-    if (dutiesCard) bodyEl.appendChild(dutiesCard);
-    if (myDjCard) bodyEl.appendChild(myDjCard);
-    bodyEl.appendChild(twoColGrid);
-    if (rosterManagerCard && rosterManagerCard.parentElement === bodyEl) {
-      bodyEl.removeChild(rosterManagerCard);
-    }
+  if (hasManagedDepts && rosterManagerCard) {
+    bodyEl.appendChild(rosterManagerCard);
+  } else if (rosterManagerCard && rosterManagerCard.parentElement === bodyEl) {
+    bodyEl.removeChild(rosterManagerCard);
   }
+
+  if (hasAnnouncementPanel && announcementManagerCard) {
+    bodyEl.appendChild(announcementManagerCard);
+  } else if (announcementManagerCard && announcementManagerCard.parentElement === bodyEl) {
+    bodyEl.removeChild(announcementManagerCard);
+  }
+
+  if (hasDjPanel && djTeachingCard) {
+    bodyEl.appendChild(djTeachingCard);
+  } else if (djTeachingCard && djTeachingCard.parentElement === bodyEl) {
+    bodyEl.removeChild(djTeachingCard);
+  }
+
+  if (dutiesCard) bodyEl.appendChild(dutiesCard);
+  if (myDjCard) bodyEl.appendChild(myDjCard);
+  bodyEl.appendChild(twoColGrid);
 }
 
 async function loadSelectedDjEnrollments() {
@@ -1238,7 +1078,8 @@ async function refreshMemberSelfService() {
     allDisciples,
     allUnavailability,
     djOfferings,
-    allDjEnrollments
+    allDjEnrollments,
+    announcements
   ] = await Promise.all([
     isRealDiscipleRecord ? getMyAssignments(discipleDoc.id).catch(() => []) : Promise.resolve([]),
     isRealDiscipleRecord ? getMyUnavailability(discipleDoc.id).catch(() => []) : Promise.resolve([]),
@@ -1248,7 +1089,8 @@ async function refreshMemberSelfService() {
     getDisciples().catch(() => []),
     getUnavailability().catch(() => []),
     getAllDjOfferings().catch(() => []),
-    getAllDjEnrollments().catch(() => [])
+    getAllDjEnrollments().catch(() => []),
+    fetchAnnouncements()
   ]);
 
   const todayISO = getAucklandTodayISO();
@@ -1272,6 +1114,7 @@ async function refreshMemberSelfService() {
   portalState.managedDepartments = resolveManagedDepartments(discipleDoc, portalState.allDepartments);
   portalState.djOfferings = djOfferings;
   portalState.allDjEnrollments = allDjEnrollments;
+  portalState.announcements = announcements;
 
   if (!portalState.selectedRosterDate && portalState.weeks.length > 0) {
     const sortedWeeks = [...portalState.weeks].sort((a, b) =>
@@ -1300,8 +1143,92 @@ async function refreshMemberSelfService() {
   renderMyBlockouts();
   renderMyDjClassesSection();
   renderDepartmentRosterManagerInMyPortal();
+  renderAnnouncementManagerInMyPortal();
   renderDjFacilitatorTeachingPanel();
   applyMemberPortalLayoutOrder();
+}
+
+// --- ANNOUNCEMENT BOARD MANAGEMENT IN MY PORTAL (ROLE / ADMIN) ---
+function renderAnnouncementManagerInMyPortal() {
+  const bodyEl = document.getElementById("member-selfservice-body");
+  if (!bodyEl) return;
+
+  let container = document.getElementById("my-portal-announcement-manager");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "my-portal-announcement-manager";
+    bodyEl.appendChild(container);
+  }
+
+  if (!canManageAnnouncements()) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const isSysAdmin = isSystemAdminUser() || canManageChurchPortal();
+  const items = portalState.announcements;
+
+  const listHtml = items.length > 0
+    ? items.map(a => `
+        <div class="p-3 rounded-xl border ${a.pinned ? "border-amber-300 bg-amber-50/40" : "border-slate-200 bg-slate-50/70"} flex items-start justify-between gap-3 text-xs">
+          <div class="space-y-1 min-w-0">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              ${a.pinned ? `<span class="px-2 py-0.5 bg-amber-400 text-slate-950 font-extrabold rounded text-[10px]">PINNED</span>` : ""}
+              <span class="px-2 py-0.5 border rounded font-semibold text-[10px] ${getAnnouncementCategoryBadge(a.category)}">${esc(a.category || "General")}</span>
+              <span class="font-mono text-[11px] text-slate-500">${esc(a.announcement_date || "")}</span>
+            </div>
+            <h4 class="font-bold text-sm text-slate-900">${esc(a.title)}</h4>
+            <p class="text-slate-700 whitespace-pre-line leading-relaxed">${esc(a.body)}</p>
+            ${a.author_name ? `<p class="text-[10px] text-slate-400">Posted by ${esc(a.author_name)}</p>` : ""}
+          </div>
+          <button
+            type="button"
+            data-delete-ann="${esc(a.id)}"
+            class="px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold text-[11px] shrink-0"
+          >
+            Delete
+          </button>
+        </div>
+      `).join("")
+    : `<p class="text-xs text-slate-500">No internal announcements posted yet.</p>`;
+
+  container.innerHTML = `
+    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+        <div>
+          <span class="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-900 text-amber-400">
+            ${isSysAdmin ? "🛡️ System Admin — Announcement Control" : "📢 Announcement Board Team"}
+          </span>
+          <h3 class="font-bold text-base text-slate-900 mt-1">Manage Church Announcements</h3>
+          <p class="text-xs text-slate-500">Post or remove announcements displayed on the Church Portal</p>
+        </div>
+        <span class="text-xs font-bold text-slate-600">${items.length} active</span>
+      </div>
+
+      <form id="form-announcement" class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <input type="text" id="ann-title" required placeholder="Announcement title..." class="sm:col-span-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold" />
+          <select id="ann-category" class="px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold">
+            <option value="General">General</option>
+            <option value="Sunday Service">Sunday Service</option>
+            <option value="Ministry Roster">Ministry Roster</option>
+            <option value="Urgent">Urgent</option>
+          </select>
+        </div>
+        <textarea id="ann-body" rows="2" required placeholder="Write short internal notice..." class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"></textarea>
+        <div class="flex items-center justify-between gap-2">
+          <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
+            <input type="checkbox" id="ann-pinned" class="rounded border-slate-300" /> Pin to top
+          </label>
+          <button type="submit" class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg">
+            + Post Notice
+          </button>
+        </div>
+      </form>
+
+      <div class="space-y-2">${listHtml}</div>
+    </div>
+  `;
 }
 
 // --- MY DISCIPLESHIP JOURNEY (DJ) PROGRESS & CLASSES IN MY PORTAL ---
@@ -1459,8 +1386,62 @@ function renderDjFacilitatorTeachingPanel() {
     bodyEl.appendChild(container);
   }
 
-  if (!canManageDjClasses() || portalState.djOfferings.length === 0) {
+  if (!canManageDjClasses()) {
     container.innerHTML = "";
+    return;
+  }
+
+  const todayISO = getAucklandTodayISO();
+  const isSysAdmin = isSystemAdminUser() || canManageChurchPortal();
+
+  const createClassFormHtml = `
+    <form id="form-create-dj-offering" class="bg-amber-50/60 p-3.5 rounded-xl border border-amber-200 space-y-2.5 text-xs">
+      <p class="font-bold text-slate-900">➕ Open New DJ Class (Facilitator / System Admin)</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        <div>
+          <label class="text-[10px] font-bold text-slate-600 uppercase">DJ Class Level</label>
+          <select id="dj-new-level" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold mt-0.5">
+            ${DJ_LEVEL_ORDER.map(k => `<option value="${k}">${k.charAt(0).toUpperCase() + k.slice(1)}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <label class="text-[10px] font-bold text-slate-600 uppercase">Batch / Title</label>
+          <input type="text" id="dj-new-title" placeholder="e.g. Come — Dec 2026" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5" />
+        </div>
+        <div>
+          <label class="text-[10px] font-bold text-slate-600 uppercase">Registration Opens</label>
+          <input type="date" id="dj-new-open" value="${esc(todayISO)}" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5" />
+        </div>
+        <div>
+          <label class="text-[10px] font-bold text-slate-600 uppercase">Registration Closes</label>
+          <input type="date" id="dj-new-close" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5" />
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
+          <input type="checkbox" id="dj-new-hidden" class="rounded border-slate-300" />
+          Create as hidden (invisible on Church Portal until ready)
+        </label>
+        <button type="submit" class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg">
+          🚀 Publish DJ Class
+        </button>
+      </div>
+    </form>
+  `;
+
+  if (portalState.djOfferings.length === 0) {
+    container.innerHTML = `
+      <div class="bg-white p-5 rounded-2xl border border-amber-300 shadow-sm space-y-4">
+        <div class="border-b border-slate-200 pb-3">
+          <span class="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900">
+            ${isSysAdmin ? "🛡️ System Admin & Facilitator Class Maintenance" : "🎓 DJ Facilitator Teaching Panel"}
+          </span>
+          <h3 class="font-bold text-base text-slate-900 mt-1">Discipleship Journey (DJ) Classes</h3>
+          <p class="text-xs text-slate-500">No DJ classes created yet. Open a new class below.</p>
+        </div>
+        ${createClassFormHtml}
+      </div>
+    `;
     return;
   }
 
@@ -1473,9 +1454,7 @@ function renderDjFacilitatorTeachingPanel() {
   const isDisabled = isDjOfferingDisabled(offering);
   const isHidden = isDjOfferingHidden(offering);
   const isClosed = offering.registration_manually_closed === true;
-  const todayISO = getAucklandTodayISO();
   const facilitatorName = getFacilitatorDisplayName(offering);
-  const isSysAdmin = isSystemAdminUser() || canManageChurchPortal();
   const currentLevelKey = normalizeDjKey(offering.class_key || offering.class_name || "come");
   const enrolledCount = portalState.selectedDjEnrollments.length;
 
@@ -1650,6 +1629,8 @@ function renderDjFacilitatorTeachingPanel() {
           ` : ""}
         </div>
       </div>
+
+      ${createClassFormHtml}
 
       ${portalState.djEditModeOpen ? `
         <form onsubmit="window.saveDjOfferingEdit(event, '${esc(offering.id)}')" class="bg-slate-50 p-4 rounded-xl border border-slate-300 space-y-3 text-xs">
@@ -2356,6 +2337,137 @@ function renderMyBlockouts() {
 function bindMemberPortalEvents() {
   if (portalState.memberEventsBound) return;
   portalState.memberEventsBound = true;
+
+  const memberBody = document.getElementById("member-selfservice-body");
+  if (memberBody && !memberBody.dataset.portalActionsBound) {
+    memberBody.dataset.portalActionsBound = "true";
+
+    memberBody.addEventListener("submit", async (e) => {
+      if (e.target.id === "form-announcement") {
+        e.preventDefault();
+        if (!canManageAnnouncements()) {
+          alert("You do not have Announcement Board posting access.");
+          return;
+        }
+
+        const title = document.getElementById("ann-title")?.value.trim() || "";
+        const category = document.getElementById("ann-category")?.value || "General";
+        const body = document.getElementById("ann-body")?.value.trim() || "";
+        const pinned = Boolean(document.getElementById("ann-pinned")?.checked);
+        if (!title || !body) return;
+
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
+          await addDoc(collection(db, "announcements"), {
+            church_id: portalState.churchProfile.church_id || "ifgf_palmy",
+            title,
+            category,
+            body,
+            pinned,
+            announcement_date: getAucklandTodayISO(),
+            author_name:
+              portalState.profile?.discipleDoc?.full_name ||
+              portalState.profile?.displayName ||
+              "Admin",
+            is_active: true,
+            created_at: serverTimestamp()
+          });
+          e.target.reset();
+          portalState.announcements = await fetchAnnouncements();
+          renderAnnouncementBoard();
+          renderAnnouncementManagerInMyPortal();
+        } catch (err) {
+          alert("Failed to post announcement: " + (err?.message || err));
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+        return;
+      }
+
+      if (e.target.id === "form-create-dj-offering") {
+        e.preventDefault();
+        if (!canManageDjClasses()) {
+          alert("Only DJ Facilitators or System Admins can open a new DJ class.");
+          return;
+        }
+
+        const rawLevel = document.getElementById("dj-new-level")?.value || "come";
+        const classKey = normalizeDjKey(rawLevel);
+        const className = classKey.charAt(0).toUpperCase() + classKey.slice(1);
+        const classTitle = document.getElementById("dj-new-title")?.value.trim() || "";
+        const openDate = document.getElementById("dj-new-open")?.value || getAucklandTodayISO();
+        const closeDate = document.getElementById("dj-new-close")?.value || "";
+        const isHidden = Boolean(document.getElementById("dj-new-hidden")?.checked);
+
+        const facilitatorName =
+          portalState.profile?.discipleDoc?.full_name ||
+          portalState.profile?.displayName ||
+          portalState.profile?.name ||
+          "Facilitator";
+        const facilitatorEmail =
+          portalState.profile?.discipleDoc?.email ||
+          portalState.profile?.email ||
+          "";
+
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
+          const created = await createDjClassOffering({
+            class_key: classKey,
+            class_name: className,
+            class_title: classTitle,
+            facilitator_id: portalState.profile?.discipleDoc?.id || portalState.profile?.uid || "",
+            facilitator_name: facilitatorName,
+            facilitator_email: facilitatorEmail,
+            registration_open_date: openDate,
+            registration_close_date: closeDate,
+            is_hidden: isHidden
+          });
+
+          e.target.reset();
+          const openEl = document.getElementById("dj-new-open");
+          if (openEl) openEl.value = getAucklandTodayISO();
+
+          portalState.djOfferings = await getAllDjOfferings().catch(() => []);
+          if (created?.id) portalState.selectedDjOfferingId = created.id;
+
+          renderPublicDjClasses();
+          if (portalState.profile?.discipleDoc) {
+            await loadSelectedDjEnrollments();
+            renderMyDjClassesSection();
+            renderDjFacilitatorTeachingPanel();
+            applyMemberPortalLayoutOrder();
+          }
+        } catch (err) {
+          alert("Failed to create DJ class: " + (err?.message || err));
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      }
+    });
+
+    memberBody.addEventListener("click", async (e) => {
+      const delAnnBtn = e.target.closest("button[data-delete-ann]");
+      if (delAnnBtn) {
+        if (!canManageAnnouncements()) return;
+        const annId = delAnnBtn.dataset.deleteAnn;
+        if (!annId || !confirm("Delete this announcement?")) return;
+        delAnnBtn.disabled = true;
+        try {
+          await deleteDoc(doc(db, "announcements", annId));
+          portalState.announcements = portalState.announcements.filter(a => a.id !== annId);
+          renderAnnouncementBoard();
+          renderAnnouncementManagerInMyPortal();
+        } catch (err) {
+          delAnnBtn.disabled = false;
+          alert("Failed to delete announcement: " + (err?.message || err));
+        }
+      }
+    });
+  }
 
   document.getElementById("form-my-blockout")?.addEventListener("submit", async (e) => {
     e.preventDefault();
