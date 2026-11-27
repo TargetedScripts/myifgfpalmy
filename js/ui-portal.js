@@ -728,10 +728,6 @@ function renderPublicDjClasses() {
   const canCreate = canManageDjClasses();
   const discipleDoc = portalState.profile?.discipleDoc;
   const isMember = Boolean(discipleDoc?.id) && !discipleDoc?._isAdminFallback;
-  const highestCompleted = isMember
-    ? getHighestCompletedDjLevel(discipleDoc, portalState.allDjEnrollments)
-    : null;
-  const highestIdx = highestCompleted ? DJ_LEVEL_ORDER.indexOf(highestCompleted) : -1;
 
   const offerings = [...portalState.djOfferings].sort((a, b) => {
     const openA = isRegistrationOpen(a, todayISO) ? 0 : 1;
@@ -757,22 +753,16 @@ function renderPublicDjClasses() {
         const chapters = Array.isArray(o.chapters) ? o.chapters : [];
         const completedCount = chapters.filter(c => c.completed === true).length;
         const levelKey = normalizeDjKey(o.class_key || o.class_name || "come");
-        const levelIdx = DJ_LEVEL_ORDER.indexOf(levelKey);
         const levelLabel = o.class_name || (levelKey.charAt(0).toUpperCase() + levelKey.slice(1));
         const prereqLabel = getPrereqLabelForLevel(levelKey);
         const facilitatorName = getFacilitatorDisplayName(o);
-
-        const allDjDone = isMember && highestCompleted === "lead";
-        const levelAlreadyDone = isMember && (
-          isDjLevelCompleted(discipleDoc, levelKey, portalState.allDjEnrollments) ||
-          (levelIdx >= 0 && highestIdx >= levelIdx)
+        const alreadyEnrolled = isMember && portalState.allDjEnrollments.some(
+          e => e.offering_id === o.id && e.disciple_id === discipleDoc.id
         );
 
         let actionHtml = "";
-        if (allDjDone) {
-          actionHtml = `<span class="text-[11px] text-emerald-700 font-semibold">🎓 Completed all DJ levels (up to LEAD)</span>`;
-        } else if (levelAlreadyDone) {
-          actionHtml = `<span class="text-[11px] text-emerald-700 font-semibold">✅ Already completed DJ ${esc(levelLabel)}</span>`;
+        if (alreadyEnrolled) {
+          actionHtml = `<span class="text-[11px] text-blue-700 font-semibold">✅ Enrolled in this class</span>`;
         } else if (isOpen) {
           actionHtml = `<button type="button" data-enroll-dj="${esc(o.id)}" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-[11px]">
             Enroll Class
@@ -788,15 +778,13 @@ function renderPublicDjClasses() {
                 DJ: ${esc(levelLabel)}
               </span>
               <span class="px-2 py-0.5 rounded-full font-extrabold text-[10px] ${
-                levelAlreadyDone
-                  ? "bg-emerald-100 text-emerald-900"
-                  : isOfferingCompleted
+                isOfferingCompleted
                   ? "bg-slate-200 text-slate-700"
                   : isOpen
                   ? "bg-emerald-100 text-emerald-800"
                   : "bg-red-100 text-red-800"
               }">
-                ${levelAlreadyDone ? "COMPLETED" : isOfferingCompleted ? "COMPLETED" : isOpen ? "OPEN" : "CLOSED"}
+                ${isOfferingCompleted ? "COMPLETED" : isOpen ? "OPEN" : "CLOSED"}
               </span>
             </div>
 
@@ -1336,22 +1324,18 @@ function renderMyDjClassesSection() {
   const offeringsHtml = portalState.djOfferings.length > 0
     ? portalState.djOfferings.map(o => {
         const levelKey = normalizeDjKey(o.class_key || o.class_name || "come");
-        const levelIdx = DJ_LEVEL_ORDER.indexOf(levelKey);
         const levelLabel = o.class_name || (levelKey.charAt(0).toUpperCase() + levelKey.slice(1));
         const facilitatorName = getFacilitatorDisplayName(o);
         const isOpen = isRegistrationOpen(o, todayISO);
         const myEnr = myEnrollments.find(e => e.offering_id === o.id);
-        const levelDone = isDjLevelCompleted(discipleDoc, levelKey, portalState.allDjEnrollments) || (levelIdx >= 0 && highestIdx >= levelIdx);
 
         let statusTag = "";
         if (myEnr) {
           statusTag = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900">${esc(myEnr.status || "Enrolled")}</span>`;
-        } else if (levelDone) {
-          statusTag = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900">Completed</span>`;
         } else if (isOpen) {
           statusTag = `<button type="button" onclick="window.enrollDjFromMyPortal('${esc(o.id)}')" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-[10px]">Enroll</button>`;
         } else {
-          statusTag = `<span class="text-[10px] text-slate-400 font-semibold">Closed</span>`;
+          statusTag = `<span class="text-[10px] text-slate-400 font-semibold">${String(o.status || "").toLowerCase() === "completed" ? "Completed" : "Closed"}</span>`;
         }
 
         return `
@@ -1360,6 +1344,13 @@ function renderMyDjClassesSection() {
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-bold text-slate-900">${esc(o.class_title || `${levelLabel} Class`)}</span>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-800">DJ: ${esc(levelLabel)}</span>
+                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                  String(o.status || "").toLowerCase() === "completed"
+                    ? "bg-slate-200 text-slate-700"
+                    : isOpen
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-red-100 text-red-800"
+                }">${String(o.status || "").toLowerCase() === "completed" ? "COMPLETED" : isOpen ? "OPEN" : "CLOSED"}</span>
               </div>
               <p class="text-[11px] text-slate-600">
                 Facilitator: <strong>${esc(facilitatorName)}</strong>
