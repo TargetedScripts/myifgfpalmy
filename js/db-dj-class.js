@@ -38,13 +38,6 @@ export function getAucklandTodayISO() {
   }).format(new Date());
 }
 
-/**
- * Menentukan apakah pendaftaran kelas masih terbuka:
- * - Status tidak "Completed"
- * - Tidak ditutup manual oleh facilitator
- * - Tanggal hari ini (Pacific/Auckland) >= registration_open_date (jika ada)
- * - Tanggal hari ini (Pacific/Auckland) <= registration_close_date (jika ada)
- */
 export function isRegistrationOpen(offering, todayISO = getAucklandTodayISO()) {
   if (!offering) return false;
   if (String(offering.status || "").toLowerCase() === "completed") return false;
@@ -58,9 +51,6 @@ export function isRegistrationOpen(offering, todayISO = getAucklandTodayISO()) {
   return true;
 }
 
-/**
- * Mengecek apakah level tertentu sudah "Completed" pada profil disciple atau riwayat enrollment.
- */
 export function isDjLevelCompleted(disciple = {}, classKey = "", allEnrollments = []) {
   const key = normalizeDjKey(classKey);
   if (!key) return false;
@@ -85,31 +75,83 @@ export function isDjLevelCompleted(disciple = {}, classKey = "", allEnrollments 
 }
 
 /**
- * Validasi urutan prasyarat: Come -> Grow -> Serve -> Lead.
+ * Mengembalikan level tertinggi yang sudah "Completed" (mis. "lead"), atau null jika belum ada.
  */
-export function checkDjPrerequisite(disciple = {}, targetClassKey = "", allEnrollments = []) {
-  const key = normalizeDjKey(targetClassKey);
-  const idx = DJ_LEVEL_ORDER.indexOf(key);
-  if (idx <= 0) {
-    return { allowed: true, missingLevelKey: null, message: "" };
+export function getHighestCompletedDjLevel(disciple = {}, allEnrollments = []) {
+  for (let i = DJ_LEVEL_ORDER.length - 1; i >= 0; i--) {
+    const key = DJ_LEVEL_ORDER[i];
+    if (isDjLevelCompleted(disciple, key, allEnrollments)) {
+      return key;
+    }
+  }
+  return null;
+}
+
+/**
+ * Mengembalikan level DJ berikutnya yang boleh diambil, atau null jika sudah lulus sampai LEAD.
+ */
+export function getNextEligibleDjLevel(disciple = {}, allEnrollments = []) {
+  const highest = getHighestCompletedDjLevel(disciple, allEnrollments);
+  if (!highest) return "come";
+  const idx = DJ_LEVEL_ORDER.indexOf(highest);
+  if (idx < 0 || idx >= DJ_LEVEL_ORDER.length - 1) return null;
+  return DJ_LEVEL_ORDER[idx + 1];
+}
+
+/**
+ * Validasi penuh kelayakan pendaftaran kelas DJ:
+ * 1. Menolak jika sudah lulus sampai LEAD (semua jenjang DJ selesai).
+ * 2. Menolak jika kelas target atau jenjang di atasnya sudah Completed.
+ * 3. Menolak jika prasyarat kelas sebelumnya belum Completed.
+ */
+export function validateDjEnrollmentEligibility(disciple = {}, targetClassKey = "", allEnrollments = []) {
+  const targetKey = normalizeDjKey(targetClassKey);
+  const targetIdx = DJ_LEVEL_ORDER.indexOf(targetKey);
+  const targetLabel = targetKey.toUpperCase();
+
+  const highestCompleted = getHighestCompletedDjLevel(disciple, allEnrollments);
+  const highestIdx = highestCompleted ? DJ_LEVEL_ORDER.indexOf(highestCompleted) : -1;
+  const nextEligible = getNextEligibleDjLevel(disciple, allEnrollments);
+
+  if (highestCompleted === "lead" || nextEligible === null) {
+    return {
+      allowed: false,
+      reason: "all_completed",
+      message: "You have already completed all Discipleship Journey classes up to DJ LEAD. No further DJ class enrollment is required."
+    };
   }
 
-  for (let i = 0; i < idx; i++) {
-    const reqKey = DJ_LEVEL_ORDER[i];
-    const completedInProfile = isDjLevelCompleted(disciple, reqKey, allEnrollments);
+  if (targetIdx >= 0 && highestIdx >= targetIdx) {
+    return {
+      allowed: false,
+      reason: "already_completed_or_higher",
+      message: `You have already completed DJ ${highestCompleted.toUpperCase()}. Your next eligible class is DJ ${nextEligible.toUpperCase()}.`
+    };
+  }
 
-    if (!completedInProfile) {
-      const reqLabel = reqKey.toUpperCase();
-      const targetLabel = key.toUpperCase();
-      return {
-        allowed: false,
-        missingLevelKey: reqKey,
-        message: `Pre-requisite required: You must complete DJ ${reqLabel} before registering for DJ ${targetLabel}.`
-      };
+  if (targetIdx > 0) {
+    for (let i = 0; i < targetIdx; i++) {
+      const reqKey = DJ_LEVEL_ORDER[i];
+      if (!isDjLevelCompleted(disciple, reqKey, allEnrollments)) {
+        return {
+          allowed: false,
+          reason: "missing_prerequisite",
+          message: `Pre-requisite required: You must complete DJ ${reqKey.toUpperCase()} before registering for DJ ${targetLabel}.`
+        };
+      }
     }
   }
 
-  return { allowed: true, missingLevelKey: null, message: "" };
+  return { allowed: true, reason: "ok", message: "" };
+}
+
+export function checkDjPrerequisite(disciple = {}, targetClassKey = "", allEnrollments = []) {
+  const res = validateDjEnrollmentEligibility(disciple, targetClassKey, allEnrollments);
+  return {
+    allowed: res.allowed,
+    missingLevelKey: null,
+    message: res.message
+  };
 }
 
 function computeTrafficLightFromProgress(djProgress = {}) {
@@ -223,15 +265,9 @@ export async function registerDiscipleToDjClass({ offering, disciple, allEnrollm
   }
 
   const key = normalizeDjKey(offering.class_key || offering.class_name);
-  const levelLabel = (offering.class_name || key || "DJ").toUpperCase();
-
-  if (isDjLevelCompleted(disciple, key, allEnrollments)) {
-    throw new Error(`You have already completed DJ ${levelLabel} and do not need to re-enroll.`);
-  }
-
-  const prereq = checkDjPrerequisite(disciple, key, allEnrollments);
-  if (!prereq.allowed) {
-    throw new Error(prereq.message);
+  const eligibility = validateDjEnrollmentEligibility(disciple, key, allEnrollments);
+  if (!eligibility.allowed) {
+    throw new Error(eligibility.message);
   }
 
   const already = (allEnrollments || []).find(
