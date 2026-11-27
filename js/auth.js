@@ -2,10 +2,7 @@
 import { auth, db } from "./firebase-config.js";
 import {
   GoogleAuthProvider,
-  setPersistence,
-  browserLocalPersistence,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
@@ -20,7 +17,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: "select_account" });
 
 // Whitelist email Super Admin awal sebelum database disciples terisi
 const BOOTSTRAP_ADMINS = [
@@ -35,66 +31,32 @@ function withTimeout(promise, ms = 8000, fallbackValue = null) {
   ]);
 }
 
-function formatAuthError(error) {
-  const code = error?.code || "";
-  if (code === "auth/unauthorized-domain") {
-    return "Domain myifgfpalmy.ifgfpalmy.org belum terdaftar di Firebase Authentication Authorized Domains.";
-  }
-  if (code === "auth/operation-not-allowed") {
-    return "Google Sign-In belum diaktifkan di Firebase Authentication -> Sign-in method.";
-  }
-  if (code === "auth/network-request-failed") {
-    return "Koneksi jaringan gagal saat menghubungi Google Sign-In.";
-  }
-  return error?.message || "Authentication failed.";
-}
-
 export async function loginWithGoogle() {
   try {
-    await setPersistence(auth, browserLocalPersistence);
-    await signInWithRedirect(auth, googleProvider);
-    return { success: true, redirecting: true };
+    await signInWithPopup(auth, googleProvider);
   } catch (error) {
-    console.error("Google Redirect Sign-In Error:", error);
-    const message = formatAuthError(error);
-    alert("Sign-in failed: " + message);
-    return { success: false, code: error?.code || "auth/unknown", message, error };
+    console.error("Google Sign-In Error:", error);
+    alert("Sign-in failed: " + error.message);
   }
 }
 
 export async function sendMagicLink(email) {
-  const cleanEmail = (email || "").trim();
   const actionCodeSettings = {
     url: window.location.origin + window.location.pathname,
     handleCodeInApp: true
   };
   try {
-    await sendSignInLinkToEmail(auth, cleanEmail, actionCodeSettings);
-    window.localStorage.setItem("ifgf_email_for_signin", cleanEmail);
+    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+    window.localStorage.setItem("ifgf_email_for_signin", email);
     return { success: true };
   } catch (error) {
     console.error("Magic Link Error:", error);
-    return { success: false, code: error?.code || "auth/unknown", message: formatAuthError(error) };
+    return { success: false, message: error.message };
   }
 }
 
-export async function completePendingSignIn() {
-  try {
-    await setPersistence(auth, browserLocalPersistence);
-  } catch (e) {
-    console.warn("Persistence setup warning:", e);
-  }
-
-  try {
-    const redirectResult = await getRedirectResult(auth);
-    if (redirectResult?.user) {
-      return redirectResult.user;
-    }
-  } catch (error) {
-    console.error("Redirect result error:", error);
-    alert("Google Sign-In gagal diselesaikan: " + formatAuthError(error));
-  }
-
+// Cek apakah halaman dibuka dari klik Email Magic Link
+export async function completeMagicLinkIfPresent() {
   try {
     if (isSignInWithEmailLink(auth, window.location.href)) {
       let email = window.localStorage.getItem("ifgf_email_for_signin");
@@ -103,21 +65,17 @@ export async function completePendingSignIn() {
       }
       if (email) {
         try {
-          const linkResult = await signInWithEmailLink(auth, email.trim(), window.location.href);
+          await signInWithEmailLink(auth, email, window.location.href);
           window.localStorage.removeItem("ifgf_email_for_signin");
           window.history.replaceState({}, document.title, window.location.pathname);
-          return linkResult.user;
         } catch (error) {
-          console.error("Magic link sign-in failed:", error);
-          alert("Magic link expired or invalid: " + formatAuthError(error));
+          alert("Magic link expired or invalid: " + error.message);
         }
       }
     }
   } catch (err) {
     console.warn("Magic link check skipped:", err);
   }
-
-  return null;
 }
 
 export async function logoutUser() {
@@ -137,7 +95,6 @@ function extractLeadEmails(deptData) {
 }
 
 async function findDepartmentsLedByEmail(email) {
-  if (!email) return [];
   try {
     const snap = await withTimeout(getDocs(collection(db, "departments")), 7000, null);
     if (!snap) return [];
@@ -151,6 +108,7 @@ async function findDepartmentsLedByEmail(email) {
   }
 }
 
+// Resolusi RBAC & Profil Disciple + Department Lead
 export async function resolveUserProfile(user) {
   const email = (user?.email || "").trim().toLowerCase();
   const isBootstrapAdmin = BOOTSTRAP_ADMINS.includes(email);
@@ -164,8 +122,6 @@ export async function resolveUserProfile(user) {
     accessLevel: isBootstrapAdmin ? "super_admin" : "member",
     isAdmin: isBootstrapAdmin
   };
-
-  if (!email) return fallbackProfile;
 
   try {
     const [discipleSnap, ledDepartments] = await Promise.all([
@@ -219,25 +175,19 @@ export function initAuthObserver(onUserReady, onUserSignedOut) {
       if (user) {
         const profile = await resolveUserProfile(user);
         settled = true;
-        if (typeof onUserReady === "function") {
-          onUserReady(profile);
-        }
+        onUserReady(profile);
       } else {
         settled = true;
-        if (typeof onUserSignedOut === "function") {
-          onUserSignedOut();
-        }
+        onUserSignedOut();
       }
     }, (err) => {
       console.error("Auth observer error:", err);
       if (!settled) {
         settled = true;
-        if (typeof onUserSignedOut === "function") {
-          onUserSignedOut();
-        }
+        onUserSignedOut();
       }
     });
   };
 
-  completePendingSignIn().finally(startObserver);
+  completeMagicLinkIfPresent().finally(startObserver);
 }
