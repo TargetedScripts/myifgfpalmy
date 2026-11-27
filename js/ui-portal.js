@@ -27,6 +27,8 @@ import {
   getAucklandTodayISO,
   isRegistrationOpen,
   isDjLevelCompleted,
+  getHighestCompletedDjLevel,
+  validateDjEnrollmentEligibility,
   getAllDjOfferings,
   getAllDjEnrollments,
   getEnrollmentsByOffering,
@@ -319,8 +321,19 @@ function getPrereqLabelForLevel(levelKey) {
 function getFacilitatorDisplayName(offering = {}) {
   const name = String(offering.facilitator_name || "").trim();
   if (name) return name;
-  const email = String(offering.facilitator_email || "").trim();
-  if (email) return email;
+
+  const facId = String(offering.facilitator_id || "").trim();
+  const facEmail = String(offering.facilitator_email || "").trim().toLowerCase();
+  if (Array.isArray(portalState.allDisciples) && portalState.allDisciples.length > 0) {
+    const matched = portalState.allDisciples.find(
+      d =>
+        (facId && d.id === facId) ||
+        (facEmail && String(d.email || "").trim().toLowerCase() === facEmail)
+    );
+    if (matched?.full_name) return matched.full_name;
+  }
+
+  if (facEmail) return facEmail;
   return "TBA";
 }
 
@@ -550,7 +563,9 @@ function bindPublicPortalEvents() {
         renderPublicDjClasses();
         if (portalState.profile?.discipleDoc) {
           await loadSelectedDjEnrollments();
+          renderMyDjClassesSection();
           renderDjFacilitatorTeachingPanel();
+          applyMemberPortalLayoutOrder();
         }
       } catch (err) {
         alert("Failed to create DJ class: " + (err?.message || err));
@@ -611,8 +626,13 @@ function bindPublicPortalEvents() {
       }
 
       const levelKey = normalizeDjKey(offering.class_key || offering.class_name);
-      if (isDjLevelCompleted(discipleDoc, levelKey, portalState.allDjEnrollments)) {
-        alert(`You have already completed DJ ${levelKey.toUpperCase()} and do not need to enroll again.`);
+      const eligibility = validateDjEnrollmentEligibility(
+        discipleDoc,
+        levelKey,
+        portalState.allDjEnrollments
+      );
+      if (!eligibility.allowed) {
+        alert(eligibility.message);
         return;
       }
 
@@ -644,10 +664,12 @@ function bindPublicPortalEvents() {
         }
 
         renderPublicDjClasses();
+        renderMyDjClassesSection();
         if (portalState.selectedDjOfferingId === offeringId) {
           await loadSelectedDjEnrollments();
           renderDjFacilitatorTeachingPanel();
         }
+        applyMemberPortalLayoutOrder();
       } catch (err) {
         alert(err?.message || "Failed to enroll in DJ class.");
       } finally {
@@ -706,6 +728,10 @@ function renderPublicDjClasses() {
   const canCreate = canManageDjClasses();
   const discipleDoc = portalState.profile?.discipleDoc;
   const isMember = Boolean(discipleDoc?.id) && !discipleDoc?._isAdminFallback;
+  const highestCompleted = isMember
+    ? getHighestCompletedDjLevel(discipleDoc, portalState.allDjEnrollments)
+    : null;
+  const highestIdx = highestCompleted ? DJ_LEVEL_ORDER.indexOf(highestCompleted) : -1;
 
   const offerings = [...portalState.djOfferings].sort((a, b) => {
     const openA = isRegistrationOpen(a, todayISO) ? 0 : 1;
@@ -731,10 +757,29 @@ function renderPublicDjClasses() {
         const chapters = Array.isArray(o.chapters) ? o.chapters : [];
         const completedCount = chapters.filter(c => c.completed === true).length;
         const levelKey = normalizeDjKey(o.class_key || o.class_name || "come");
+        const levelIdx = DJ_LEVEL_ORDER.indexOf(levelKey);
         const levelLabel = o.class_name || (levelKey.charAt(0).toUpperCase() + levelKey.slice(1));
         const prereqLabel = getPrereqLabelForLevel(levelKey);
         const facilitatorName = getFacilitatorDisplayName(o);
-        const alreadyCompletedLevel = isMember && isDjLevelCompleted(discipleDoc, levelKey, portalState.allDjEnrollments);
+
+        const allDjDone = isMember && highestCompleted === "lead";
+        const levelAlreadyDone = isMember && (
+          isDjLevelCompleted(discipleDoc, levelKey, portalState.allDjEnrollments) ||
+          (levelIdx >= 0 && highestIdx >= levelIdx)
+        );
+
+        let actionHtml = "";
+        if (allDjDone) {
+          actionHtml = `<span class="text-[11px] text-emerald-700 font-semibold">🎓 Completed all DJ levels (up to LEAD)</span>`;
+        } else if (levelAlreadyDone) {
+          actionHtml = `<span class="text-[11px] text-emerald-700 font-semibold">✅ Already completed DJ ${esc(levelLabel)}</span>`;
+        } else if (isOpen) {
+          actionHtml = `<button type="button" data-enroll-dj="${esc(o.id)}" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-[11px]">
+            Enroll Class
+          </button>`;
+        } else {
+          actionHtml = `<span class="text-[11px] text-slate-400 font-medium">${isOfferingCompleted ? "Class finished" : "Registration closed"}</span>`;
+        }
 
         return `
           <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2 text-xs">
@@ -743,7 +788,7 @@ function renderPublicDjClasses() {
                 DJ: ${esc(levelLabel)}
               </span>
               <span class="px-2 py-0.5 rounded-full font-extrabold text-[10px] ${
-                alreadyCompletedLevel
+                levelAlreadyDone
                   ? "bg-emerald-100 text-emerald-900"
                   : isOfferingCompleted
                   ? "bg-slate-200 text-slate-700"
@@ -751,7 +796,7 @@ function renderPublicDjClasses() {
                   ? "bg-emerald-100 text-emerald-800"
                   : "bg-red-100 text-red-800"
               }">
-                ${alreadyCompletedLevel ? "COMPLETED" : isOfferingCompleted ? "COMPLETED" : isOpen ? "OPEN" : "CLOSED"}
+                ${levelAlreadyDone ? "COMPLETED" : isOfferingCompleted ? "COMPLETED" : isOpen ? "OPEN" : "CLOSED"}
               </span>
             </div>
 
@@ -769,15 +814,7 @@ function renderPublicDjClasses() {
             ` : ""}
 
             <div class="pt-1 flex items-center justify-between gap-2">
-              ${
-                alreadyCompletedLevel
-                  ? `<span class="text-[11px] text-emerald-700 font-semibold">✅ Already completed DJ ${esc(levelLabel)}</span>`
-                  : isOpen
-                  ? `<button type="button" data-enroll-dj="${esc(o.id)}" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-[11px]">
-                       Enroll Class
-                     </button>`
-                  : `<span class="text-[11px] text-slate-400 font-medium">${isOfferingCompleted ? "Class finished" : "Registration closed"}</span>`
-              }
+              ${actionHtml}
             </div>
           </div>
         `;
@@ -1105,6 +1142,7 @@ function applyMemberPortalLayoutOrder() {
 
   const rosterManagerCard = document.getElementById("my-portal-dept-roster-manager");
   const djTeachingCard = document.getElementById("my-portal-dj-teaching-panel");
+  const myDjCard = document.getElementById("my-portal-dj-classes-card");
 
   let twoColGrid = document.getElementById("my-portal-bottom-two-col");
   if (!twoColGrid) {
@@ -1121,15 +1159,9 @@ function applyMemberPortalLayoutOrder() {
     }
   });
 
-  if (dutiesCard) {
-    dutiesCard.classList.remove("mt-4", "mt-5", "mt-6", "mb-4", "mb-6");
-  }
-  if (rosterManagerCard) {
-    rosterManagerCard.classList.remove("mt-4", "mt-5", "mt-6", "mb-4", "mb-6");
-  }
-  if (djTeachingCard) {
-    djTeachingCard.classList.remove("mt-4", "mt-5", "mt-6", "mb-4", "mb-6");
-  }
+  [dutiesCard, rosterManagerCard, djTeachingCard, myDjCard].forEach(card => {
+    if (card) card.classList.remove("mt-4", "mt-5", "mt-6", "mb-4", "mb-6");
+  });
 
   const hasManagedDepts = Array.isArray(portalState.managedDepartments) && portalState.managedDepartments.length > 0;
   const hasDjPanel = canManageDjClasses() && portalState.djOfferings.length > 0;
@@ -1142,10 +1174,12 @@ function applyMemberPortalLayoutOrder() {
     if (rosterManagerCard) bodyEl.appendChild(rosterManagerCard);
     if (hasDjPanel && djTeachingCard) bodyEl.appendChild(djTeachingCard);
     if (dutiesCard) bodyEl.appendChild(dutiesCard);
+    if (myDjCard) bodyEl.appendChild(myDjCard);
     bodyEl.appendChild(twoColGrid);
   } else {
     if (hasDjPanel && djTeachingCard) bodyEl.appendChild(djTeachingCard);
     if (dutiesCard) bodyEl.appendChild(dutiesCard);
+    if (myDjCard) bodyEl.appendChild(myDjCard);
     bodyEl.appendChild(twoColGrid);
     if (rosterManagerCard && rosterManagerCard.parentElement === bodyEl) {
       bodyEl.removeChild(rosterManagerCard);
@@ -1251,10 +1285,146 @@ async function refreshMemberSelfService() {
 
   renderMyDuties();
   renderMyBlockouts();
+  renderMyDjClassesSection();
   renderDepartmentRosterManagerInMyPortal();
   renderDjFacilitatorTeachingPanel();
   applyMemberPortalLayoutOrder();
 }
+
+// --- MY DISCIPLESHIP JOURNEY (DJ) PROGRESS & CLASSES IN MY PORTAL ---
+function renderMyDjClassesSection() {
+  const bodyEl = document.getElementById("member-selfservice-body");
+  if (!bodyEl) return;
+
+  let container = document.getElementById("my-portal-dj-classes-card");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "my-portal-dj-classes-card";
+    bodyEl.appendChild(container);
+  }
+
+  const discipleDoc = portalState.profile?.discipleDoc;
+  if (!discipleDoc || discipleDoc._isAdminFallback) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const todayISO = getAucklandTodayISO();
+  const highestCompleted = getHighestCompletedDjLevel(discipleDoc, portalState.allDjEnrollments);
+  const highestIdx = highestCompleted ? DJ_LEVEL_ORDER.indexOf(highestCompleted) : -1;
+
+  const progressBadgesHtml = DJ_LEVEL_ORDER.map((lvl, idx) => {
+    const label = lvl.toUpperCase();
+    const isDone = isDjLevelCompleted(discipleDoc, lvl, portalState.allDjEnrollments) || (highestIdx >= idx);
+    const rawVal = String(discipleDoc?.dj_progress?.[lvl] || "").trim();
+    const statusText = isDone ? "Completed" : (rawVal || "Not Started");
+    const badgeStyle = isDone
+      ? "bg-emerald-100 text-emerald-900 border-emerald-200"
+      : statusText.toLowerCase() === "in progress"
+      ? "bg-amber-100 text-amber-900 border-amber-200"
+      : "bg-slate-100 text-slate-600 border-slate-200";
+
+    return `
+      <div class="p-2.5 rounded-xl border ${badgeStyle} text-center">
+        <p class="text-[10px] font-extrabold uppercase tracking-wider">DJ ${idx + 1}: ${esc(label)}</p>
+        <p class="text-xs font-bold mt-0.5">${esc(statusText)}</p>
+      </div>
+    `;
+  }).join("");
+
+  const myEnrollments = portalState.allDjEnrollments.filter(e => e.disciple_id === discipleDoc.id);
+  const offeringsHtml = portalState.djOfferings.length > 0
+    ? portalState.djOfferings.map(o => {
+        const levelKey = normalizeDjKey(o.class_key || o.class_name || "come");
+        const levelIdx = DJ_LEVEL_ORDER.indexOf(levelKey);
+        const levelLabel = o.class_name || (levelKey.charAt(0).toUpperCase() + levelKey.slice(1));
+        const facilitatorName = getFacilitatorDisplayName(o);
+        const isOpen = isRegistrationOpen(o, todayISO);
+        const myEnr = myEnrollments.find(e => e.offering_id === o.id);
+        const levelDone = isDjLevelCompleted(discipleDoc, levelKey, portalState.allDjEnrollments) || (levelIdx >= 0 && highestIdx >= levelIdx);
+
+        let statusTag = "";
+        if (myEnr) {
+          statusTag = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900">${esc(myEnr.status || "Enrolled")}</span>`;
+        } else if (levelDone) {
+          statusTag = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900">Completed</span>`;
+        } else if (isOpen) {
+          statusTag = `<button type="button" onclick="window.enrollDjFromMyPortal('${esc(o.id)}')" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-[10px]">Enroll</button>`;
+        } else {
+          statusTag = `<span class="text-[10px] text-slate-400 font-semibold">Closed</span>`;
+        }
+
+        return `
+          <div class="p-3 rounded-xl border border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div class="space-y-0.5">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-bold text-slate-900">${esc(o.class_title || `${levelLabel} Class`)}</span>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-800">DJ: ${esc(levelLabel)}</span>
+              </div>
+              <p class="text-[11px] text-slate-600">
+                Facilitator: <strong>${esc(facilitatorName)}</strong>
+                ${(o.registration_open_date || o.registration_close_date) ? ` • Reg: ${esc(o.registration_open_date || "—")} → ${esc(o.registration_close_date || "—")}` : ""}
+              </p>
+            </div>
+            <div class="shrink-0">${statusTag}</div>
+          </div>
+        `;
+      }).join("")
+    : `<p class="text-xs text-slate-500">No DJ classes published yet.</p>`;
+
+  container.innerHTML = `
+    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h3 class="font-bold text-sm text-slate-900">🎓 My Discipleship Journey (DJ) Progress & Classes</h3>
+          <p class="text-[11px] text-slate-500">Your completed levels and published DJ classes with facilitator details</p>
+        </div>
+        ${highestCompleted === "lead" ? `<span class="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900">🏆 ALL DJ LEVELS COMPLETED</span>` : ""}
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">${progressBadgesHtml}</div>
+
+      <div class="space-y-2 pt-1">${offeringsHtml}</div>
+    </div>
+  `;
+}
+
+window.enrollDjFromMyPortal = async (offeringId) => {
+  const discipleDoc = portalState.profile?.discipleDoc;
+  if (!discipleDoc || discipleDoc._isAdminFallback) return;
+
+  const offering = portalState.djOfferings.find(o => o.id === offeringId);
+  if (!offering) return;
+
+  const levelKey = normalizeDjKey(offering.class_key || offering.class_name);
+  const eligibility = validateDjEnrollmentEligibility(
+    discipleDoc,
+    levelKey,
+    portalState.allDjEnrollments
+  );
+  if (!eligibility.allowed) {
+    alert(eligibility.message);
+    return;
+  }
+
+  try {
+    const res = await registerDiscipleToDjClass({
+      offering,
+      disciple: discipleDoc,
+      allEnrollments: portalState.allDjEnrollments
+    });
+    portalState.allDjEnrollments = await getAllDjEnrollments().catch(() => []);
+    if (res?.alreadyRegistered) {
+      alert(`You are already enrolled in ${offering.class_title || offering.class_name || "this DJ class"}.`);
+    } else {
+      alert(`Successfully enrolled in ${offering.class_title || offering.class_name || "DJ Class"}!`);
+    }
+    renderPublicDjClasses();
+    renderMyDjClassesSection();
+  } catch (err) {
+    alert(err?.message || "Failed to enroll in DJ class.");
+  }
+};
 
 // --- DJ FACILITATOR TEACHING PANEL IN MY PORTAL ---
 function renderDjFacilitatorTeachingPanel() {
@@ -1383,6 +1553,7 @@ window.toggleDjRegistration = async (offeringId, closedState) => {
     await setDjRegistrationClosed(offeringId, Boolean(closedState));
     portalState.djOfferings = await getAllDjOfferings().catch(() => []);
     renderPublicDjClasses();
+    renderMyDjClassesSection();
     renderDjFacilitatorTeachingPanel();
     applyMemberPortalLayoutOrder();
   } catch (err) {
@@ -1402,6 +1573,7 @@ window.toggleDjChapter = async (offeringId, chapterIndex, completed) => {
     portalState.allDjEnrollments = await getAllDjEnrollments().catch(() => []);
     await loadSelectedDjEnrollments();
     renderPublicDjClasses();
+    renderMyDjClassesSection();
     renderDjFacilitatorTeachingPanel();
     applyMemberPortalLayoutOrder();
     if (res?.allCompleted) {
