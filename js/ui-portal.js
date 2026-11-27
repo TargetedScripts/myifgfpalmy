@@ -22,12 +22,17 @@ import {
 } from "./db-roster.js";
 import { getDepartments, getRolesReference, getDisciples } from "./db-master.js";
 import {
-  getDjOfferings,
+  DJ_LEVEL_ORDER,
+  normalizeDjKey,
+  getAucklandTodayISO,
+  isRegistrationOpen,
+  getAllDjOfferings,
+  getAllDjEnrollments,
+  getEnrollmentsByOffering,
   createDjClassOffering,
-  setDjOfferingRegistrationOpen,
-  enrollInDjClassOffering,
-  getDjEnrollmentsByOffering,
-  toggleDjChapterCompletion
+  setDjRegistrationClosed,
+  registerDiscipleToDjClass,
+  updateDjChapterCompletion
 } from "./db-dj-class.js";
 
 const {
@@ -50,7 +55,6 @@ const DEFAULT_CHURCH_PROFILE = {
 };
 
 const LEGACY_SINGER_NAMES = ["Singer 1", "Singer 2", "Singer 3"];
-const DJ_LEVEL_ORDER = ["Come", "Grow", "Serve", "Lead"];
 
 function isUniversalSharedTask(role = {}) {
   if (role?.is_universal === true) return true;
@@ -243,6 +247,7 @@ let portalState = {
   weeks: [],
   reflections: [],
   djOfferings: [],
+  allDjEnrollments: [],
   selectedDjOfferingId: "",
   selectedDjEnrollments: [],
   myDuties: [],
@@ -264,15 +269,6 @@ function esc(str = "") {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function getAucklandTodayISO() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Pacific/Auckland",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(new Date());
 }
 
 function isSystemAdminUser() {
@@ -313,15 +309,10 @@ function canManageDjClasses() {
   });
 }
 
-function isDjOfferingRegistrationOpen(offering, todayISO = getAucklandTodayISO()) {
-  if (!offering) return false;
-  if (offering.status === "Completed") return false;
-  if (offering.registration_open === false) return false;
-  const openDate = offering.registration_open_date || offering.open_date || "";
-  const closeDate = offering.registration_close_date || offering.close_date || "";
-  if (openDate && todayISO < openDate) return false;
-  if (closeDate && todayISO > closeDate) return false;
-  return true;
+function getPrereqLabelForLevel(levelKey) {
+  const idx = DJ_LEVEL_ORDER.indexOf(normalizeDjKey(levelKey));
+  if (idx <= 0) return "None";
+  return DJ_LEVEL_ORDER[idx - 1].toUpperCase();
 }
 
 function resolveManagedDepartments(discipleDoc, departments) {
@@ -396,14 +387,15 @@ async function resolveDiscipleForCurrentUser(profile) {
 // --- 1. CHURCH PORTAL INITIALIZER (GUEST & LOGGED-IN) ---
 export async function initPublicPortal() {
   try {
-    let [churchProfile, announcements, snapshot, months, weeks, reflections, djOfferings] = await Promise.all([
+    let [churchProfile, announcements, snapshot, months, weeks, reflections, djOfferings, allDjEnrollments] = await Promise.all([
       fetchChurchProfile(),
       fetchAnnouncements(),
       fetchHubSnapshotCounts(),
       getPublicMonthlyThemes(),
       getPublicWeeklyInsights(),
       fetchPublicDailyReflections(),
-      getDjOfferings().catch(() => [])
+      getAllDjOfferings().catch(() => []),
+      getAllDjEnrollments().catch(() => [])
     ]);
 
     if (reflections.length === 0) {
@@ -422,6 +414,7 @@ export async function initPublicPortal() {
     portalState.weeks = weeks;
     portalState.reflections = reflections;
     portalState.djOfferings = djOfferings;
+    portalState.allDjEnrollments = allDjEnrollments;
 
     bindPublicPortalEvents();
     renderPublicFeed();
@@ -508,8 +501,10 @@ function bindPublicPortalEvents() {
         return;
       }
 
-      const level = document.getElementById("dj-new-level")?.value || "Come";
-      const title = document.getElementById("dj-new-title")?.value.trim() || "";
+      const rawLevel = document.getElementById("dj-new-level")?.value || "come";
+      const classKey = normalizeDjKey(rawLevel);
+      const className = classKey.charAt(0).toUpperCase() + classKey.slice(1);
+      const classTitle = document.getElementById("dj-new-title")?.value.trim() || "";
       const openDate = document.getElementById("dj-new-open")?.value || getAucklandTodayISO();
       const closeDate = document.getElementById("dj-new-close")?.value || "";
 
@@ -518,19 +513,20 @@ function bindPublicPortalEvents() {
 
       try {
         const created = await createDjClassOffering({
-          level,
-          title,
-          registration_open_date: openDate,
-          registration_close_date: closeDate,
-          registration_open: true,
+          class_key: classKey,
+          class_name: className,
+          class_title: classTitle,
+          facilitator_id: portalState.profile?.discipleDoc?.id || portalState.profile?.uid || "",
           facilitator_name: portalState.profile?.discipleDoc?.full_name || portalState.profile?.displayName || "Facilitator",
-          facilitator_email: portalState.profile?.discipleDoc?.email || portalState.profile?.email || ""
+          facilitator_email: portalState.profile?.discipleDoc?.email || portalState.profile?.email || "",
+          registration_open_date: openDate,
+          registration_close_date: closeDate
         });
         e.target.reset();
         const openEl = document.getElementById("dj-new-open");
         if (openEl) openEl.value = getAucklandTodayISO();
 
-        portalState.djOfferings = await getDjOfferings().catch(() => []);
+        portalState.djOfferings = await getAllDjOfferings().catch(() => []);
         if (created?.id) portalState.selectedDjOfferingId = created.id;
         renderPublicDjClasses();
         if (portalState.profile?.discipleDoc) {
@@ -589,22 +585,46 @@ function bindPublicPortalEvents() {
         return;
       }
 
+      const offering = portalState.djOfferings.find(o => o.id === offeringId);
+      if (!offering) {
+        alert("DJ class offering not found.");
+        return;
+      }
+
       enrollBtn.disabled = true;
       try {
-        const res = await enrollInDjClassOffering(offeringId, discipleDoc);
-        if (!res?.ok) {
-          alert(res?.message || "Unable to enroll in this class.");
+        const res = await registerDiscipleToDjClass({
+          offering,
+          disciple: discipleDoc,
+          allEnrollments: portalState.allDjEnrollments
+        });
+
+        portalState.allDjEnrollments = await getAllDjEnrollments().catch(() => []);
+        if (res?.alreadyRegistered) {
+          alert(`You are already enrolled in ${offering.class_title || offering.class_name || "this DJ class"}.`);
         } else {
-          alert(res?.message || "Enrolled successfully!");
-          portalState.djOfferings = await getDjOfferings().catch(() => []);
-          renderPublicDjClasses();
-          if (portalState.selectedDjOfferingId === offeringId) {
-            await loadSelectedDjEnrollments();
-            renderDjFacilitatorTeachingPanel();
+          if (res?.enrollment?.id) {
+            portalState.profile.discipleDoc = {
+              ...discipleDoc,
+              dj_progress: {
+                ...(discipleDoc.dj_progress || {}),
+                [normalizeDjKey(offering.class_key)]:
+                  String(discipleDoc?.dj_progress?.[normalizeDjKey(offering.class_key)] || "").toLowerCase() === "completed"
+                    ? "Completed"
+                    : "In Progress"
+              }
+            };
           }
+          alert(`Successfully enrolled in ${offering.class_title || offering.class_name || "DJ Class"}!`);
+        }
+
+        renderPublicDjClasses();
+        if (portalState.selectedDjOfferingId === offeringId) {
+          await loadSelectedDjEnrollments();
+          renderDjFacilitatorTeachingPanel();
         }
       } catch (err) {
-        alert("Failed to enroll: " + (err?.message || err));
+        alert(err?.message || "Failed to enroll in DJ class.");
       } finally {
         enrollBtn.disabled = false;
       }
@@ -660,16 +680,16 @@ function renderPublicDjClasses() {
   const todayISO = getAucklandTodayISO();
   const canCreate = canManageDjClasses();
   const offerings = [...portalState.djOfferings].sort((a, b) => {
-    const openA = isDjOfferingRegistrationOpen(a, todayISO) ? 0 : 1;
-    const openB = isDjOfferingRegistrationOpen(b, todayISO) ? 0 : 1;
+    const openA = isRegistrationOpen(a, todayISO) ? 0 : 1;
+    const openB = isRegistrationOpen(b, todayISO) ? 0 : 1;
     if (openA !== openB) return openA - openB;
     return String(b.created_at_iso || b.registration_open_date || "").localeCompare(
       String(a.created_at_iso || a.registration_open_date || "")
     );
   });
 
-  const levelBadge = (lvl) => {
-    const l = String(lvl || "Come").toLowerCase();
+  const levelBadge = (key) => {
+    const l = normalizeDjKey(key);
     if (l === "lead") return "bg-purple-100 text-purple-900 border-purple-200";
     if (l === "serve") return "bg-blue-100 text-blue-900 border-blue-200";
     if (l === "grow") return "bg-emerald-100 text-emerald-900 border-emerald-200";
@@ -678,16 +698,18 @@ function renderPublicDjClasses() {
 
   const cardsHtml = offerings.length > 0
     ? offerings.map(o => {
-        const isOpen = isDjOfferingRegistrationOpen(o, todayISO);
-        const isCompleted = o.status === "Completed";
+        const isOpen = isRegistrationOpen(o, todayISO);
+        const isCompleted = String(o.status || "").toLowerCase() === "completed";
         const chapters = Array.isArray(o.chapters) ? o.chapters : [];
-        const completedCount = chapters.filter(c => c.completed).length;
-        const levelLabel = o.level || o.dj_level || "Come";
+        const completedCount = chapters.filter(c => c.completed === true).length;
+        const levelKey = normalizeDjKey(o.class_key || o.class_name || "come");
+        const levelLabel = o.class_name || (levelKey.charAt(0).toUpperCase() + levelKey.slice(1));
+        const prereqLabel = getPrereqLabelForLevel(levelKey);
 
         return `
           <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2 text-xs">
             <div class="flex items-center justify-between gap-2 flex-wrap">
-              <span class="px-2 py-0.5 rounded-full border font-bold text-[10px] ${levelBadge(levelLabel)}">
+              <span class="px-2 py-0.5 rounded-full border font-bold text-[10px] ${levelBadge(levelKey)}">
                 DJ: ${esc(levelLabel)}
               </span>
               <span class="px-2 py-0.5 rounded-full font-extrabold text-[10px] ${
@@ -701,9 +723,9 @@ function renderPublicDjClasses() {
               </span>
             </div>
 
-            <h4 class="font-bold text-sm text-slate-900">${esc(o.title || `${levelLabel} Class`)}</h4>
+            <h4 class="font-bold text-sm text-slate-900">${esc(o.class_title || `${levelLabel} Class`)}</h4>
             <p class="text-[11px] text-slate-600">
-              Prereq: <strong>${esc(o.prerequisite_level || "None")}</strong> • Chapters: <strong>${completedCount}/${chapters.length}</strong>
+              Prereq: <strong>${esc(prereqLabel)}</strong> • Chapters: <strong>${completedCount}/${chapters.length}</strong>
             </p>
             ${(o.registration_open_date || o.registration_close_date) ? `
               <p class="text-[10px] font-mono text-slate-500">
@@ -730,7 +752,7 @@ function renderPublicDjClasses() {
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 class="font-bold text-sm text-slate-900">🎓 Discipleship Journey (DJ) Classes</h3>
-          <p class="text-[11px] text-slate-500">Sequential path: ${DJ_LEVEL_ORDER.join(" → ")}</p>
+          <p class="text-[11px] text-slate-500">Sequential path: ${DJ_LEVEL_ORDER.map(k => k.toUpperCase()).join(" → ")}</p>
         </div>
         <span class="text-[11px] font-semibold text-slate-500">${offerings.length} class(es)</span>
       </div>
@@ -742,7 +764,7 @@ function renderPublicDjClasses() {
             <div>
               <label class="text-[10px] font-bold text-slate-600 uppercase">DJ Class Level</label>
               <select id="dj-new-level" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold mt-0.5">
-                ${DJ_LEVEL_ORDER.map(lvl => `<option value="${lvl}">${lvl}</option>`).join("")}
+                ${DJ_LEVEL_ORDER.map(k => `<option value="${k}">${k.charAt(0).toUpperCase() + k.slice(1)}</option>`).join("")}
               </select>
             </div>
             <div>
@@ -1103,7 +1125,7 @@ async function loadSelectedDjEnrollments() {
   if (!portalState.selectedDjOfferingId || !portalState.djOfferings.some(o => o.id === portalState.selectedDjOfferingId)) {
     portalState.selectedDjOfferingId = portalState.djOfferings[0].id;
   }
-  portalState.selectedDjEnrollments = await getDjEnrollmentsByOffering(portalState.selectedDjOfferingId).catch(() => []);
+  portalState.selectedDjEnrollments = await getEnrollmentsByOffering(portalState.selectedDjOfferingId).catch(() => []);
 }
 
 async function refreshMemberSelfService() {
@@ -1131,7 +1153,8 @@ async function refreshMemberSelfService() {
     allRoles,
     allDisciples,
     allUnavailability,
-    djOfferings
+    djOfferings,
+    allDjEnrollments
   ] = await Promise.all([
     isRealDiscipleRecord ? getMyAssignments(discipleDoc.id).catch(() => []) : Promise.resolve([]),
     isRealDiscipleRecord ? getMyUnavailability(discipleDoc.id).catch(() => []) : Promise.resolve([]),
@@ -1140,7 +1163,8 @@ async function refreshMemberSelfService() {
     getRolesReference().catch(() => []),
     getDisciples().catch(() => []),
     getUnavailability().catch(() => []),
-    getDjOfferings().catch(() => [])
+    getAllDjOfferings().catch(() => []),
+    getAllDjEnrollments().catch(() => [])
   ]);
 
   const todayISO = getAucklandTodayISO();
@@ -1163,6 +1187,7 @@ async function refreshMemberSelfService() {
   portalState.allUnavailability = allUnavailability;
   portalState.managedDepartments = resolveManagedDepartments(discipleDoc, portalState.allDepartments);
   portalState.djOfferings = djOfferings;
+  portalState.allDjEnrollments = allDjEnrollments;
 
   if (!portalState.selectedRosterDate && portalState.weeks.length > 0) {
     const sortedWeeks = [...portalState.weeks].sort((a, b) =>
@@ -1216,19 +1241,19 @@ function renderDjFacilitatorTeachingPanel() {
     portalState.djOfferings[0];
 
   const chapters = Array.isArray(offering.chapters) ? offering.chapters : [];
-  const isOpen = offering.registration_open !== false && offering.status !== "Completed";
+  const isCompleted = String(offering.status || "").toLowerCase() === "completed";
+  const isClosed = offering.registration_manually_closed === true;
   const todayISO = getAucklandTodayISO();
 
   const offeringOptions = portalState.djOfferings.map(o => `
     <option value="${esc(o.id)}" ${o.id === offering.id ? "selected" : ""}>
-      ${esc(o.title || `${o.level || "DJ"} Class`)} (${esc(o.status || "Active")})
+      ${esc(o.class_title || o.class_name || "DJ Class")} (${esc(o.status || "Open")})
     </option>
   `).join("");
 
   const chaptersHtml = chapters.map((ch, idx) => {
-    const chId = ch.id || ch.chapter_id || String(idx);
-    const chTitle = ch.title || ch.name || `Chapter ${idx + 1}`;
-    const done = Boolean(ch.completed);
+    const chTitle = ch.title || ch.name || `Chapter ${ch.chapter_no || idx + 1}`;
+    const done = ch.completed === true;
     const doneDate = ch.completed_date || todayISO;
     return `
       <div class="flex items-center justify-between gap-2 p-2.5 rounded-lg border ${done ? "bg-emerald-50/70 border-emerald-200" : "bg-white border-slate-200"} text-xs">
@@ -1236,7 +1261,7 @@ function renderDjFacilitatorTeachingPanel() {
           <input
             type="checkbox"
             ${done ? "checked" : ""}
-            onchange="window.toggleDjChapter('${esc(offering.id)}', '${esc(chId)}', this.checked)"
+            onchange="window.toggleDjChapter('${esc(offering.id)}', ${idx}, this.checked)"
             class="rounded border-slate-300 text-emerald-700"
           />
           <span class="font-semibold text-slate-900 truncate">${esc(chTitle)}</span>
@@ -1253,7 +1278,9 @@ function renderDjFacilitatorTeachingPanel() {
         <div class="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 last:border-b-0 text-xs">
           <span class="font-medium text-slate-800">${esc(en.disciple_name || en.full_name || "Member")}</span>
           <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${
-            en.status === "Completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+            String(en.status || "").toLowerCase() === "completed"
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-amber-100 text-amber-800"
           }">${esc(en.status || "Enrolled")}</span>
         </div>
       `).join("")
@@ -1266,7 +1293,7 @@ function renderDjFacilitatorTeachingPanel() {
           <span class="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900">
             🎓 DJ Facilitator Teaching Panel
           </span>
-          <h3 class="font-bold text-base text-slate-900 mt-1">${esc(offering.title || `${offering.level || "DJ"} Class`)}</h3>
+          <h3 class="font-bold text-base text-slate-900 mt-1">${esc(offering.class_title || offering.class_name || "DJ Class")}</h3>
           <p class="text-xs text-slate-500">Check off completed chapters to update class & participant progress.</p>
         </div>
 
@@ -1277,15 +1304,15 @@ function renderDjFacilitatorTeachingPanel() {
           >
             ${offeringOptions}
           </select>
-          ${offering.status !== "Completed" ? `
+          ${!isCompleted ? `
             <button
               type="button"
-              onclick="window.toggleDjRegistration('${esc(offering.id)}', ${!isOpen})"
+              onclick="window.toggleDjRegistration('${esc(offering.id)}', ${!isClosed})"
               class="px-3 py-1.5 rounded-lg text-xs font-bold ${
-                isOpen ? "bg-red-100 text-red-800 hover:bg-red-200" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                !isClosed ? "bg-red-100 text-red-800 hover:bg-red-200" : "bg-emerald-600 text-white hover:bg-emerald-700"
               }"
             >
-              ${isOpen ? "Close Registration" : "Reopen Registration"}
+              ${!isClosed ? "Close Registration" : "Reopen Registration"}
             </button>
           ` : ""}
         </div>
@@ -1293,7 +1320,7 @@ function renderDjFacilitatorTeachingPanel() {
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="lg:col-span-2 space-y-2">
-          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600">Chapters (${chapters.filter(c => c.completed).length}/${chapters.length})</h4>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600">Chapters (${chapters.filter(c => c.completed === true).length}/${chapters.length})</h4>
           <div class="space-y-1.5">${chaptersHtml || `<p class="text-xs text-slate-400">No chapters configured.</p>`}</div>
         </div>
         <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
@@ -1312,10 +1339,10 @@ window.changeDjTeachingOffering = async (offeringId) => {
   applyMemberPortalLayoutOrder();
 };
 
-window.toggleDjRegistration = async (offeringId, openState) => {
+window.toggleDjRegistration = async (offeringId, closedState) => {
   try {
-    await setDjOfferingRegistrationOpen(offeringId, Boolean(openState));
-    portalState.djOfferings = await getDjOfferings().catch(() => []);
+    await setDjRegistrationClosed(offeringId, Boolean(closedState));
+    portalState.djOfferings = await getAllDjOfferings().catch(() => []);
     renderPublicDjClasses();
     renderDjFacilitatorTeachingPanel();
     applyMemberPortalLayoutOrder();
@@ -1324,14 +1351,23 @@ window.toggleDjRegistration = async (offeringId, openState) => {
   }
 };
 
-window.toggleDjChapter = async (offeringId, chapterId, completed) => {
+window.toggleDjChapter = async (offeringId, chapterIndex, completed) => {
   try {
-    await toggleDjChapterCompletion(offeringId, chapterId, Boolean(completed), getAucklandTodayISO());
-    portalState.djOfferings = await getDjOfferings().catch(() => []);
+    const res = await updateDjChapterCompletion({
+      offeringId,
+      chapterIndex: Number(chapterIndex),
+      completed: Boolean(completed),
+      completedDate: getAucklandTodayISO()
+    });
+    portalState.djOfferings = await getAllDjOfferings().catch(() => []);
+    portalState.allDjEnrollments = await getAllDjEnrollments().catch(() => []);
     await loadSelectedDjEnrollments();
     renderPublicDjClasses();
     renderDjFacilitatorTeachingPanel();
     applyMemberPortalLayoutOrder();
+    if (res?.allCompleted) {
+      alert("All chapters completed! DJ class status and enrolled participants have been marked as Completed.");
+    }
   } catch (err) {
     alert("Failed to update chapter progress: " + (err?.message || err));
   }
