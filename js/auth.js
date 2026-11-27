@@ -32,14 +32,31 @@ function withTimeout(promise, ms = 8000, fallbackValue = null) {
   ]);
 }
 
+function formatAuthError(error) {
+  const code = error?.code || "";
+  if (code === "auth/popup-blocked") {
+    return "Popup was blocked by browser. Allow popups or use Magic Sign-In Link below.";
+  }
+  if (code === "auth/popup-closed-by-user") {
+    return "Sign-in popup was closed before completing login.";
+  }
+  if (code === "auth/unauthorized-domain") {
+    return "This domain is not listed in Firebase Authentication Authorized Domains.";
+  }
+  if (code === "auth/operation-not-allowed") {
+    return "This sign-in provider is disabled in Firebase Authentication settings.";
+  }
+  return error?.message || "Authentication failed.";
+}
+
 export async function loginWithGoogle() {
   try {
     const credential = await signInWithPopup(auth, googleProvider);
-    return credential.user;
+    return { success: true, user: credential.user };
   } catch (error) {
     console.error("Google Sign-In Error:", error);
-    alert("Sign-in failed: " + error.message);
-    throw error;
+    const message = formatAuthError(error);
+    return { success: false, code: error?.code || "auth/unknown", message, error };
   }
 }
 
@@ -55,7 +72,7 @@ export async function sendMagicLink(email) {
     return { success: true };
   } catch (error) {
     console.error("Magic Link Error:", error);
-    return { success: false, message: error.message };
+    return { success: false, code: error?.code || "auth/unknown", message: formatAuthError(error) };
   }
 }
 
@@ -73,7 +90,8 @@ export async function completeMagicLinkIfPresent() {
           window.localStorage.removeItem("ifgf_email_for_signin");
           window.history.replaceState({}, document.title, window.location.pathname);
         } catch (error) {
-          alert("Magic link expired or invalid: " + error.message);
+          console.error("Magic link sign-in failed:", error);
+          alert("Magic link expired or invalid: " + formatAuthError(error));
         }
       }
     }
