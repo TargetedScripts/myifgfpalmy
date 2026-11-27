@@ -7,6 +7,7 @@ import {
   getDocs,
   addDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   serverTimestamp
@@ -318,6 +319,11 @@ export async function registerDiscipleToDjClass({ offering, disciple, allEnrollm
     alreadyRegistered: false,
     enrollment: { id: enrRef.id, ...enrollmentPayload }
   };
+}
+
+export async function removeDiscipleFromDjClass(enrollmentId) {
+  if (!enrollmentId) throw new Error("Missing enrollment ID.");
+  await deleteDoc(doc(db, "dj_class_enrollments", enrollmentId));
 }
 
 export async function updateDjChapterCompletion({
