@@ -175,16 +175,22 @@ export function initAuthObserver(onUserReady, onUserSignedOut) {
       if (user) {
         const profile = await resolveUserProfile(user);
         settled = true;
-        onUserReady(profile);
+        if (typeof onUserReady === "function") {
+          onUserReady(profile);
+        }
       } else {
         settled = true;
-        onUserSignedOut();
+        if (typeof onUserSignedOut === "function") {
+          onUserSignedOut();
+        }
       }
     }, (err) => {
       console.error("Auth observer error:", err);
       if (!settled) {
         settled = true;
-        onUserSignedOut();
+        if (typeof onUserSignedOut === "function") {
+          onUserSignedOut();
+        }
       }
     });
   };
