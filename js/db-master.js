@@ -12,6 +12,9 @@ import {
   orderBy,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { RAW_DISCIPLES_LIST } from "./disciples-seed-data.js";
+
+const VALID_ICARE_GROUPS = ["Darah Muda", "Keluarga Muda", "Jiwa Muda"];
 
 // --- 1. DEPARTMENTS (ADD / EDIT / DELETE) ---
 export async function getDepartments() {
@@ -101,25 +104,88 @@ export async function toggleRoleActive(id, currentState) {
   });
 }
 
-// --- 3. DISCIPLES (SOFT-DELETE ONLY) ---
+// --- 3. DISCIPLES (AUTO MEMBER ID + ICARE GROUPS + SOFT-DELETE) ---
+export function generateNextMemberId(existingDisciples = [], prefix = "IFGF", padLength = 3) {
+  let maxNum = 0;
+
+  (Array.isArray(existingDisciples) ? existingDisciples : []).forEach((d) => {
+    const rawId = String(d?.member_id || "").trim();
+    const match = rawId.match(/(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (Number.isFinite(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  });
+
+  return `${prefix}-${String(maxNum + 1).padStart(padLength, "0")}`;
+}
+
+export function normalizeIcareGroups(rawValue) {
+  const list = Array.isArray(rawValue)
+    ? rawValue
+    : String(rawValue || "").split(",");
+
+  const result = [];
+  const seen = new Set();
+
+  list.forEach((item) => {
+    const cleaned = String(item || "").trim();
+    if (!cleaned) return;
+    const matched = VALID_ICARE_GROUPS.find(g => g.toLowerCase() === cleaned.toLowerCase()) || cleaned;
+    const key = matched.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(matched);
+    }
+  });
+
+  return result;
+}
+
 export async function getDisciples() {
   const q = query(collection(db, "disciples"), orderBy("full_name", "asc"));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-export async function saveDisciple(id, data) {
+export async function saveDisciple(id, data, existingDisciples = null) {
+  const icareGroups = normalizeIcareGroups(
+    data.icare_groups ?? data.icare_group ?? data.in_icare ?? data.age_group ?? []
+  );
+
+  let memberId = String(data.member_id || "").trim();
+  if (!id && !memberId) {
+    const currentList = Array.isArray(existingDisciples)
+      ? existingDisciples
+      : await getDisciples().catch(() => []);
+    memberId = generateNextMemberId(currentList);
+  }
+
   const payload = {
     ...data,
-    email: (data.email || "").trim().toLowerCase(),
+    ...(memberId ? { member_id: memberId } : {}),
+    full_name: String(data.full_name || "").trim(),
+    email: String(data.email || "").trim().toLowerCase(),
+    phone: String(data.phone || "").trim(),
+    address: String(data.address || "").trim(),
+    birth_date: String(data.birth_date || data.date_of_birth || "").trim(),
+    icare_group: icareGroups.join(", "),
+    icare_groups: icareGroups,
+    ministry_interests: Array.isArray(data.ministry_interests) ? data.ministry_interests : [],
+    status: data.status || "Active",
     updated_at: serverTimestamp()
   };
+
   if (id) {
     await setDoc(doc(db, "disciples", id), payload, { merge: true });
-  } else {
-    payload.created_at = serverTimestamp();
-    await addDoc(collection(db, "disciples"), payload);
+    return { id, ...payload };
   }
+
+  payload.created_at = serverTimestamp();
+  const docRef = await addDoc(collection(db, "disciples"), payload);
+  return { id: docRef.id, ...payload };
 }
 
 // --- 4. BULK CSV IMPORTER (GOOGLE FORMS / SHEETS) ---
@@ -207,6 +273,9 @@ export async function importDisciplesFromCSV(csvText) {
       djLight = "amber";
     }
 
+    const rawIcare = getCol("icare") || getCol("joined an icare") || getCol("age group") || "";
+    const icareGroups = normalizeIcareGroups(rawIcare);
+
     const rawInterests = getCol("ministry interest")
       .split(",")
       .map(x => cleanText(x))
@@ -222,6 +291,11 @@ export async function importDisciplesFromCSV(csvText) {
       new Set([...(prev?.ministry_interests || []), ...rawInterests])
     );
 
+    const mergedIcare = normalizeIcareGroups([
+      ...(prev?.icare_groups || []),
+      ...icareGroups
+    ]);
+
     mergedRecords.set(key, {
       member_id: getCol("member id") || prev?.member_id || "",
       full_name: fullName || prev?.full_name || "",
@@ -229,6 +303,7 @@ export async function importDisciplesFromCSV(csvText) {
       gender: getCol("gender") || prev?.gender || "",
       place_of_birth: getCol("place of birth") || prev?.place_of_birth || "",
       date_of_birth: getCol("date of birth") || prev?.date_of_birth || "",
+      birth_date: getCol("date of birth") || getCol("birth date") || prev?.birth_date || "",
       nz_status: getCol("status in new zealand") || prev?.nz_status || "",
       institution: getCol("institution/company") || prev?.institution || "",
       email,
@@ -241,7 +316,8 @@ export async function importDisciplesFromCSV(csvText) {
         lead: dj4 || prev?.dj_progress?.lead || "Not Started"
       },
       dj_traffic_light: djLight,
-      in_icare: getCol("joined an icare") || prev?.in_icare || "",
+      icare_group: mergedIcare.join(", "),
+      icare_groups: mergedIcare,
       ministry_interests: mergedInterests,
       marital_status: getCol("marital status") || prev?.marital_status || "",
       spouse_name: getCol("spouse") || prev?.spouse_name || "",
@@ -285,7 +361,132 @@ export async function importDisciplesFromCSV(csvText) {
   };
 }
 
-// --- 5. ONE-CLICK SEED MASTER DATA (9 DEPARTMENTS & ROLES) ---
+// --- 5. SEED DISCIPLES FROM LIST (IGNORE DUPLICATES) ---
+function normKeyText(v = "") {
+  return String(v || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function normKeyPhone(v = "") {
+  return String(v || "").replace(/\D+/g, "");
+}
+
+export async function importSeedDisciplesIgnoreDuplicates({ dryRun = false } = {}) {
+  const existing = await getDisciples();
+
+  const existingNames = new Set();
+  const existingEmails = new Set();
+  const existingNamePhone = new Set();
+  const existingNameDob = new Set();
+
+  existing.forEach((d) => {
+    const n = normKeyText(d.full_name || d.name);
+    const e = normKeyText(d.email);
+    const p = normKeyPhone(d.phone);
+    const dob = normKeyText(d.birth_date || d.date_of_birth || d.dob);
+
+    if (n) existingNames.add(n);
+    if (e) existingEmails.add(e);
+    if (n && p) existingNamePhone.add(`${n}__${p}`);
+    if (n && dob) existingNameDob.add(`${n}__${dob}`);
+  });
+
+  const batchNames = new Set();
+  const batchNamePhone = new Set();
+  const batchNameDob = new Set();
+
+  const poolForId = [...existing];
+  const added = [];
+  const skipped = [];
+
+  for (let i = 0; i < RAW_DISCIPLES_LIST.length; i++) {
+    const raw = RAW_DISCIPLES_LIST[i];
+    const fullName = cleanText(raw.full_name);
+    const email = cleanText(raw.email).toLowerCase();
+    const address = cleanText(raw.address);
+    const phone = cleanText(raw.phone);
+    const birthDate = cleanText(raw.birth_date);
+    const icareGroups = normalizeIcareGroups(raw.icare_groups || raw.icare_group);
+
+    const n = normKeyText(fullName);
+    const p = normKeyPhone(phone);
+    const dob = normKeyText(birthDate);
+
+    const isDupInDb =
+      (n && existingNames.has(n)) ||
+      (n && p && existingNamePhone.has(`${n}__${p}`)) ||
+      (n && dob && existingNameDob.has(`${n}__${dob}`)) ||
+      (email && existingEmails.has(email));
+
+    if (isDupInDb) {
+      skipped.push({ full_name: fullName, reason: "Already exists in Firestore disciples" });
+      continue;
+    }
+
+    const isDupInBatch =
+      (n && batchNames.has(n)) ||
+      (n && p && batchNamePhone.has(`${n}__${p}`)) ||
+      (n && dob && batchNameDob.has(`${n}__${dob}`));
+
+    if (isDupInBatch) {
+      skipped.push({ full_name: fullName, reason: "Duplicate entry in seed list" });
+      continue;
+    }
+
+    if (n) batchNames.add(n);
+    if (n && p) batchNamePhone.add(`${n}__${p}`);
+    if (n && dob) batchNameDob.add(`${n}__${dob}`);
+
+    const nextMemberId = generateNextMemberId(poolForId);
+    const slug = n.replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "member";
+    const docId = `disc_${slug}_${String(i + 1).padStart(3, "0")}`;
+
+    const payload = {
+      member_id: nextMemberId,
+      full_name: fullName,
+      email,
+      phone,
+      address,
+      birth_date: birthDate,
+      date_of_birth: birthDate,
+      icare_group: icareGroups.join(", "),
+      icare_groups: icareGroups,
+      ministry_interests: [],
+      status: "Active",
+      system_role: email === "tedysutedja@gmail.com" || email === "admin@ifgfpalmy.org"
+        ? "super_admin"
+        : "member",
+      dj_traffic_light: "red",
+      dj_progress: {
+        come: "Not Started",
+        grow: "Not Started",
+        serve: "Not Started",
+        lead: "Not Started"
+      },
+      source: "list_import_ignore_duplicates",
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp()
+    };
+
+    if (!dryRun) {
+      await setDoc(doc(db, "disciples", docId), payload, { merge: false });
+    }
+
+    poolForId.push({ member_id: nextMemberId });
+    added.push({ id: docId, member_id: nextMemberId, full_name: fullName, icare_group: payload.icare_group });
+  }
+
+  return {
+    dryRun,
+    totalInput: RAW_DISCIPLES_LIST.length,
+    existingCount: existing.length,
+    addedCount: added.length,
+    skippedCount: skipped.length,
+    added,
+    skipped
+  };
+}
+
+// --- 6. ONE-CLICK SEED MASTER DATA (9 DEPARTMENTS & ROLES) ---
 export async function seedInitialMasterData() {
   const depts = [
     { id: "pulpit_editorial", name: "Pulpit & Editorial", sort_order: 1, is_active: true },
