@@ -2,6 +2,8 @@
 import { auth, db } from "./firebase-config.js";
 import {
   GoogleAuthProvider,
+  setPersistence,
+  browserLocalPersistence,
   signInWithRedirect,
   getRedirectResult,
   sendSignInLinkToEmail,
@@ -36,7 +38,7 @@ function withTimeout(promise, ms = 8000, fallbackValue = null) {
 function formatAuthError(error) {
   const code = error?.code || "";
   if (code === "auth/unauthorized-domain") {
-    return "Domain belum terdaftar di Firebase Authentication Authorized Domains.";
+    return "Domain myifgfpalmy.ifgfpalmy.org belum terdaftar di Firebase Authentication Authorized Domains.";
   }
   if (code === "auth/operation-not-allowed") {
     return "Google Sign-In belum diaktifkan di Firebase Authentication -> Sign-in method.";
@@ -47,9 +49,9 @@ function formatAuthError(error) {
   return error?.message || "Authentication failed.";
 }
 
-// Gunakan Redirect agar bebas blokir COOP / Pop-up Blocker di subdomain
 export async function loginWithGoogle() {
   try {
+    await setPersistence(auth, browserLocalPersistence);
     await signInWithRedirect(auth, googleProvider);
     return { success: true, redirecting: true };
   } catch (error) {
@@ -76,8 +78,13 @@ export async function sendMagicLink(email) {
   }
 }
 
-// Tangkap hasil redirect Google Sign-In maupun Email Magic Link saat halaman dimuat
 export async function completePendingSignIn() {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (e) {
+    console.warn("Persistence setup warning:", e);
+  }
+
   try {
     const redirectResult = await getRedirectResult(auth);
     if (redirectResult?.user) {
@@ -144,7 +151,6 @@ async function findDepartmentsLedByEmail(email) {
   }
 }
 
-// Resolusi RBAC & Profil Disciple + Department Lead
 export async function resolveUserProfile(user) {
   const email = (user?.email || "").trim().toLowerCase();
   const isBootstrapAdmin = BOOTSTRAP_ADMINS.includes(email);
