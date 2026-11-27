@@ -25,6 +25,8 @@ import {
   DJ_LEVEL_ORDER,
   normalizeDjKey,
   getAucklandTodayISO,
+  isDjOfferingDisabled,
+  isDjOfferingHidden,
   isRegistrationOpen,
   isDjLevelCompleted,
   getHighestCompletedDjLevel,
@@ -33,7 +35,10 @@ import {
   getAllDjEnrollments,
   getEnrollmentsByOffering,
   createDjClassOffering,
+  updateDjClassOffering,
   setDjRegistrationClosed,
+  setDjOfferingHidden,
+  setDjOfferingDisabled,
   registerDiscipleToDjClass,
   updateDjChapterCompletion
 } from "./db-dj-class.js";
@@ -253,6 +258,7 @@ let portalState = {
   allDjEnrollments: [],
   selectedDjOfferingId: "",
   selectedDjEnrollments: [],
+  djEditModeOpen: false,
   myDuties: [],
   myBlockouts: [],
   allDepartments: [],
@@ -335,6 +341,12 @@ function getFacilitatorDisplayName(offering = {}) {
 
   if (facEmail) return facEmail;
   return "TBA";
+}
+
+function getVisibleDjOfferings() {
+  return portalState.djOfferings.filter(
+    o => !isDjOfferingHidden(o) && !isDjOfferingDisabled(o)
+  );
 }
 
 function resolveManagedDepartments(discipleDoc, departments) {
@@ -529,6 +541,7 @@ function bindPublicPortalEvents() {
       const classTitle = document.getElementById("dj-new-title")?.value.trim() || "";
       const openDate = document.getElementById("dj-new-open")?.value || getAucklandTodayISO();
       const closeDate = document.getElementById("dj-new-close")?.value || "";
+      const isHidden = Boolean(document.getElementById("dj-new-hidden")?.checked);
 
       const facilitatorName =
         portalState.profile?.discipleDoc?.full_name ||
@@ -552,7 +565,8 @@ function bindPublicPortalEvents() {
           facilitator_name: facilitatorName,
           facilitator_email: facilitatorEmail,
           registration_open_date: openDate,
-          registration_close_date: closeDate
+          registration_close_date: closeDate,
+          is_hidden: isHidden
         });
         e.target.reset();
         const openEl = document.getElementById("dj-new-open");
@@ -620,8 +634,8 @@ function bindPublicPortalEvents() {
       }
 
       const offering = portalState.djOfferings.find(o => o.id === offeringId);
-      if (!offering) {
-        alert("DJ class offering not found.");
+      if (!offering || isDjOfferingDisabled(offering) || isDjOfferingHidden(offering)) {
+        alert("This DJ class is no longer available for enrollment.");
         return;
       }
 
@@ -729,7 +743,8 @@ function renderPublicDjClasses() {
   const discipleDoc = portalState.profile?.discipleDoc;
   const isMember = Boolean(discipleDoc?.id) && !discipleDoc?._isAdminFallback;
 
-  const offerings = [...portalState.djOfferings].sort((a, b) => {
+  // Hide invisible & disabled classes from Church Portal screen
+  const visibleOfferings = getVisibleDjOfferings().sort((a, b) => {
     const openA = isRegistrationOpen(a, todayISO) ? 0 : 1;
     const openB = isRegistrationOpen(b, todayISO) ? 0 : 1;
     if (openA !== openB) return openA - openB;
@@ -737,6 +752,8 @@ function renderPublicDjClasses() {
       String(a.created_at_iso || a.registration_open_date || "")
     );
   });
+
+  const hiddenOrDisabledCount = portalState.djOfferings.length - visibleOfferings.length;
 
   const levelBadge = (key) => {
     const l = normalizeDjKey(key);
@@ -746,8 +763,8 @@ function renderPublicDjClasses() {
     return "bg-amber-100 text-amber-900 border-amber-200";
   };
 
-  const cardsHtml = offerings.length > 0
-    ? offerings.map(o => {
+  const cardsHtml = visibleOfferings.length > 0
+    ? visibleOfferings.map(o => {
         const isOpen = isRegistrationOpen(o, todayISO);
         const isOfferingCompleted = String(o.status || "").toLowerCase() === "completed";
         const chapters = Array.isArray(o.chapters) ? o.chapters : [];
@@ -807,7 +824,7 @@ function renderPublicDjClasses() {
           </div>
         `;
       }).join("")
-    : `<p class="text-xs text-slate-500 col-span-full">No DJ classes published yet.</p>`;
+    : `<p class="text-xs text-slate-500 col-span-full">No visible DJ classes currently published.</p>`;
 
   container.innerHTML = `
     <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
@@ -816,12 +833,15 @@ function renderPublicDjClasses() {
           <h3 class="font-bold text-sm text-slate-900">🎓 Discipleship Journey (DJ) Classes</h3>
           <p class="text-[11px] text-slate-500">Sequential path: ${DJ_LEVEL_ORDER.map(k => k.toUpperCase()).join(" → ")}</p>
         </div>
-        <span class="text-[11px] font-semibold text-slate-500">${offerings.length} class(es)</span>
+        <div class="flex items-center gap-2">
+          ${canCreate && hiddenOrDisabledCount > 0 ? `<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${hiddenOrDisabledCount} hidden/disabled (manage in My Portal)</span>` : ""}
+          <span class="text-[11px] font-semibold text-slate-500">${visibleOfferings.length} visible</span>
+        </div>
       </div>
 
       ${canCreate ? `
         <form id="form-create-dj-offering" class="bg-amber-50/60 p-3 rounded-xl border border-amber-200 space-y-2 text-xs">
-          <p class="font-bold text-slate-900">➕ Open New DJ Class (Facilitator)</p>
+          <p class="font-bold text-slate-900">➕ Open New DJ Class (Facilitator / Admin)</p>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <div>
               <label class="text-[10px] font-bold text-slate-600 uppercase">DJ Class Level</label>
@@ -842,7 +862,11 @@ function renderPublicDjClasses() {
               <input type="date" id="dj-new-close" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5" />
             </div>
           </div>
-          <div class="flex justify-end pt-1">
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
+              <input type="checkbox" id="dj-new-hidden" class="rounded border-slate-300" />
+              Create as hidden (invisible on Church Portal until ready)
+            </label>
             <button type="submit" class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg">
               🚀 Publish DJ Class
             </button>
@@ -1321,8 +1345,10 @@ function renderMyDjClassesSection() {
   }).join("");
 
   const myEnrollments = portalState.allDjEnrollments.filter(e => e.disciple_id === discipleDoc.id);
-  const offeringsHtml = portalState.djOfferings.length > 0
-    ? portalState.djOfferings.map(o => {
+  const visibleOfferings = getVisibleDjOfferings();
+
+  const offeringsHtml = visibleOfferings.length > 0
+    ? visibleOfferings.map(o => {
         const levelKey = normalizeDjKey(o.class_key || o.class_name || "come");
         const levelLabel = o.class_name || (levelKey.charAt(0).toUpperCase() + levelKey.slice(1));
         const facilitatorName = getFacilitatorDisplayName(o);
@@ -1361,7 +1387,7 @@ function renderMyDjClassesSection() {
           </div>
         `;
       }).join("")
-    : `<p class="text-xs text-slate-500">No DJ classes published yet.</p>`;
+    : `<p class="text-xs text-slate-500">No visible DJ classes published yet.</p>`;
 
   container.innerHTML = `
     <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
@@ -1385,7 +1411,10 @@ window.enrollDjFromMyPortal = async (offeringId) => {
   if (!discipleDoc || discipleDoc._isAdminFallback) return;
 
   const offering = portalState.djOfferings.find(o => o.id === offeringId);
-  if (!offering) return;
+  if (!offering || isDjOfferingDisabled(offering) || isDjOfferingHidden(offering)) {
+    alert("This DJ class is no longer available for enrollment.");
+    return;
+  }
 
   const levelKey = normalizeDjKey(offering.class_key || offering.class_name);
   const eligibility = validateDjEnrollmentEligibility(
@@ -1417,7 +1446,7 @@ window.enrollDjFromMyPortal = async (offeringId) => {
   }
 };
 
-// --- DJ FACILITATOR TEACHING PANEL IN MY PORTAL ---
+// --- DJ FACILITATOR & SYSTEM ADMIN TEACHING / MAINTENANCE PANEL IN MY PORTAL ---
 function renderDjFacilitatorTeachingPanel() {
   const bodyEl = document.getElementById("member-selfservice-body");
   if (!bodyEl) return;
@@ -1440,15 +1469,47 @@ function renderDjFacilitatorTeachingPanel() {
 
   const chapters = Array.isArray(offering.chapters) ? offering.chapters : [];
   const isCompleted = String(offering.status || "").toLowerCase() === "completed";
+  const isDisabled = isDjOfferingDisabled(offering);
+  const isHidden = isDjOfferingHidden(offering);
   const isClosed = offering.registration_manually_closed === true;
   const todayISO = getAucklandTodayISO();
   const facilitatorName = getFacilitatorDisplayName(offering);
+  const isSysAdmin = isSystemAdminUser() || canManageChurchPortal();
+  const currentLevelKey = normalizeDjKey(offering.class_key || offering.class_name || "come");
 
-  const offeringOptions = portalState.djOfferings.map(o => `
-    <option value="${esc(o.id)}" ${o.id === offering.id ? "selected" : ""}>
-      ${esc(o.class_title || o.class_name || "DJ Class")} (${esc(o.status || "Open")})
-    </option>
-  `).join("");
+  const offeringOptions = portalState.djOfferings.map(o => {
+    const flags = [
+      isDjOfferingDisabled(o) ? "DISABLED" : String(o.status || "OPEN").toUpperCase(),
+      isDjOfferingHidden(o) ? "HIDDEN" : ""
+    ].filter(Boolean).join(" • ");
+    return `
+      <option value="${esc(o.id)}" ${o.id === offering.id ? "selected" : ""}>
+        ${esc(o.class_title || o.class_name || "DJ Class")} [${esc(flags)}]
+      </option>
+    `;
+  }).join("");
+
+  const facilitatorOptions = portalState.allDisciples.map(d => {
+    const selected =
+      (offering.facilitator_id && d.id === offering.facilitator_id) ||
+      (offering.facilitator_email &&
+        String(d.email || "").trim().toLowerCase() ===
+          String(offering.facilitator_email || "").trim().toLowerCase());
+    return `<option value="${esc(d.id)}" ${selected ? "selected" : ""}>${esc(d.full_name)} (${esc(d.email || "no email")})</option>`;
+  }).join("");
+
+  const statusPills = [
+    isDisabled
+      ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-800 text-white">⛔ DISABLED</span>`
+      : isCompleted
+      ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">✅ COMPLETED</span>`
+      : isClosed
+      ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-100 text-red-800">🔒 CLOSED</span>`
+      : `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">🟢 OPEN</span>`,
+    isHidden
+      ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-900">🙈 HIDDEN FROM PORTAL</span>`
+      : `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-800">👁️ VISIBLE ON PORTAL</span>`
+  ].join(" ");
 
   const chaptersHtml = chapters.map((ch, idx) => {
     const chTitle = ch.title || ch.name || `Chapter ${ch.chapter_no || idx + 1}`;
@@ -1487,36 +1548,135 @@ function renderDjFacilitatorTeachingPanel() {
 
   container.innerHTML = `
     <div class="bg-white p-5 rounded-2xl border border-amber-300 shadow-sm space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div>
-          <span class="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900">
-            🎓 DJ Facilitator Teaching Panel
-          </span>
-          <h3 class="font-bold text-base text-slate-900 mt-1">${esc(offering.class_title || offering.class_name || "DJ Class")}</h3>
-          <p class="text-xs text-slate-600">Facilitator: <strong>${esc(facilitatorName)}</strong></p>
-          <p class="text-xs text-slate-500">Check off completed chapters to update class & participant progress.</p>
+      <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-3 border-b border-slate-200 pb-3">
+        <div class="space-y-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900">
+              ${isSysAdmin ? "🛡️ System Admin & Facilitator Class Maintenance" : "🎓 DJ Facilitator Teaching Panel"}
+            </span>
+            ${statusPills}
+          </div>
+          <h3 class="font-bold text-base text-slate-900">${esc(offering.class_title || offering.class_name || "DJ Class")}</h3>
+          <p class="text-xs text-slate-600">
+            Facilitator: <strong>${esc(facilitatorName)}</strong> •
+            Reg: <span class="font-mono">${esc(offering.registration_open_date || "—")} → ${esc(offering.registration_close_date || "—")}</span>
+          </p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2 shrink-0">
           <select
             onchange="window.changeDjTeachingOffering(this.value)"
-            class="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold bg-white"
+            class="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold bg-white max-w-[260px]"
           >
             ${offeringOptions}
           </select>
-          ${!isCompleted ? `
+
+          <button
+            type="button"
+            onclick="window.toggleDjEditForm()"
+            class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300"
+          >
+            ${portalState.djEditModeOpen ? "✖ Cancel Edit" : "✏️ Edit Class"}
+          </button>
+
+          ${!isCompleted && !isDisabled ? `
             <button
               type="button"
               onclick="window.toggleDjRegistration('${esc(offering.id)}', ${!isClosed})"
               class="px-3 py-1.5 rounded-lg text-xs font-bold ${
-                !isClosed ? "bg-red-100 text-red-800 hover:bg-red-200" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                !isClosed ? "bg-amber-100 text-amber-900 hover:bg-amber-200" : "bg-emerald-600 text-white hover:bg-emerald-700"
               }"
             >
-              ${!isClosed ? "Close Registration" : "Reopen Registration"}
+              ${!isClosed ? "Close Reg" : "Reopen Reg"}
+            </button>
+          ` : ""}
+
+          ${isSysAdmin ? `
+            <button
+              type="button"
+              onclick="window.toggleDjVisibility('${esc(offering.id)}', ${!isHidden})"
+              class="px-3 py-1.5 rounded-lg text-xs font-bold ${
+                isHidden
+                  ? "bg-purple-600 text-white hover:bg-purple-700"
+                  : "bg-purple-100 text-purple-900 hover:bg-purple-200"
+              }"
+              title="Hide or show this class on Church Portal and Member screen"
+            >
+              ${isHidden ? "👁️ Show on Portal" : "🙈 Hide from Portal"}
+            </button>
+
+            <button
+              type="button"
+              onclick="window.toggleDjDisabled('${esc(offering.id)}', ${!isDisabled})"
+              class="px-3 py-1.5 rounded-lg text-xs font-bold ${
+                isDisabled
+                  ? "bg-emerald-700 text-white hover:bg-emerald-800"
+                  : "bg-red-100 text-red-800 hover:bg-red-200"
+              }"
+              title="Disable or enable this class completely"
+            >
+              ${isDisabled ? "✅ Enable Class" : "⛔ Disable Class"}
             </button>
           ` : ""}
         </div>
       </div>
+
+      ${portalState.djEditModeOpen ? `
+        <form onsubmit="window.saveDjOfferingEdit(event, '${esc(offering.id)}')" class="bg-slate-50 p-4 rounded-xl border border-slate-300 space-y-3 text-xs">
+          <div class="flex items-center justify-between">
+            <p class="font-bold text-slate-900">✏️ Edit DJ Class Details</p>
+            <span class="text-[11px] text-slate-500">ID: ${esc(offering.id)}</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div>
+              <label class="text-[10px] font-bold text-slate-600 uppercase">DJ Class Level</label>
+              <select id="dj-edit-level" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold mt-0.5">
+                ${DJ_LEVEL_ORDER.map(k => `<option value="${k}" ${k === currentLevelKey ? "selected" : ""}>${k.charAt(0).toUpperCase() + k.slice(1)}</option>`).join("")}
+              </select>
+            </div>
+
+            <div>
+              <label class="text-[10px] font-bold text-slate-600 uppercase">Batch / Title</label>
+              <input type="text" id="dj-edit-title" required value="${esc(offering.class_title || "")}" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5" />
+            </div>
+
+            <div>
+              <label class="text-[10px] font-bold text-slate-600 uppercase">Facilitator</label>
+              <select id="dj-edit-facilitator" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5">
+                <option value="">— Keep Current (${esc(facilitatorName)}) —</option>
+                ${facilitatorOptions}
+              </select>
+            </div>
+
+            <div>
+              <label class="text-[10px] font-bold text-slate-600 uppercase">Registration Opens</label>
+              <input type="date" id="dj-edit-open" value="${esc(offering.registration_open_date || "")}" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5" />
+            </div>
+
+            <div>
+              <label class="text-[10px] font-bold text-slate-600 uppercase">Registration Closes</label>
+              <input type="date" id="dj-edit-close" value="${esc(offering.registration_close_date || "")}" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg mt-0.5" />
+            </div>
+
+            <div class="flex items-end pb-1">
+              <label class="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                <input type="checkbox" id="dj-edit-hidden" ${isHidden ? "checked" : ""} class="rounded border-slate-300" />
+                Invisible on Church Portal
+              </label>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-1">
+            <button type="button" onclick="window.toggleDjEditForm()" class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold text-slate-700">
+              Cancel
+            </button>
+            <button type="submit" class="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg">
+              💾 Save Class Changes
+            </button>
+          </div>
+        </form>
+      ` : ""}
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="lg:col-span-2 space-y-2">
@@ -1534,9 +1694,64 @@ function renderDjFacilitatorTeachingPanel() {
 
 window.changeDjTeachingOffering = async (offeringId) => {
   portalState.selectedDjOfferingId = offeringId;
+  portalState.djEditModeOpen = false;
   await loadSelectedDjEnrollments();
   renderDjFacilitatorTeachingPanel();
   applyMemberPortalLayoutOrder();
+};
+
+window.toggleDjEditForm = () => {
+  portalState.djEditModeOpen = !portalState.djEditModeOpen;
+  renderDjFacilitatorTeachingPanel();
+  applyMemberPortalLayoutOrder();
+};
+
+window.saveDjOfferingEdit = async (event, offeringId) => {
+  event.preventDefault();
+  const offering = portalState.djOfferings.find(o => o.id === offeringId);
+  if (!offering) return;
+
+  const classKey = document.getElementById("dj-edit-level")?.value || offering.class_key || "come";
+  const classTitle = document.getElementById("dj-edit-title")?.value.trim() || offering.class_title;
+  const openDate = document.getElementById("dj-edit-open")?.value || "";
+  const closeDate = document.getElementById("dj-edit-close")?.value || "";
+  const isHidden = Boolean(document.getElementById("dj-edit-hidden")?.checked);
+  const selectedFacId = document.getElementById("dj-edit-facilitator")?.value || "";
+
+  let facilitator_id = offering.facilitator_id || "";
+  let facilitator_name = offering.facilitator_name || "";
+  let facilitator_email = offering.facilitator_email || "";
+
+  if (selectedFacId) {
+    const facDoc = portalState.allDisciples.find(d => d.id === selectedFacId);
+    if (facDoc) {
+      facilitator_id = facDoc.id;
+      facilitator_name = facDoc.full_name || "";
+      facilitator_email = facDoc.email || "";
+    }
+  }
+
+  try {
+    await updateDjClassOffering(offeringId, {
+      class_key: classKey,
+      class_title: classTitle,
+      facilitator_id,
+      facilitator_name,
+      facilitator_email,
+      registration_open_date: openDate,
+      registration_close_date: closeDate,
+      is_hidden: isHidden
+    });
+
+    portalState.djEditModeOpen = false;
+    portalState.djOfferings = await getAllDjOfferings().catch(() => []);
+    renderPublicDjClasses();
+    renderMyDjClassesSection();
+    renderDjFacilitatorTeachingPanel();
+    applyMemberPortalLayoutOrder();
+  } catch (err) {
+    alert("Failed to update DJ class: " + (err?.message || err));
+  }
 };
 
 window.toggleDjRegistration = async (offeringId, closedState) => {
@@ -1549,6 +1764,35 @@ window.toggleDjRegistration = async (offeringId, closedState) => {
     applyMemberPortalLayoutOrder();
   } catch (err) {
     alert("Failed to update registration status: " + (err?.message || err));
+  }
+};
+
+window.toggleDjVisibility = async (offeringId, hiddenState) => {
+  try {
+    await setDjOfferingHidden(offeringId, Boolean(hiddenState));
+    portalState.djOfferings = await getAllDjOfferings().catch(() => []);
+    renderPublicDjClasses();
+    renderMyDjClassesSection();
+    renderDjFacilitatorTeachingPanel();
+    applyMemberPortalLayoutOrder();
+  } catch (err) {
+    alert("Failed to update class visibility: " + (err?.message || err));
+  }
+};
+
+window.toggleDjDisabled = async (offeringId, disabledState) => {
+  const actionLabel = disabledState ? "disable" : "enable";
+  if (!confirm(`Are you sure you want to ${actionLabel} this DJ class?`)) return;
+
+  try {
+    await setDjOfferingDisabled(offeringId, Boolean(disabledState));
+    portalState.djOfferings = await getAllDjOfferings().catch(() => []);
+    renderPublicDjClasses();
+    renderMyDjClassesSection();
+    renderDjFacilitatorTeachingPanel();
+    applyMemberPortalLayoutOrder();
+  } catch (err) {
+    alert("Failed to update class active status: " + (err?.message || err));
   }
 };
 
