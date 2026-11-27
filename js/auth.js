@@ -17,6 +17,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 // Whitelist email Super Admin awal sebelum database disciples terisi
 const BOOTSTRAP_ADMINS = [
@@ -33,21 +34,24 @@ function withTimeout(promise, ms = 8000, fallbackValue = null) {
 
 export async function loginWithGoogle() {
   try {
-    await signInWithPopup(auth, googleProvider);
+    const credential = await signInWithPopup(auth, googleProvider);
+    return credential.user;
   } catch (error) {
     console.error("Google Sign-In Error:", error);
     alert("Sign-in failed: " + error.message);
+    throw error;
   }
 }
 
 export async function sendMagicLink(email) {
+  const cleanEmail = (email || "").trim();
   const actionCodeSettings = {
     url: window.location.origin + window.location.pathname,
     handleCodeInApp: true
   };
   try {
-    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-    window.localStorage.setItem("ifgf_email_for_signin", email);
+    await sendSignInLinkToEmail(auth, cleanEmail, actionCodeSettings);
+    window.localStorage.setItem("ifgf_email_for_signin", cleanEmail);
     return { success: true };
   } catch (error) {
     console.error("Magic Link Error:", error);
@@ -65,7 +69,7 @@ export async function completeMagicLinkIfPresent() {
       }
       if (email) {
         try {
-          await signInWithEmailLink(auth, email, window.location.href);
+          await signInWithEmailLink(auth, email.trim(), window.location.href);
           window.localStorage.removeItem("ifgf_email_for_signin");
           window.history.replaceState({}, document.title, window.location.pathname);
         } catch (error) {
@@ -95,6 +99,7 @@ function extractLeadEmails(deptData) {
 }
 
 async function findDepartmentsLedByEmail(email) {
+  if (!email) return [];
   try {
     const snap = await withTimeout(getDocs(collection(db, "departments")), 7000, null);
     if (!snap) return [];
@@ -122,6 +127,8 @@ export async function resolveUserProfile(user) {
     accessLevel: isBootstrapAdmin ? "super_admin" : "member",
     isAdmin: isBootstrapAdmin
   };
+
+  if (!email) return fallbackProfile;
 
   try {
     const [discipleSnap, ledDepartments] = await Promise.all([
