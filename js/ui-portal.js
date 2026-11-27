@@ -26,6 +26,7 @@ import {
   normalizeDjKey,
   getAucklandTodayISO,
   isRegistrationOpen,
+  isDjLevelCompleted,
   getAllDjOfferings,
   getAllDjEnrollments,
   getEnrollmentsByOffering,
@@ -315,6 +316,14 @@ function getPrereqLabelForLevel(levelKey) {
   return DJ_LEVEL_ORDER[idx - 1].toUpperCase();
 }
 
+function getFacilitatorDisplayName(offering = {}) {
+  const name = String(offering.facilitator_name || "").trim();
+  if (name) return name;
+  const email = String(offering.facilitator_email || "").trim();
+  if (email) return email;
+  return "TBA";
+}
+
 function resolveManagedDepartments(discipleDoc, departments) {
   const activeDepts = departments.filter(d => d.active !== false && d.is_active !== false);
   if (isSystemAdminUser() || canManageChurchPortal()) {
@@ -508,6 +517,16 @@ function bindPublicPortalEvents() {
       const openDate = document.getElementById("dj-new-open")?.value || getAucklandTodayISO();
       const closeDate = document.getElementById("dj-new-close")?.value || "";
 
+      const facilitatorName =
+        portalState.profile?.discipleDoc?.full_name ||
+        portalState.profile?.displayName ||
+        portalState.profile?.name ||
+        "Facilitator";
+      const facilitatorEmail =
+        portalState.profile?.discipleDoc?.email ||
+        portalState.profile?.email ||
+        "";
+
       const submitBtn = e.target.querySelector('button[type="submit"]');
       if (submitBtn) submitBtn.disabled = true;
 
@@ -517,8 +536,8 @@ function bindPublicPortalEvents() {
           class_name: className,
           class_title: classTitle,
           facilitator_id: portalState.profile?.discipleDoc?.id || portalState.profile?.uid || "",
-          facilitator_name: portalState.profile?.discipleDoc?.full_name || portalState.profile?.displayName || "Facilitator",
-          facilitator_email: portalState.profile?.discipleDoc?.email || portalState.profile?.email || "",
+          facilitator_name: facilitatorName,
+          facilitator_email: facilitatorEmail,
           registration_open_date: openDate,
           registration_close_date: closeDate
         });
@@ -591,6 +610,12 @@ function bindPublicPortalEvents() {
         return;
       }
 
+      const levelKey = normalizeDjKey(offering.class_key || offering.class_name);
+      if (isDjLevelCompleted(discipleDoc, levelKey, portalState.allDjEnrollments)) {
+        alert(`You have already completed DJ ${levelKey.toUpperCase()} and do not need to enroll again.`);
+        return;
+      }
+
       enrollBtn.disabled = true;
       try {
         const res = await registerDiscipleToDjClass({
@@ -608,8 +633,8 @@ function bindPublicPortalEvents() {
               ...discipleDoc,
               dj_progress: {
                 ...(discipleDoc.dj_progress || {}),
-                [normalizeDjKey(offering.class_key)]:
-                  String(discipleDoc?.dj_progress?.[normalizeDjKey(offering.class_key)] || "").toLowerCase() === "completed"
+                [levelKey]:
+                  String(discipleDoc?.dj_progress?.[levelKey] || "").toLowerCase() === "completed"
                     ? "Completed"
                     : "In Progress"
               }
@@ -679,6 +704,9 @@ function renderPublicDjClasses() {
 
   const todayISO = getAucklandTodayISO();
   const canCreate = canManageDjClasses();
+  const discipleDoc = portalState.profile?.discipleDoc;
+  const isMember = Boolean(discipleDoc?.id) && !discipleDoc?._isAdminFallback;
+
   const offerings = [...portalState.djOfferings].sort((a, b) => {
     const openA = isRegistrationOpen(a, todayISO) ? 0 : 1;
     const openB = isRegistrationOpen(b, todayISO) ? 0 : 1;
@@ -699,12 +727,14 @@ function renderPublicDjClasses() {
   const cardsHtml = offerings.length > 0
     ? offerings.map(o => {
         const isOpen = isRegistrationOpen(o, todayISO);
-        const isCompleted = String(o.status || "").toLowerCase() === "completed";
+        const isOfferingCompleted = String(o.status || "").toLowerCase() === "completed";
         const chapters = Array.isArray(o.chapters) ? o.chapters : [];
         const completedCount = chapters.filter(c => c.completed === true).length;
         const levelKey = normalizeDjKey(o.class_key || o.class_name || "come");
         const levelLabel = o.class_name || (levelKey.charAt(0).toUpperCase() + levelKey.slice(1));
         const prereqLabel = getPrereqLabelForLevel(levelKey);
+        const facilitatorName = getFacilitatorDisplayName(o);
+        const alreadyCompletedLevel = isMember && isDjLevelCompleted(discipleDoc, levelKey, portalState.allDjEnrollments);
 
         return `
           <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2 text-xs">
@@ -713,17 +743,22 @@ function renderPublicDjClasses() {
                 DJ: ${esc(levelLabel)}
               </span>
               <span class="px-2 py-0.5 rounded-full font-extrabold text-[10px] ${
-                isCompleted
+                alreadyCompletedLevel
+                  ? "bg-emerald-100 text-emerald-900"
+                  : isOfferingCompleted
                   ? "bg-slate-200 text-slate-700"
                   : isOpen
                   ? "bg-emerald-100 text-emerald-800"
                   : "bg-red-100 text-red-800"
               }">
-                ${isCompleted ? "COMPLETED" : isOpen ? "OPEN" : "CLOSED"}
+                ${alreadyCompletedLevel ? "COMPLETED" : isOfferingCompleted ? "COMPLETED" : isOpen ? "OPEN" : "CLOSED"}
               </span>
             </div>
 
             <h4 class="font-bold text-sm text-slate-900">${esc(o.class_title || `${levelLabel} Class`)}</h4>
+            <p class="text-[11px] text-slate-700">
+              Facilitator: <strong>${esc(facilitatorName)}</strong>
+            </p>
             <p class="text-[11px] text-slate-600">
               Prereq: <strong>${esc(prereqLabel)}</strong> • Chapters: <strong>${completedCount}/${chapters.length}</strong>
             </p>
@@ -735,11 +770,13 @@ function renderPublicDjClasses() {
 
             <div class="pt-1 flex items-center justify-between gap-2">
               ${
-                isOpen
+                alreadyCompletedLevel
+                  ? `<span class="text-[11px] text-emerald-700 font-semibold">✅ Already completed DJ ${esc(levelLabel)}</span>`
+                  : isOpen
                   ? `<button type="button" data-enroll-dj="${esc(o.id)}" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-[11px]">
                        Enroll Class
                      </button>`
-                  : `<span class="text-[11px] text-slate-400 font-medium">${isCompleted ? "Class finished" : "Registration closed"}</span>`
+                  : `<span class="text-[11px] text-slate-400 font-medium">${isOfferingCompleted ? "Class finished" : "Registration closed"}</span>`
               }
             </div>
           </div>
@@ -1244,6 +1281,7 @@ function renderDjFacilitatorTeachingPanel() {
   const isCompleted = String(offering.status || "").toLowerCase() === "completed";
   const isClosed = offering.registration_manually_closed === true;
   const todayISO = getAucklandTodayISO();
+  const facilitatorName = getFacilitatorDisplayName(offering);
 
   const offeringOptions = portalState.djOfferings.map(o => `
     <option value="${esc(o.id)}" ${o.id === offering.id ? "selected" : ""}>
@@ -1294,6 +1332,7 @@ function renderDjFacilitatorTeachingPanel() {
             🎓 DJ Facilitator Teaching Panel
           </span>
           <h3 class="font-bold text-base text-slate-900 mt-1">${esc(offering.class_title || offering.class_name || "DJ Class")}</h3>
+          <p class="text-xs text-slate-600">Facilitator: <strong>${esc(facilitatorName)}</strong></p>
           <p class="text-xs text-slate-500">Check off completed chapters to update class & participant progress.</p>
         </div>
 
