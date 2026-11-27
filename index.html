@@ -1167,7 +1167,6 @@
       const { initCurriculumTab } = await import("./js/ui-curriculum.js");
       const { initMediaServicesTab } = await import("./js/service-archives-tab.js");
       const { initMediaPublicationsTab } = await import("./js/media-publications-tab.js");
-      const { initDisciplesModule, refreshDisciplesModule } = await import("./js/ui-disciples.js");
 
       function syncActiveArchiveSubpanel(preferredSubtab = null) {
         reorderArchiveSubtabs();
@@ -1203,8 +1202,6 @@
         });
         if (tabName === "archives") {
           syncActiveArchiveSubpanel();
-        } else if (tabName === "disciples") {
-          refreshDisciplesModule().catch(err => console.warn("refreshDisciplesModule error:", err));
         }
       }
 
@@ -1226,42 +1223,77 @@
       document.getElementById("form-magic-link").addEventListener("submit", async (e) => {
         e.preventDefault();
         const email = document.getElementById("magic-email").value.trim();
-       const statusEl = document.getElementById("magic-status");
-        try {
-          await sendMagicLink(email);
-          if (statusEl) {
-            statusEl.textContent = "Magic sign-in link sent! Check your inbox.";
-            statusEl.classList.remove("hidden");
-          }
-        } catch (err) {
-          if (statusEl) {
-            statusEl.textContent = err?.message || "Failed to send magic link.";
-            statusEl.classList.remove("hidden");
-          }
-        }
+        const statusEl = document.getElementById("magic-status");
+        const res = await sendMagicLink(email);
+        statusEl.classList.remove("hidden");
+        statusEl.textContent = res.success
+          ? "Sign-in link sent! Check your email inbox."
+          : "Error: " + res.message;
       });
 
-      await Promise.allSettled([
-        initMasterApp(),
-        initRosterEngine(),
-        initPublicPortal(),
-        initMemberSelfService(),
-        initCareModule(),
-        initCurriculumTab(),
-        initMediaServicesTab(),
-        initMediaPublicationsTab(),
-        initDisciplesModule()
-      ]);
+      await initPublicPortal().catch(err => console.warn("initPublicPortal error:", err));
+      try {
+        initMediaServicesTab();
+        initMediaPublicationsTab();
+      } catch (err) {
+        console.warn("initMediaServicesTab / initMediaPublicationsTab error:", err);
+      }
+      reorderArchiveSubtabs();
 
-      initAuthObserver();
-      activateTab("public");
+      initAuthObserver(
+        async (profile) => {
+          clearTimeout(bootTimer);
+          loadingScreen.classList.add("hidden");
+          document.getElementById("modal-login").classList.add("hidden");
+          appScreen.classList.remove("hidden");
+
+          document.getElementById("btn-open-login").classList.add("hidden");
+          document.getElementById("header-user-info").classList.remove("hidden");
+          document.getElementById("nav-my-portal").classList.remove("hidden");
+          document.getElementById("user-name-badge").textContent = profile.displayName;
+          document.getElementById("user-role-badge").textContent = profile.accessLevel.toUpperCase();
+
+          const isAdminOrCoord = profile.accessLevel === "super_admin" || profile.accessLevel === "coordinator";
+          const isDeptLead =
+            profile.accessLevel === "department_lead" ||
+            (Array.isArray(profile.ledDepartments) && profile.ledDepartments.length > 0);
+
+          document.querySelectorAll(".admin-only-tab").forEach(el => {
+            el.classList.toggle("hidden", !isAdminOrCoord);
+          });
+          document.querySelectorAll(".roster-lead-tab").forEach(el => {
+            el.classList.toggle("hidden", !(isAdminOrCoord || isDeptLead));
+          });
+
+          await initMemberSelfService(profile).catch(err => console.warn("initMemberSelfService error:", err));
+
+          if (isAdminOrCoord) {
+            await Promise.allSettled([
+              initMasterApp(profile),
+              initCurriculumTab(),
+              initRosterEngine(profile),
+              initCareModule()
+            ]);
+          } else if (isDeptLead) {
+            await initRosterEngine(profile).catch(err => console.warn("initRosterEngine error:", err));
+          }
+          reorderArchiveSubtabs();
+        },
+        () => {
+          clearTimeout(bootTimer);
+          loadingScreen.classList.add("hidden");
+          appScreen.classList.remove("hidden");
+
+          document.getElementById("btn-open-login").classList.remove("hidden");
+          document.getElementById("header-user-info").classList.add("hidden");
+          document.getElementById("nav-my-portal").classList.add("hidden");
+          document.querySelectorAll(".admin-only-tab").forEach(el => el.classList.add("hidden"));
+          document.querySelectorAll(".roster-lead-tab").forEach(el => el.classList.add("hidden"));
+        }
+      );
     } catch (err) {
-      console.error("Boot error:", err);
-      showErrorOnLoading(err?.message || String(err));
-    } finally {
       clearTimeout(bootTimer);
-      loadingScreen.classList.add("hidden");
-      appScreen.classList.remove("hidden");
+      showErrorOnLoading(err.message || "Failed to load JS modules.");
     }
   </script>
 </body>
