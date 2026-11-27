@@ -7,7 +7,13 @@ import {
   updateDoc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getDisciples, getDepartments, getRolesReference } from "./db-master.js";
+import {
+  getDisciples,
+  getDepartments,
+  getRolesReference,
+  importDisciplesFromCSV,
+  importSeedDisciplesIgnoreDuplicates
+} from "./db-master.js";
 
 const ICARE_OPTIONS = ["Darah Muda", "Keluarga Muda", "Jiwa Muda"];
 
@@ -125,6 +131,7 @@ export async function createDiscipleRecord(formValues, existingDisciples = []) {
     phone: String(formValues.phone || "").trim(),
     address: String(formValues.address || "").trim(),
     birth_date: String(formValues.birth_date || "").trim(),
+    date_of_birth: String(formValues.birth_date || "").trim(),
     icare_group: icareGroups.join(", "),
     icare_groups: icareGroups,
     ministry_interests: Array.isArray(formValues.ministry_interests)
@@ -159,6 +166,7 @@ export async function updateDiscipleRecord(discipleId, formValues) {
     phone: String(formValues.phone || "").trim(),
     address: String(formValues.address || "").trim(),
     birth_date: String(formValues.birth_date || "").trim(),
+    date_of_birth: String(formValues.birth_date || "").trim(),
     icare_group: icareGroups.join(", "),
     icare_groups: icareGroups,
     ministry_interests: Array.isArray(formValues.ministry_interests)
@@ -258,100 +266,7 @@ function renderDiscipleFormHtml() {
             ${isEditing ? "✏️ Edit Disciple" : "➕ New Disciple (Auto Member ID)"}
           </span>
           <h4 class="font-bold text-sm text-slate-900 mt-1">
-            ${isEditing ? `Update ${esc(existingDoc?.full_name || "Disciple")}` : "Add New Disciple to Database"}
-          </h4>
-        </div>
-        <div class="text-right">
-          <span class="text-[10px] font-bold uppercase text-slate-500 block">Member ID</span>
-          <span id="disc-preview-member-id" class="font-mono text-sm font-black px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-slate-900">
-            ${esc(displayMemberId)}
-          </span>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <div>
-          <label class="text-[10px] font-bold text-slate-600 uppercase">Full Name *</label>
-          <input
-            type="text"
-            id="disc-full-name"
-            required
-            value="${esc(existingDoc?.full_name || "")}"
-            placeholder="e.g. Budi Santoso"
-            class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1 font-semibold"
-          />
-        </div>
-
-        <div>
-          <label class="text-[10px] font-bold text-slate-600 uppercase">Email</label>
-          <input
-            type="email"
-            id="disc-email"
-            value="${esc(existingDoc?.email || "")}"
-            placeholder="name@example.com"
-            class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1"
-          />
-        </div>
-
-        <div>
-          <label class="text-[10px] font-bold text-slate-600 uppercase">Phone</label>
-          <input
-            type="text"
-            id="disc-phone"
-            value="${esc(existingDoc?.phone || "")}"
-            placeholder="e.g. 0221234567"
-            class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1"
-          />
-        </div>
-
-        <div>
-          <label class="text-[10px] font-bold text-slate-600 uppercase">Birth Date</label>
-          <input
-            type="date"
-            id="disc-birth-date"
-            value="${esc(existingDoc?.birth_date || "")}"
-            class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1"
-          />
-        </div>
-
-        <div>
-          <label class="text-[10px] font-bold text-slate-600 uppercase">Status</label>
-          <select id="disc-status" class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1 font-semibold">
-            <option value="Active" ${(existingDoc?.status || "Active") === "Active" ? "selected" : ""}>Active</option>
-            <option value="Inactive" ${existingDoc?.status === "Inactive" ? "selected" : ""}>Inactive</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="text-[10px] font-bold text-slate-600 uppercase">Address</label>
-          <input
-            type="text"
-            id="disc-address"
-            value="${esc(existingDoc?.address || "")}"
-            placeholder="Street, Suburb, Palmerston North"
-            class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1"
-          />
-        </div>
-      </div>
-
-      <div class="space-y-1.5">
-        <label class="text-[10px] font-bold text-slate-600 uppercase block">iCare Group</label>
-        <div class="flex flex-wrap gap-2">${icareChecksHtml}</div>
-      </div>
-
-      <div class="space-y-1.5">
-        <label class="text-[10px] font-bold text-slate-600 uppercase block">Ministry Interests / Roles</label>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-40 overflow-y-auto p-2 bg-slate-50/80 rounded-xl border border-slate-200">
-          ${interestsHtml}
-        </div>
-      </div>
-
-      <div class="flex items-center justify-end gap-2 pt-1">
-        <button type="button" id="btn-cancel-disciple-form" class="px-3.5 py-1.5 bg-white border border-slate-300 text-slate-700 font-semibold rounded-lg">
-          Cancel
-        </button>
-        <button type="submit" id="btn-save-disciple-crud" class="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg">
-          ${isEditing ? "💾 Save Changes" : `➕ Create (${esc(displayMemberId)})`}
+            ${isEditing ? `Update ${esc(existingDoc?.full_name \vert{}\vert{} "Disciple")}` : "Add New Disciple to Database"} </h4> </div> <div class="text-right"> <span class="text-[10px] font-bold uppercase text-slate-500 block">Member ID</span> <span id="disc-preview-member-id" class="font-mono text-sm font-black px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-slate-900"> ${esc(displayMemberId)} </span> </div> </div>  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"> <div> <label class="text-[10px] font-bold text-slate-600 uppercase">Full Name *</label> <input type="text" id="disc-full-name" required value="${esc(existingDoc?.full_name \vert{}\vert{} "")}" placeholder="e.g. Budi Santoso" class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1 font-semibold" /> </div>  <div> <label class="text-[10px] font-bold text-slate-600 uppercase">Email</label> <input type="email" id="disc-email" value="${esc(existingDoc?.email \vert{}\vert{} "")}" placeholder="name@example.com" class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1" /> </div>  <div> <label class="text-[10px] font-bold text-slate-600 uppercase">Phone</label> <input type="text" id="disc-phone" value="${esc(existingDoc?.phone \vert{}\vert{} "")}" placeholder="e.g. 0221234567" class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1" /> </div>  <div> <label class="text-[10px] font-bold text-slate-600 uppercase">Birth Date</label> <input type="date" id="disc-birth-date" value="${esc(existingDoc?.birth_date \vert{}\vert{} existingDoc?.date_of_birth \vert{}\vert{} "")}" class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1" /> </div>  <div> <label class="text-[10px] font-bold text-slate-600 uppercase">Status</label> <select id="disc-status" class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1 font-semibold"> <option value="Active" ${(existingDoc?.status \vert{}\vert{} "Active") === "Active" ? "selected" : ""}>Active</option> <option value="Inactive" ${existingDoc?.status === "Inactive" ? "selected" : ""}>Inactive</option> </select> </div>  <div> <label class="text-[10px] font-bold text-slate-600 uppercase">Address</label> <input type="text" id="disc-address" value="${esc(existingDoc?.address \vert{}\vert{} "")}" placeholder="Street, Suburb, Palmerston North" class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg mt-1" /> </div> </div>  <div class="space-y-1.5"> <label class="text-[10px] font-bold text-slate-600 uppercase block">iCare Group</label> <div class="flex flex-wrap gap-2">${icareChecksHtml}</div> </div>  <div class="space-y-1.5"> <label class="text-[10px] font-bold text-slate-600 uppercase block">Ministry Interests / Roles</label> <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-40 overflow-y-auto p-2 bg-slate-50/80 rounded-xl border border-slate-200"> ${interestsHtml} </div> </div>  <div class="flex items-center justify-end gap-2 pt-1"> <button type="button" id="btn-cancel-disciple-form" class="px-3.5 py-1.5 bg-white border border-slate-300 text-slate-700 font-semibold rounded-lg"> Cancel </button> <button type="submit" id="btn-save-disciple-crud" class="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg"> ${isEditing ? "💾 Save Changes" : `➕ Create (${esc(displayMemberId)})`}
         </button>
       </div>
     </form>
@@ -422,7 +337,7 @@ export function renderDisciplesPanel() {
 
   container.innerHTML = `
     <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h3 class="font-bold text-base text-slate-900">👥 Disciples (360°)</h3>
           <p class="text-xs text-slate-500">
@@ -430,13 +345,30 @@ export function renderDisciplesPanel() {
           </p>
         </div>
 
-        <button
-          type="button"
-          id="btn-open-add-disciple"
-          class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-xl text-xs shrink-0"
-        >
-          + Add Disciple (${esc(nextIdPreview)})
-        </button>
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+          <input type="file" id="disc-csv-file-input" accept=".csv" class="hidden" />
+          <button
+            type="button"
+            id="btn-disc-import-list"
+            class="px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold rounded-xl text-xs border border-amber-300"
+          >
+            ⚡ Import 43 List (Skip Duplicates)
+          </button>
+          <button
+            type="button"
+            id="btn-disc-import-csv"
+            class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs"
+          >
+            📥 Import CSV
+          </button>
+          <button
+            type="button"
+            id="btn-open-add-disciple"
+            class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-xl text-xs"
+          >
+            + Add Disciple (${esc(nextIdPreview)})
+          </button>
+        </div>
       </div>
 
       ${renderDiscipleFormHtml()}
@@ -501,17 +433,30 @@ function bindDisciplesEvents() {
     }
   });
 
-  container.addEventListener("change", (e) => {
+  container.addEventListener("change", async (e) => {
     if (e.target.id === "disc-icare-filter") {
       disciplesState.icareFilter = e.target.value || "ALL";
       renderDisciplesPanel();
     } else if (e.target.id === "disc-status-filter") {
       disciplesState.statusFilter = e.target.value || "ALL";
       renderDisciplesPanel();
+    } else if (e.target.id === "disc-csv-file-input") {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const csvText = await file.text();
+        const res = await importDisciplesFromCSV(csvText);
+        alert(`CSV Import Complete: ${res.createdCount} added, ${res.updatedCount} updated.`);
+        await refreshDisciplesTab();
+      } catch (err) {
+        alert("CSV Import Failed: " + (err?.message || err));
+      } finally {
+        e.target.value = "";
+      }
     }
   });
 
-  container.addEventListener("click", (e) => {
+  container.addEventListener("click", async (e) => {
     const addBtn = e.target.closest("#btn-open-add-disciple");
     if (addBtn) {
       disciplesState.formOpen = true;
@@ -537,6 +482,32 @@ function bindDisciplesEvents() {
       disciplesState.formOpen = false;
       disciplesState.editingId = null;
       renderDisciplesPanel();
+      return;
+    }
+
+    const csvBtn = e.target.closest("#btn-disc-import-csv");
+    if (csvBtn) {
+      document.getElementById("disc-csv-file-input")?.click();
+      return;
+    }
+
+    const seedListBtn = e.target.closest("#btn-disc-import-list");
+    if (seedListBtn) {
+      seedListBtn.disabled = true;
+      try {
+        const res = await importSeedDisciplesIgnoreDuplicates({ dryRun: false });
+        alert(
+          `Seed Import Complete (Duplicates Ignored):\n` +
+          `Added: ${res.addedCount}\n` +
+          `Skipped (Duplicates): ${res.skippedCount}\n` +
+          `Total in DB now: ${res.existingCount + res.addedCount}`
+        );
+        await refreshDisciplesTab();
+      } catch (err) {
+        alert("Seed Import Failed: " + (err?.message || err));
+      } finally {
+        seedListBtn.disabled = false;
+      }
     }
   });
 
