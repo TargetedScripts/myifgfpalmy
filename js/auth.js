@@ -2,7 +2,8 @@
 import { auth, db } from "./firebase-config.js";
 import {
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
@@ -34,28 +35,27 @@ function withTimeout(promise, ms = 8000, fallbackValue = null) {
 
 function formatAuthError(error) {
   const code = error?.code || "";
-  if (code === "auth/popup-blocked") {
-    return "Popup was blocked by browser. Allow popups or use Magic Sign-In Link below.";
-  }
-  if (code === "auth/popup-closed-by-user") {
-    return "Sign-in popup was closed before completing login.";
-  }
   if (code === "auth/unauthorized-domain") {
-    return "This domain is not listed in Firebase Authentication Authorized Domains.";
+    return "Domain belum terdaftar di Firebase Authentication Authorized Domains.";
   }
   if (code === "auth/operation-not-allowed") {
-    return "This sign-in provider is disabled in Firebase Authentication settings.";
+    return "Google Sign-In belum diaktifkan di Firebase Authentication -> Sign-in method.";
+  }
+  if (code === "auth/network-request-failed") {
+    return "Koneksi jaringan gagal saat menghubungi Google Sign-In.";
   }
   return error?.message || "Authentication failed.";
 }
 
+// Gunakan Redirect agar bebas blokir COOP / Pop-up Blocker di subdomain
 export async function loginWithGoogle() {
   try {
-    const credential = await signInWithPopup(auth, googleProvider);
-    return { success: true, user: credential.user };
+    await signInWithRedirect(auth, googleProvider);
+    return { success: true, redirecting: true };
   } catch (error) {
-    console.error("Google Sign-In Error:", error);
+    console.error("Google Redirect Sign-In Error:", error);
     const message = formatAuthError(error);
+    alert("Sign-in failed: " + message);
     return { success: false, code: error?.code || "auth/unknown", message, error };
   }
 }
@@ -76,8 +76,18 @@ export async function sendMagicLink(email) {
   }
 }
 
-// Cek apakah halaman dibuka dari klik Email Magic Link
-export async function completeMagicLinkIfPresent() {
+// Tangkap hasil redirect Google Sign-In maupun Email Magic Link saat halaman dimuat
+export async function completePendingSignIn() {
+  try {
+    const redirectResult = await getRedirectResult(auth);
+    if (redirectResult?.user) {
+      return redirectResult.user;
+    }
+  } catch (error) {
+    console.error("Redirect result error:", error);
+    alert("Google Sign-In gagal diselesaikan: " + formatAuthError(error));
+  }
+
   try {
     if (isSignInWithEmailLink(auth, window.location.href)) {
       let email = window.localStorage.getItem("ifgf_email_for_signin");
@@ -86,9 +96,10 @@ export async function completeMagicLinkIfPresent() {
       }
       if (email) {
         try {
-          await signInWithEmailLink(auth, email.trim(), window.location.href);
+          const linkResult = await signInWithEmailLink(auth, email.trim(), window.location.href);
           window.localStorage.removeItem("ifgf_email_for_signin");
           window.history.replaceState({}, document.title, window.location.pathname);
+          return linkResult.user;
         } catch (error) {
           console.error("Magic link sign-in failed:", error);
           alert("Magic link expired or invalid: " + formatAuthError(error));
@@ -98,6 +109,8 @@ export async function completeMagicLinkIfPresent() {
   } catch (err) {
     console.warn("Magic link check skipped:", err);
   }
+
+  return null;
 }
 
 export async function logoutUser() {
@@ -220,5 +233,5 @@ export function initAuthObserver(onUserReady, onUserSignedOut) {
     });
   };
 
-  completeMagicLinkIfPresent().finally(startObserver);
+  completePendingSignIn().finally(startObserver);
 }
