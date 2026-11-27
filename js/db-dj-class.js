@@ -75,7 +75,6 @@ export function isDjLevelCompleted(disciple = {}, classKey = "") {
 
 /**
  * Validasi urutan prasyarat: Come -> Grow -> Serve -> Lead.
- * Mengembalikan { allowed: boolean, missingLevelKey: string|null, message: string }
  */
 export function checkDjPrerequisite(disciple = {}, targetClassKey = "", allEnrollments = []) {
   const key = normalizeDjKey(targetClassKey);
@@ -141,10 +140,6 @@ export async function getEnrollmentsByOffering(offeringId) {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-/**
- * Facilitator membuat kelas DJ baru (Come / Grow / Serve / Lead)
- * dengan menyalin daftar bab dari kurikulum (atau daftar bab kustom).
- */
 export async function createDjClassOffering({
   class_key,
   class_name,
@@ -214,9 +209,6 @@ export async function deleteDjClassOffering(offeringId) {
   await deleteDoc(doc(db, COL_OFFERINGS, offeringId));
 }
 
-/**
- * Jemaat mendaftar ke kelas DJ yang masih buka setelah lolos cek prasyarat.
- */
 export async function registerDiscipleToDjClass({ offering, disciple, allEnrollments = [] }) {
   if (!offering?.id) throw new Error("Class offering not found.");
   if (!disciple?.id) throw new Error("Disciple profile is required to register.");
@@ -253,7 +245,6 @@ export async function registerDiscipleToDjClass({ offering, disciple, allEnrollm
 
   const ref = await addDoc(collection(db, COL_ENROLLMENTS), payload);
 
-  // Tandai status "In Progress" di profil disciple jika belum "Completed"
   const key = normalizeDjKey(offering.class_key);
   const currVal = String(disciple?.dj_progress?.[key] || "").toLowerCase();
   if (currVal !== "completed") {
@@ -271,13 +262,6 @@ export async function registerDiscipleToDjClass({ offering, disciple, allEnrollm
   return { alreadyRegistered: false, enrollment: { id: ref.id, ...payload } };
 }
 
-/**
- * Facilitator mencentang / meng-uncheck satu bab dan mengisi tanggal selesainya.
- * Jika semua bab (chapters.length > 0) sudah completed === true:
- * - offering.status menjadi "Completed"
- * - semua peserta di offering ini statusnya menjadi "Completed"
- * - profil setiap disciple diupdate dj_progress[class_key] = "Completed" & dj_traffic_light = "green"
- */
 export async function updateDjChapterCompletion({
   offeringId,
   chapterIndex,
