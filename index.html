@@ -1226,4 +1226,43 @@
       document.getElementById("form-magic-link").addEventListener("submit", async (e) => {
         e.preventDefault();
         const email = document.getElementById("magic-email").value.trim();
-        const statusEl = document.getElement
+       const statusEl = document.getElementById("magic-status");
+        try {
+          await sendMagicLink(email);
+          if (statusEl) {
+            statusEl.textContent = "Magic sign-in link sent! Check your inbox.";
+            statusEl.classList.remove("hidden");
+          }
+        } catch (err) {
+          if (statusEl) {
+            statusEl.textContent = err?.message || "Failed to send magic link.";
+            statusEl.classList.remove("hidden");
+          }
+        }
+      });
+
+      await Promise.allSettled([
+        initMasterApp(),
+        initRosterEngine(),
+        initPublicPortal(),
+        initMemberSelfService(),
+        initCareModule(),
+        initCurriculumTab(),
+        initMediaServicesTab(),
+        initMediaPublicationsTab(),
+        initDisciplesModule()
+      ]);
+
+      initAuthObserver();
+      activateTab("public");
+    } catch (err) {
+      console.error("Boot error:", err);
+      showErrorOnLoading(err?.message || String(err));
+    } finally {
+      clearTimeout(bootTimer);
+      loadingScreen.classList.add("hidden");
+      appScreen.classList.remove("hidden");
+    }
+  </script>
+</body>
+</html>
