@@ -40,6 +40,7 @@ import {
   setDjOfferingHidden,
   setDjOfferingDisabled,
   registerDiscipleToDjClass,
+  removeDiscipleFromDjClass,
   updateDjChapterCompletion
 } from "./db-dj-class.js";
 
@@ -743,7 +744,6 @@ function renderPublicDjClasses() {
   const discipleDoc = portalState.profile?.discipleDoc;
   const isMember = Boolean(discipleDoc?.id) && !discipleDoc?._isAdminFallback;
 
-  // Hide invisible & disabled classes from Church Portal screen
   const visibleOfferings = getVisibleDjOfferings().sort((a, b) => {
     const openA = isRegistrationOpen(a, todayISO) ? 0 : 1;
     const openB = isRegistrationOpen(b, todayISO) ? 0 : 1;
@@ -769,6 +769,7 @@ function renderPublicDjClasses() {
         const isOfferingCompleted = String(o.status || "").toLowerCase() === "completed";
         const chapters = Array.isArray(o.chapters) ? o.chapters : [];
         const completedCount = chapters.filter(c => c.completed === true).length;
+        const enrolledCount = portalState.allDjEnrollments.filter(e => e.offering_id === o.id).length;
         const levelKey = normalizeDjKey(o.class_key || o.class_name || "come");
         const levelLabel = o.class_name || (levelKey.charAt(0).toUpperCase() + levelKey.slice(1));
         const prereqLabel = getPrereqLabelForLevel(levelKey);
@@ -810,7 +811,7 @@ function renderPublicDjClasses() {
               Facilitator: <strong>${esc(facilitatorName)}</strong>
             </p>
             <p class="text-[11px] text-slate-600">
-              Prereq: <strong>${esc(prereqLabel)}</strong> • Chapters: <strong>${completedCount}/${chapters.length}</strong>
+              Prereq: <strong>${esc(prereqLabel)}</strong> • Chapters: <strong>${completedCount}/${chapters.length}</strong> • Enrolled: <strong>${enrolledCount}</strong>
             </p>
             ${(o.registration_open_date || o.registration_close_date) ? `
               <p class="text-[10px] font-mono text-slate-500">
@@ -1476,11 +1477,14 @@ function renderDjFacilitatorTeachingPanel() {
   const facilitatorName = getFacilitatorDisplayName(offering);
   const isSysAdmin = isSystemAdminUser() || canManageChurchPortal();
   const currentLevelKey = normalizeDjKey(offering.class_key || offering.class_name || "come");
+  const enrolledCount = portalState.selectedDjEnrollments.length;
 
   const offeringOptions = portalState.djOfferings.map(o => {
+    const countForO = portalState.allDjEnrollments.filter(e => e.offering_id === o.id).length;
     const flags = [
       isDjOfferingDisabled(o) ? "DISABLED" : String(o.status || "OPEN").toUpperCase(),
-      isDjOfferingHidden(o) ? "HIDDEN" : ""
+      isDjOfferingHidden(o) ? "HIDDEN" : "",
+      `${countForO} enrolled`
     ].filter(Boolean).join(" • ");
     return `
       <option value="${esc(o.id)}" ${o.id === offering.id ? "selected" : ""}>
@@ -1497,6 +1501,15 @@ function renderDjFacilitatorTeachingPanel() {
           String(offering.facilitator_email || "").trim().toLowerCase());
     return `<option value="${esc(d.id)}" ${selected ? "selected" : ""}>${esc(d.full_name)} (${esc(d.email || "no email")})</option>`;
   }).join("");
+
+  const enrolledIds = new Set(portalState.selectedDjEnrollments.map(e => e.disciple_id));
+  const availableDisciples = [...portalState.allDisciples]
+    .filter(d => !enrolledIds.has(d.id))
+    .sort((a, b) => String(a.full_name || "").localeCompare(String(b.full_name || "")));
+
+  const addMemberOptions = availableDisciples.map(d =>
+    `<option value="${esc(d.id)}">${esc(d.full_name)}</option>`
+  ).join("");
 
   const statusPills = [
     isDisabled
@@ -1535,16 +1548,29 @@ function renderDjFacilitatorTeachingPanel() {
 
   const enrolledHtml = portalState.selectedDjEnrollments.length > 0
     ? portalState.selectedDjEnrollments.map(en => `
-        <div class="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 last:border-b-0 text-xs">
-          <span class="font-medium text-slate-800">${esc(en.disciple_name || en.full_name || "Member")}</span>
-          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${
-            String(en.status || "").toLowerCase() === "completed"
-              ? "bg-emerald-100 text-emerald-800"
-              : "bg-amber-100 text-amber-800"
-          }">${esc(en.status || "Enrolled")}</span>
+        <div class="flex items-center justify-between gap-2 py-2 border-b border-slate-200/80 last:border-b-0 text-xs">
+          <div class="min-w-0">
+            <p class="font-bold text-slate-900 truncate">${esc(en.disciple_name || en.full_name || "Member")}</p>
+            <p class="text-[10px] text-slate-500">${esc(en.enrolled_at_iso || "")}</p>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              String(en.status || "").toLowerCase() === "completed"
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-amber-100 text-amber-800"
+            }">${esc(en.status || "Enrolled")}</span>
+            <button
+              type="button"
+              onclick="window.removeDjEnrollment('${esc(en.id)}', '${esc(en.disciple_name || "Member")}')"
+              class="px-2 py-0.5 rounded text-[10px] font-bold text-red-600 hover:bg-red-50 border border-red-200"
+              title="Remove participant from class"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       `).join("")
-    : `<p class="text-xs text-slate-400">No enrolled participants yet.</p>`;
+    : `<p class="text-xs text-slate-400 py-2">No enrolled participants yet.</p>`;
 
   container.innerHTML = `
     <div class="bg-white p-5 rounded-2xl border border-amber-300 shadow-sm space-y-4">
@@ -1556,7 +1582,13 @@ function renderDjFacilitatorTeachingPanel() {
             </span>
             ${statusPills}
           </div>
-          <h3 class="font-bold text-base text-slate-900">${esc(offering.class_title || offering.class_name || "DJ Class")}</h3>
+          <div class="flex flex-wrap items-center gap-3 pt-1">
+            <h3 class="font-bold text-base text-slate-900">${esc(offering.class_title || offering.class_name || "DJ Class")}</h3>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-400 text-slate-950 font-black shadow-sm">
+              <span class="text-xl leading-none">${enrolledCount}</span>
+              <span class="text-[10px] uppercase tracking-wider">Enrolled</span>
+            </span>
+          </div>
           <p class="text-xs text-slate-600">
             Facilitator: <strong>${esc(facilitatorName)}</strong> •
             Reg: <span class="font-mono">${esc(offering.registration_open_date || "—")} → ${esc(offering.registration_close_date || "—")}</span>
@@ -1566,7 +1598,7 @@ function renderDjFacilitatorTeachingPanel() {
         <div class="flex flex-wrap items-center gap-2 shrink-0">
           <select
             onchange="window.changeDjTeachingOffering(this.value)"
-            class="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold bg-white max-w-[260px]"
+            class="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold bg-white max-w-[280px]"
           >
             ${offeringOptions}
           </select>
@@ -1600,7 +1632,6 @@ function renderDjFacilitatorTeachingPanel() {
                   ? "bg-purple-600 text-white hover:bg-purple-700"
                   : "bg-purple-100 text-purple-900 hover:bg-purple-200"
               }"
-              title="Hide or show this class on Church Portal and Member screen"
             >
               ${isHidden ? "👁️ Show on Portal" : "🙈 Hide from Portal"}
             </button>
@@ -1613,7 +1644,6 @@ function renderDjFacilitatorTeachingPanel() {
                   ? "bg-emerald-700 text-white hover:bg-emerald-800"
                   : "bg-red-100 text-red-800 hover:bg-red-200"
               }"
-              title="Disable or enable this class completely"
             >
               ${isDisabled ? "✅ Enable Class" : "⛔ Disable Class"}
             </button>
@@ -1683,14 +1713,82 @@ function renderDjFacilitatorTeachingPanel() {
           <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600">Chapters (${chapters.filter(c => c.completed === true).length}/${chapters.length})</h4>
           <div class="space-y-1.5">${chaptersHtml || `<p class="text-xs text-slate-400">No chapters configured.</p>`}</div>
         </div>
-        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
-          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600">Enrolled (${portalState.selectedDjEnrollments.length})</h4>
+
+        <div class="bg-amber-50/50 p-4 rounded-xl border-2 border-amber-300 space-y-3">
+          <div class="flex items-center justify-between gap-2 border-b border-amber-200 pb-2">
+            <span class="text-xs font-extrabold uppercase tracking-wider text-slate-900">Enrolled Participants</span>
+            <span class="px-3 py-1 rounded-lg bg-amber-500 text-slate-950 font-black text-2xl leading-none shadow-sm">
+              ${enrolledCount}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <select
+              id="dj-add-member-select"
+              class="flex-1 min-w-0 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium"
+            >
+              <option value="">+ Select disciple to enroll...</option>
+              ${addMemberOptions}
+            </select>
+            <button
+              type="button"
+              onclick="window.addMemberToDjClass('${esc(offering.id)}')"
+              class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg text-xs shrink-0"
+            >
+              Add
+            </button>
+          </div>
+
           <div>${enrolledHtml}</div>
         </div>
       </div>
     </div>
   `;
 }
+
+window.addMemberToDjClass = async (offeringId) => {
+  const selectEl = document.getElementById("dj-add-member-select");
+  const discipleId = selectEl?.value || "";
+  if (!discipleId) {
+    alert("Please select a disciple first.");
+    return;
+  }
+
+  const offering = portalState.djOfferings.find(o => o.id === offeringId);
+  const disciple = portalState.allDisciples.find(d => d.id === discipleId);
+  if (!offering || !disciple) return;
+
+  try {
+    await registerDiscipleToDjClass({
+      offering,
+      disciple,
+      allEnrollments: portalState.allDjEnrollments
+    });
+    portalState.allDjEnrollments = await getAllDjEnrollments().catch(() => []);
+    await loadSelectedDjEnrollments();
+    renderPublicDjClasses();
+    renderMyDjClassesSection();
+    renderDjFacilitatorTeachingPanel();
+    applyMemberPortalLayoutOrder();
+  } catch (err) {
+    alert("Failed to enroll member: " + (err?.message || err));
+  }
+};
+
+window.removeDjEnrollment = async (enrollmentId, participantName = "participant") => {
+  if (!enrollmentId || !confirm(`Remove ${participantName} from this DJ class?`)) return;
+  try {
+    await removeDiscipleFromDjClass(enrollmentId);
+    portalState.allDjEnrollments = await getAllDjEnrollments().catch(() => []);
+    await loadSelectedDjEnrollments();
+    renderPublicDjClasses();
+    renderMyDjClassesSection();
+    renderDjFacilitatorTeachingPanel();
+    applyMemberPortalLayoutOrder();
+  } catch (err) {
+    alert("Failed to remove participant: " + (err?.message || err));
+  }
+};
 
 window.changeDjTeachingOffering = async (offeringId) => {
   portalState.selectedDjOfferingId = offeringId;
